@@ -1,0 +1,24 @@
+[package]
+name = "beacn-mic-ui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Logging
+log = "0.4.26"
+simplelog = "0.12.2"
+
+# Error Handling
+anyhow = "1.0.96"
+
+# Enum Helpers
+strum = "0.27.1"
+strum_macros = "0.27.1"
+enum-map = "2.7.3"
+
+# UI Framework
+egui = "0.31.0"
+eframe = "0.31.0"
+
+# Grab beacn-mic-lib for comms
+beacn-mic-lib = { git = "https://github.com/beacn-on-linux/beacn-mic-lib.git" }

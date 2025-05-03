@@ -1,0 +1,5 @@
+# Copy this file to /etc/udev/rules.d, then run:
+# udevadm control --reload-rules
+# udevadm trigger
+
+SUBSYSTEM=="usb", ATTR{idVendor}=="33ae", ATTR{idProduct}=="0001", TAG+="uaccess"
