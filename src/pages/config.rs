@@ -34,7 +34,7 @@ impl Configuration {
 
 impl MicPage for Configuration {
     fn icon(&self) -> &'static str {
-        "🔵"
+        "mic"
     }
 
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {

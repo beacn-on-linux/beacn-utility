@@ -9,9 +9,15 @@ use beacn_mic_lib::manager::{
     DeviceLocation, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
 use eframe::Frame;
+use eframe::glow::Texture;
 use egui::ahash::HashMap;
-use egui::{Color32, Context, Response, Ui};
+use egui::{
+    Color32, Context, Image, ImageButton, ImageSource, Response, TextureHandle, Ui, include_image,
+    vec2,
+};
+use egui_extras::image;
 use log::{LevelFilter, debug, error};
+use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
@@ -21,6 +27,15 @@ mod numbers;
 mod pages;
 mod state;
 mod widgets;
+
+// SVG Images
+pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
+    let mut map = HashMap::default();
+    map.insert("mic", include_image!("../resources/icons/microphone.svg"));
+    map.insert("bulb", include_image!("../resources/icons/lightbulb.svg"));
+    map.insert("gear", include_image!("../resources/icons/gear.svg"));
+    map
+});
 
 pub struct MicConfiguration {
     pub mic: BeacnMic,
@@ -42,14 +57,21 @@ pub struct BeacnMicApp {
 
     active_page: usize,
     pages: Vec<Box<dyn MicPage>>,
+    // Used for icons
+    //textures: HashMap<String, Image>,
 }
 
 impl BeacnMicApp {
     pub fn new(context: &Context) -> Self {
+        egui_extras::install_image_loaders(context);
+
         // We need to spawn up the hotplug handler to get mic hotplug info
         let (plug_tx, plug_rx) = mpsc::channel();
         let (manage_tx, manage_rx) = mpsc::channel();
         let (proxy_tx, proxy_rx) = mpsc::channel();
+
+        // Generate the SVG textures
+        //let mut svgs = HashMap::default();
 
         spawn_mic_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
 
@@ -67,7 +89,7 @@ impl BeacnMicApp {
                         if m == HotPlugMessage::ThreadStopped {
                             break;
                         }
-                    },
+                    }
                     Err(e) => {
                         // The message channel has been disconnected
                         error!("Error Received: {}", e);
@@ -92,6 +114,7 @@ impl BeacnMicApp {
                 Box::new(Lighting::new()),
                 Box::new(About::new()),
             ],
+            //textures: svgs,
         }
     }
 }
@@ -156,11 +179,14 @@ impl eframe::App for BeacnMicApp {
             .resizable(false)
             .default_width(80.0)
             .show(ctx, |ui| {
+                ui.add_space(5.0);
                 ui.vertical_centered(|ui| {
                     for (index, page) in self.pages.iter().enumerate() {
+                        //let icon = self.textures.get("Microphone").unwrap();
                         if round_nav_button(ui, page.icon(), self.active_page == index).clicked() {
                             self.active_page = index;
                         }
+                        ui.add_space(5.0);
                     }
                 })
             });
@@ -197,22 +223,34 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn round_nav_button(ui: &mut egui::Ui, label: &str, active: bool) -> Response {
-    let (fill_color, text_color) = if active {
-        (Color32::LIGHT_BLUE, Color32::BLACK)
+fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
+    let tint_colour = if active {
+        Color32::WHITE
     } else {
-        (Color32::DARK_GRAY, Color32::WHITE)
+        Color32::from_rgb(120, 120, 120)
     };
 
-    ui.scope(|ui| {
-        ui.style_mut().visuals.override_text_color = Some(text_color);
+    // We might need to do caching here..
+    let image = SVG.get(img).unwrap().clone();
 
-        ui.add(
-            egui::Button::new(label)
-                .min_size(egui::vec2(40.0, 40.0))
-                .fill(fill_color)
-                .corner_radius(20.0),
+    ui.scope(|ui| {
+        ui.style_mut().spacing.button_padding = vec2(10.0, 10.0);
+        ui.add_sized(
+            [50.0, 50.0],
+            ImageButton::new(image)
+                .corner_radius(5.0)
+                .tint(tint_colour)
+                .selected(active),
         )
+
+        //
+        // let response = ui.add(
+        //     egui::Button::new("")
+        //         .min_size(egui::vec2(40.0, 40.0))
+        //         .fill(fill_color)
+        //         .corner_radius(20.0),
+        // );
+        //response
     })
     .inner
 }

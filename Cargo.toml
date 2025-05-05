@@ -18,8 +18,11 @@ enum-map = "2.7.3"
 
 # UI Framework
 egui = "0.31.0"
+egui_extras = { version = "0.31.0", features = ["svg"] }
 eframe = "0.31.0"
 
 # Grab beacn-mic-lib for comms
 beacn-mic-lib = { git = "https://github.com/beacn-on-linux/beacn-mic-lib.git" }
 #beacn-mic-lib = { path = "../beacn-mic-lib" }
+
+once_cell = "1.20.3"

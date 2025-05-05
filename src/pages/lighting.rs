@@ -14,7 +14,7 @@ impl Lighting {
 
 impl MicPage for Lighting {
     fn icon(&self) -> &'static str {
-        "🟢"
+        "bulb"
     }
 
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {

@@ -14,7 +14,7 @@ impl About {
 
 impl MicPage for About {
     fn icon(&self) -> &'static str {
-        "🔴"
+        "gear"
     }
 
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
