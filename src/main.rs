@@ -163,22 +163,27 @@ impl eframe::App for BeacnMicApp {
         }
 
         // Grab the active device and its settings
+        let devices: Vec<DeviceLocation> = self.devices.keys().cloned().collect();
         let active_device = self.active_device.unwrap();
         let settings = self.devices.get_mut(&active_device).unwrap();
 
-        // TODO: If there are multiple devices, we should duplicate this..
         egui::SidePanel::left("left_panel")
             .resizable(false)
             .default_width(80.0)
             .show(ctx, |ui| {
-                ui.add_space(5.0);
                 ui.vertical_centered(|ui| {
-                    for (index, page) in self.pages.iter().enumerate() {
-                        //let icon = self.textures.get("Microphone").unwrap();
-                        if round_nav_button(ui, page.icon(), self.active_page == index).clicked() {
-                            self.active_page = index;
-                        }
+                    // We need to iterate between devices and pages
+                    for device in devices {
                         ui.add_space(5.0);
+                        for (index, page) in self.pages.iter().enumerate() {
+                            let selected = active_device == device && self.active_page == index;
+                            if round_nav_button(ui, page.icon(), selected).clicked() {
+                                self.active_device = Some(device);
+                                self.active_page = index;
+                            }
+                            ui.add_space(5.0);
+                        }
+                        ui.separator();
                     }
                 })
             });
