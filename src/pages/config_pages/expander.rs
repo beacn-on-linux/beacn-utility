@@ -7,8 +7,6 @@ use beacn_mic_lib::messages::expander::ExpanderMode::{Advanced, Simple};
 use beacn_mic_lib::messages::expander::{Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold};
 use beacn_mic_lib::types::TimeFrame;
 use egui::Ui;
-use std::cell::RefCell;
-use std::rc::Rc;
 use strum::IntoEnumIterator;
 
 pub struct ExpanderPage;
@@ -18,8 +16,8 @@ impl ConfigPage for ExpanderPage {
         "Expander"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
-        let expander = &mut state.borrow_mut().expander;
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+        let expander = &mut state.expander;
 
         // Extract out all the current values
         let values = &mut expander.values[expander.mode];

@@ -7,10 +7,9 @@ pub(crate) mod suppressor;
 use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
 use egui::Ui;
-use std::cell::RefCell;
-use std::rc::Rc;
+
 
 pub trait ConfigPage {
     fn title(&self) -> &'static str;
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>);
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState);
 }

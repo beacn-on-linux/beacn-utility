@@ -9,8 +9,6 @@ use beacn_mic_lib::messages::compressor::{
 };
 use beacn_mic_lib::types::{MakeUpGain, TimeFrame};
 use egui::Ui;
-use std::cell::RefCell;
-use std::rc::Rc;
 use strum::IntoEnumIterator;
 
 pub struct CompressorPage;
@@ -20,8 +18,8 @@ impl ConfigPage for CompressorPage {
         "Compressor"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
-        let comp = &mut state.borrow_mut().compressor;
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+        let comp = &mut state.compressor;
 
         // Extract out all the current values
         let values = &mut comp.values[comp.mode];

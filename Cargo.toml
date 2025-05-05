@@ -22,3 +22,4 @@ eframe = "0.31.0"
 
 # Grab beacn-mic-lib for comms
 beacn-mic-lib = { git = "https://github.com/beacn-on-linux/beacn-mic-lib.git" }
+#beacn-mic-lib = { path = "../beacn-mic-lib" }

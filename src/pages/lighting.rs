@@ -1,20 +1,23 @@
 use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
-use std::cell::RefCell;
-use std::rc::Rc;
+use egui::Ui;
+use crate::pages::MicPage;
 
 #[allow(unused)]
-pub struct Lighting {
-    mic: Rc<BeacnMic>,
-    state: Rc<RefCell<BeacnMicState>>,
-}
+pub struct Lighting {}
 
 impl Lighting {
-    pub fn new(mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) -> Self {
-        Self { mic, state }
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl MicPage for Lighting {
+    fn icon(&self) -> &'static str {
+        "🟢"
     }
 
-    pub fn ui(&self, ui: &mut egui::Ui) {
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         ui.heading("Lighting Section");
     }
 }

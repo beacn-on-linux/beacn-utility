@@ -9,24 +9,17 @@ use crate::widgets::draw_range;
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::headphones::HPMicOutputGain;
 use beacn_mic_lib::types::HasRange;
-use egui::Label;
-use std::cell::RefCell;
-use std::rc::Rc;
+use egui::{Label, Ui};
+use crate::pages::MicPage;
 
 pub struct Configuration {
-    state: Rc<RefCell<BeacnMicState>>,
-    mic: Rc<BeacnMic>,
-
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
 }
 
 impl Configuration {
-    pub fn new(mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            state,
-            mic,
-
             selected_tab: 0,
             tab_pages: vec![
                 Box::new(MicSetupPage),
@@ -37,8 +30,14 @@ impl Configuration {
             ],
         }
     }
+}
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+impl MicPage for Configuration {
+    fn icon(&self) -> &'static str {
+        "🔵"
+    }
+
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         ui.add_sized(
             [ui.available_width(), ui.available_height() - 240.],
             Label::new("EQ").wrap(),
@@ -72,7 +71,7 @@ impl Configuration {
 
                         // Active tab content
                         if let Some(page) = self.tab_pages.get_mut(self.selected_tab) {
-                            page.ui(ui, self.mic.clone(), self.state.clone());
+                            page.ui(ui, mic, state);
                         }
                     });
                 });
@@ -81,7 +80,7 @@ impl Configuration {
 
                 // Right: Fixed panel
                 ui.allocate_ui(egui::vec2(fixed_panel_width, total_available.y), |ui| {
-                    let gain = &mut self.state.borrow_mut().headphones;
+                    let gain = &mut state.headphones;
                     if draw_range(
                         ui,
                         &mut gain.output_gain,

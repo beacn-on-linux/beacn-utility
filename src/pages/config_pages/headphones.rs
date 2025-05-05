@@ -12,8 +12,6 @@ use beacn_mic_lib::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones
 use beacn_mic_lib::messages::subwoofer::Subwoofer;
 use egui::Ui;
 use log::debug;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 pub struct HeadphonesPage;
 
@@ -22,13 +20,11 @@ impl ConfigPage for HeadphonesPage {
         "Headphones"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         let spacing = 10.0;
 
-        let mut state3 = state.borrow_mut();
-
         ui.horizontal_centered(|ui| {
-            let hp = &mut state3.headphones;
+            let hp = &mut state.headphones;
             ui.add_space(spacing);
             if draw_range(ui, &mut hp.mic_monitor, -100.0..=6.0, "Mic Monitor", "dB") {
                 let value = HPMicMonitorLevel(hp.mic_monitor);
@@ -65,7 +61,7 @@ impl ConfigPage for HeadphonesPage {
                 }
             };
 
-            let eq = &mut state3.headphone_eq;
+            let eq = &mut state.headphone_eq;
             if draw_range(ui, &mut eq.eq[Bass].amount, -12.0..=12.0, "Bass", "") {
                 let value = HPEQValue(eq.eq[Bass].amount);
                 let message = Message::HeadphoneEQ(HeadphoneEQ::Amount(Bass, value));
@@ -82,7 +78,7 @@ impl ConfigPage for HeadphonesPage {
                 mic.set_value(message).expect("Failed to Send Message");
             }
 
-            let sub = &mut state3.subwoofer;
+            let sub = &mut state.subwoofer;
             if draw_range(ui, &mut sub.amount, 0..=10, "Subwoofer", "") {
                 // Fetch the messages needed for this change
                 let messages = Subwoofer::get_amount_messages(sub.amount);
@@ -96,7 +92,7 @@ impl ConfigPage for HeadphonesPage {
             ui.add_space(spacing);
 
             ui.vertical(|ui| {
-                let hp = &mut state3.headphones;
+                let hp = &mut state.headphones;
                 // The easiest way to handle this is to monitor the previous and see if it's
                 // changed, rather than having .click or .change on each radio
                 let previous = hp.headphone_type;

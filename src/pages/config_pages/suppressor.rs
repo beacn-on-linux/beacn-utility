@@ -9,8 +9,7 @@ use beacn_mic_lib::types::Percent;
 use egui::SelectableLabel;
 use egui::Ui;
 use log::debug;
-use std::cell::RefCell;
-use std::rc::Rc;
+
 
 pub struct NoiseSuppressionPage;
 
@@ -19,10 +18,10 @@ impl ConfigPage for NoiseSuppressionPage {
         "Noise Suppression"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         let spacing = 5.0;
 
-        let ns = &mut state.borrow_mut().suppressor;
+        let ns = &mut state.suppressor;
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 if ui.checkbox(&mut ns.enabled, "Enabled").changed() {

@@ -11,8 +11,6 @@ use beacn_mic_lib::messages::mic_setup::{MicGain, MicSetup};
 use beacn_mic_lib::types::Percent;
 use egui::{Align, Label, Layout, Ui};
 use log::debug;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 pub struct MicSetupPage;
 
@@ -21,15 +19,13 @@ impl ConfigPage for MicSetupPage {
         "Mic Setup"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         let spacing = 10.0;
-
-        let mut state3 = state.borrow_mut();
 
         ui.horizontal_centered(|ui| {
             ui.add_space(spacing);
 
-            let mic_setup = &mut state3.mic_setup;
+            let mic_setup = &mut state.mic_setup;
             if draw_range(ui, &mut mic_setup.gain, 3..=20, "Mic Gain", "dB") {
                 let value = MicGain(mic_setup.gain as u32);
                 let message = Message::MicSetup(MicSetup::MicGain(value));
@@ -40,7 +36,7 @@ impl ConfigPage for MicSetupPage {
             ui.separator();
             ui.add_space(spacing);
 
-            let de_esser = &mut state3.de_esser;
+            let de_esser = &mut state.de_esser;
             if draw_range(ui, &mut de_esser.amount, 0..=100, "De-Esser", "%") {
                 let value = Percent(de_esser.amount as f32);
                 let message = Message::DeEsser(DeEsser::Amount(value));
@@ -64,7 +60,7 @@ impl ConfigPage for MicSetupPage {
 
                 ui.add_space(2.0);
 
-                let bass = &mut state3.bass_enhancement;
+                let bass = &mut state.bass_enhancement;
                 ui.horizontal_centered(|ui| {
                     ui.add_sized([80.0, ui.available_height()], |ui: &mut Ui| {
                         ui.vertical(|ui| {
@@ -143,7 +139,7 @@ impl ConfigPage for MicSetupPage {
                 ui.add_space(2.0);
 
                 ui.horizontal_centered(|ui| {
-                    let excite = &mut state3.exciter;
+                    let excite = &mut state.exciter;
                     if draw_range(ui, &mut excite.amount, 0..=100, "Amount", "%") {
                         let value = Percent(excite.amount as f32);
                         let message = Message::Exciter(Exciter::Amount(value));

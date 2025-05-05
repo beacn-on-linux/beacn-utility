@@ -1,84 +1,176 @@
+use crate::pages::MicPage;
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
 use crate::pages::lighting::Lighting;
 use crate::state::BeacnMicState;
 use anyhow::{Result, anyhow};
 use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
+use beacn_mic_lib::manager::{
+    DeviceLocation, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
+};
 use eframe::Frame;
-use egui::{Color32, Context, Response};
-use log::{LevelFilter, debug};
+use egui::ahash::HashMap;
+use egui::{Color32, Context, Response, Ui};
+use log::{LevelFilter, debug, error};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::mpsc;
+use std::sync::mpsc::TryRecvError;
+use std::thread;
 
 mod numbers;
 mod pages;
 mod state;
 mod widgets;
 
-#[derive(PartialEq)]
-enum Page {
-    Configuration,
-    Lighting,
-    About,
+pub struct MicConfiguration {
+    pub mic: BeacnMic,
+    pub state: BeacnMicState,
+}
+
+impl MicConfiguration {
+    pub fn new(mic: BeacnMic, state: BeacnMicState) -> Self {
+        Self { mic, state }
+    }
 }
 
 pub struct BeacnMicApp {
-    active_page: Page,
+    devices: HashMap<DeviceLocation, MicConfiguration>,
+    active_device: Option<DeviceLocation>,
 
-    // Page early instantiations
-    configuration_page: Configuration,
-    lighting_page: Lighting,
-    about_page: About,
+    hotplug_recv: mpsc::Receiver<HotPlugMessage>,
+    hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
+
+    active_page: usize,
+    pages: Vec<Box<dyn MicPage>>,
 }
 
 impl BeacnMicApp {
-    pub fn new(mic: BeacnMic, state: BeacnMicState) -> Self {
-        let state = Rc::new(RefCell::new(state));
-        let mic = Rc::new(mic);
+    pub fn new(context: &Context) -> Self {
+        // We need to spawn up the hotplug handler to get mic hotplug info
+        let (plug_tx, plug_rx) = mpsc::channel();
+        let (manage_tx, manage_rx) = mpsc::channel();
+        let (proxy_tx, proxy_rx) = mpsc::channel();
 
-        let configuration_page = Configuration::new(mic.clone(), state.clone());
-        let lighting_page = Lighting::new(mic.clone(), state.clone());
-        let about_page = About::new(mic.clone(), state.clone());
+        spawn_mic_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
+
+        // We need to proxy messages between the hotplug handler and the main context, egui will
+        // not redraw if the mouse isn't inside the window, so we need to grab the messages, forward
+        // them, then force a redraw.
+        let context_inner = context.clone();
+        thread::spawn(move || {
+            loop {
+                match plug_rx.recv() {
+                    Ok(m) => {
+                        let _ = proxy_tx.send(m);
+                        context_inner.request_repaint();
+
+                        if m == HotPlugMessage::ThreadStopped {
+                            break;
+                        }
+                    },
+                    Err(e) => {
+                        // The message channel has been disconnected
+                        error!("Error Received: {}", e);
+                        let _ = proxy_tx.send(HotPlugMessage::ThreadStopped);
+                        context_inner.request_repaint();
+                        break;
+                    }
+                }
+            }
+        });
 
         Self {
-            active_page: Page::Configuration,
+            devices: Default::default(),
+            active_device: None,
 
-            configuration_page,
-            lighting_page,
-            about_page,
+            hotplug_recv: proxy_rx,
+            hotplug_send: manage_tx,
+
+            active_page: 0,
+            pages: vec![
+                Box::new(Configuration::new()),
+                Box::new(Lighting::new()),
+                Box::new(About::new()),
+            ],
         }
     }
 }
 
 impl eframe::App for BeacnMicApp {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        // Here is where we should deal with any messages from the Mic :p
+        match self.hotplug_recv.try_recv() {
+            Ok(msg) => {
+                match msg {
+                    HotPlugMessage::DeviceAttached(d) => {
+                        // Device has been found / attached, lets handle it.
+                        let device = BeacnMic::open(d).expect("Failed to open Device");
+                        let state = BeacnMicState::load_settings(&device).expect("State Fail");
+
+                        // Add to state
+                        self.devices.insert(d, MicConfiguration::new(device, state));
+                        if self.active_device.is_none() {
+                            self.active_device = Some(d);
+                        }
+                    }
+                    HotPlugMessage::DeviceRemoved(d) => {
+                        // Device removed, update our states
+                        self.devices.remove(&d);
+                        if self.active_device == Some(d) {
+                            if self.devices.iter().len() == 0 {
+                                self.active_device = None;
+                            } else {
+                                // Switch to the first device
+                                let dev = self.devices.keys().next().unwrap().clone();
+                                self.active_device = Some(dev)
+                            }
+                        }
+                    }
+                    HotPlugMessage::ThreadStopped => {
+                        debug!("HotPlug Thread Stopped..");
+                    }
+                }
+            }
+            Err(e) => match e {
+                TryRecvError::Empty => {}
+                TryRecvError::Disconnected => {}
+            },
+        }
+
+        // Do we have an active device? (Should be no if there are no devices)
+        if self.active_device.is_none() {
+            egui::CentralPanel::default().show(ctx, |ui: &mut Ui| {
+                ui.add_sized(ui.available_size(), |ui: &mut Ui| {
+                    ui.label("No Devices Detected")
+                });
+            });
+            return;
+        }
+
+        // Grab the active device and its settings
+        let active_device = self.active_device.unwrap();
+        let settings = self.devices.get_mut(&active_device).unwrap();
+
+        // TODO: If there are multiple devices, we should duplicate this..
         egui::SidePanel::left("left_panel")
             .resizable(false)
             .default_width(80.0)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    if round_nav_button(ui, "🔵", self.active_page == Page::Configuration).clicked()
-                    {
-                        self.active_page = Page::Configuration;
-                    }
-                    if round_nav_button(ui, "🟢", self.active_page == Page::Lighting).clicked() {
-                        self.active_page = Page::Lighting;
-                    }
-                    if round_nav_button(ui, "🔴", self.active_page == Page::About).clicked() {
-                        self.active_page = Page::About;
+                    for (index, page) in self.pages.iter().enumerate() {
+                        if round_nav_button(ui, page.icon(), self.active_page == index).clicked() {
+                            self.active_page = index;
+                        }
                     }
                 })
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            match &mut self.active_page {
-                Page::Configuration => self.configuration_page.ui(ui),
-                Page::Lighting => self.lighting_page.ui(ui),
-                Page::About => self.about_page.ui(ui),
-            };
+            self.pages[self.active_page].ui(ui, &settings.mic, &mut settings.state);
         });
+    }
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _ = self.hotplug_send.send(HotPlugThreadManagement::Quit);
     }
 }
 
@@ -90,14 +182,6 @@ fn main() -> Result<()> {
         ColorChoice::Auto,
     )])?;
 
-    // Before we do anything, open a connection to the mic, and attempt to obtain a state.
-
-    let mic = BeacnMic::open()?;
-    let state = BeacnMicState::load_settings(&mic)?;
-    debug!("{:#?}", state);
-
-    Message::generate_fetch_message();
-
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([1100., 520.]),
         ..Default::default()
@@ -106,7 +190,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "Beacn Mic Configuration",
         options,
-        Box::new(|cc| Ok(Box::new(BeacnMicApp::new(mic, state)))),
+        Box::new(|cc| Ok(Box::new(BeacnMicApp::new(&cc.egui_ctx)))),
     )
     .map_err(|e| anyhow!("Failed: {}", e))?;
 
