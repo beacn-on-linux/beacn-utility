@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::Message;
@@ -19,7 +19,7 @@ impl ConfigPage for NoiseSuppressionPage {
         "Noise Suppression"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState2>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
         let spacing = 5.0;
 
         let ns = &mut state.borrow_mut().suppressor;

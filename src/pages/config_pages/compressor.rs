@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::Message;
@@ -20,7 +20,7 @@ impl ConfigPage for CompressorPage {
         "Compressor"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState2>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
         let comp = &mut state.borrow_mut().compressor;
 
         // Extract out all the current values

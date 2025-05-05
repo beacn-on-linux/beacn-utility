@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::Message;
@@ -18,7 +18,7 @@ impl ConfigPage for ExpanderPage {
         "Expander"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState2>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
         let expander = &mut state.borrow_mut().expander;
 
         // Extract out all the current values

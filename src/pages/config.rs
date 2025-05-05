@@ -4,7 +4,7 @@ use crate::pages::config_pages::expander::ExpanderPage;
 use crate::pages::config_pages::headphones::HeadphonesPage;
 use crate::pages::config_pages::mic_setup::MicSetupPage;
 use crate::pages::config_pages::suppressor::NoiseSuppressionPage;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::headphones::HPMicOutputGain;
@@ -14,7 +14,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct Configuration {
-    state: Rc<RefCell<BeacnMicState2>>,
+    state: Rc<RefCell<BeacnMicState>>,
     mic: Rc<BeacnMic>,
 
     selected_tab: usize,
@@ -22,7 +22,7 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    pub fn new(mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState2>>) -> Self {
+    pub fn new(mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) -> Self {
         Self {
             state,
             mic,

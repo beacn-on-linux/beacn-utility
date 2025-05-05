@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::Message;
@@ -22,7 +22,7 @@ impl ConfigPage for HeadphonesPage {
         "Headphones"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState2>>) {
+    fn ui(&mut self, ui: &mut Ui, mic: Rc<BeacnMic>, state: Rc<RefCell<BeacnMicState>>) {
         let spacing = 10.0;
 
         let mut state3 = state.borrow_mut();

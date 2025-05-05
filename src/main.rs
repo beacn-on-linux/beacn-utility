@@ -1,7 +1,7 @@
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
 use crate::pages::lighting::Lighting;
-use crate::state::BeacnMicState2;
+use crate::state::BeacnMicState;
 use anyhow::{Result, anyhow};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::Message;
@@ -34,7 +34,7 @@ pub struct BeacnMicApp {
 }
 
 impl BeacnMicApp {
-    pub fn new(mic: BeacnMic, state: BeacnMicState2) -> Self {
+    pub fn new(mic: BeacnMic, state: BeacnMicState) -> Self {
         let state = Rc::new(RefCell::new(state));
         let mic = Rc::new(mic);
 
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
     // Before we do anything, open a connection to the mic, and attempt to obtain a state.
 
     let mic = BeacnMic::open()?;
-    let state = BeacnMicState2::load_settings(&mic)?;
+    let state = BeacnMicState::load_settings(&mic)?;
     debug!("{:#?}", state);
 
     Message::generate_fetch_message();
@@ -106,7 +106,7 @@ fn main() -> Result<()> {
     eframe::run_native(
         "Beacn Mic Configuration",
         options,
-        Box::new(|_| Ok(Box::new(BeacnMicApp::new(mic, state)))),
+        Box::new(|cc| Ok(Box::new(BeacnMicApp::new(mic, state)))),
     )
     .map_err(|e| anyhow!("Failed: {}", e))?;
 
