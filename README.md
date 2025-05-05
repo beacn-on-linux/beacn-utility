@@ -14,7 +14,8 @@ In addition, this project accepts no responsibility or liability for any use of 
 which may occur from its use. Please read the LICENSE for more information.
 
 ***
-![img.png](.github/resources/img.png)
+![img_1.png](.github/resources/img.png)
+
 Currently, this tool is quite barebones and basic and is likely going to stay that way, it's just for adjusting
 values on the Mic. This app may  also might be slightly buggy, so expect issues. The Beacn Mic has on-board storage, so
 values changed here should persist across
@@ -54,7 +55,6 @@ Not Yet Implemented:
 
 Not Planned:
 * Profiles
-* Multi-Device
 * Audio Visualisations ([egui_canvas](https://gitlab.com/urciteniefilipdubina/egui_canvas) might be a candiate)
 
 ***
