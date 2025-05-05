@@ -9,13 +9,8 @@ use beacn_mic_lib::manager::{
     DeviceLocation, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
 use eframe::Frame;
-use eframe::glow::Texture;
 use egui::ahash::HashMap;
-use egui::{
-    Color32, Context, Image, ImageButton, ImageSource, Response, TextureHandle, Ui, include_image,
-    vec2,
-};
-use egui_extras::image;
+use egui::{Color32, Context, ImageButton, ImageSource, Response, Ui, include_image, vec2};
 use log::{LevelFilter, debug, error};
 use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
@@ -69,9 +64,6 @@ impl BeacnMicApp {
         let (plug_tx, plug_rx) = mpsc::channel();
         let (manage_tx, manage_rx) = mpsc::channel();
         let (proxy_tx, proxy_rx) = mpsc::channel();
-
-        // Generate the SVG textures
-        //let mut svgs = HashMap::default();
 
         spawn_mic_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
 
@@ -144,8 +136,8 @@ impl eframe::App for BeacnMicApp {
                                 self.active_device = None;
                             } else {
                                 // Switch to the first device
-                                let dev = self.devices.keys().next().unwrap().clone();
-                                self.active_device = Some(dev)
+                                let dev = self.devices.keys().next().unwrap();
+                                self.active_device = Some(*dev)
                             }
                         }
                     }
@@ -236,21 +228,12 @@ fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     ui.scope(|ui| {
         ui.style_mut().spacing.button_padding = vec2(10.0, 10.0);
         ui.add_sized(
-            [50.0, 50.0],
+            [40.0, 40.0],
             ImageButton::new(image)
                 .corner_radius(5.0)
                 .tint(tint_colour)
                 .selected(active),
         )
-
-        //
-        // let response = ui.add(
-        //     egui::Button::new("")
-        //         .min_size(egui::vec2(40.0, 40.0))
-        //         .fill(fill_color)
-        //         .corner_radius(20.0),
-        // );
-        //response
     })
     .inner
 }

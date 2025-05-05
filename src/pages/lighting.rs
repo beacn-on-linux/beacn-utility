@@ -1,7 +1,7 @@
+use crate::pages::MicPage;
 use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
 use egui::Ui;
-use crate::pages::MicPage;
 
 #[allow(unused)]
 pub struct Lighting {}
@@ -17,7 +17,7 @@ impl MicPage for Lighting {
         "bulb"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, _mic: &BeacnMic, _state: &mut BeacnMicState) {
         ui.heading("Lighting Section");
     }
 }

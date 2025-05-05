@@ -1,6 +1,6 @@
+use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
 use egui::Ui;
-use crate::state::BeacnMicState;
 
 pub(crate) mod about;
 pub(crate) mod config;

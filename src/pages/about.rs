@@ -17,7 +17,7 @@ impl MicPage for About {
         "gear"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, _mic: &BeacnMic, _state: &mut BeacnMicState) {
         ui.heading("About Section");
     }
 }

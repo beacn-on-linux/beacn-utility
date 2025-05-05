@@ -8,7 +8,6 @@ use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
 use egui::Ui;
 
-
 pub trait ConfigPage {
     fn title(&self) -> &'static str;
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState);

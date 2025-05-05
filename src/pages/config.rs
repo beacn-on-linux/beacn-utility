@@ -1,3 +1,4 @@
+use crate::pages::MicPage;
 use crate::pages::config_pages::ConfigPage;
 use crate::pages::config_pages::compressor::CompressorPage;
 use crate::pages::config_pages::expander::ExpanderPage;
@@ -10,7 +11,6 @@ use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::headphones::HPMicOutputGain;
 use beacn_mic_lib::types::HasRange;
 use egui::{Label, Ui};
-use crate::pages::MicPage;
 
 pub struct Configuration {
     selected_tab: usize,

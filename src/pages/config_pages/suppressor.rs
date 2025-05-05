@@ -10,7 +10,6 @@ use egui::SelectableLabel;
 use egui::Ui;
 use log::debug;
 
-
 pub struct NoiseSuppressionPage;
 
 impl ConfigPage for NoiseSuppressionPage {
