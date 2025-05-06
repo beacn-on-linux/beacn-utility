@@ -2,12 +2,13 @@ use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{draw_range, toggle_button};
 use beacn_mic_lib::device::BeacnMic;
+use beacn_mic_lib::manager::DeviceType;
 use beacn_mic_lib::messages::Message;
 use beacn_mic_lib::messages::bass_enhancement::BassPreset::{Preset1, Preset2, Preset3, Preset4};
 use beacn_mic_lib::messages::bass_enhancement::{BassAmount, BassEnhancement};
 use beacn_mic_lib::messages::deesser::DeEsser;
 use beacn_mic_lib::messages::exciter::{Exciter, ExciterFreq};
-use beacn_mic_lib::messages::mic_setup::{MicGain, MicSetup};
+use beacn_mic_lib::messages::mic_setup::{MicGain, MicSetup, StudioMicGain};
 use beacn_mic_lib::types::Percent;
 use egui::{Align, Label, Layout, Ui};
 use log::debug;
@@ -26,9 +27,23 @@ impl ConfigPage for MicSetupPage {
             ui.add_space(spacing);
 
             let mic_setup = &mut state.mic_setup;
-            if draw_range(ui, &mut mic_setup.gain, 3..=20, "Mic Gain", "dB") {
-                let value = MicGain(mic_setup.gain as u32);
-                let message = Message::MicSetup(MicSetup::MicGain(value));
+
+            // The Beacn Studio has a different range for the Mic Gain, so we'll set it here.
+            let range = match state.device_type {
+                DeviceType::BeacnMic => 3..=20,
+                DeviceType::BeacnStudio => 0..=69,  // Nice.
+            };
+            if draw_range(ui, &mut mic_setup.gain, range, "Mic Gain", "dB") {
+                let message = match state.device_type {
+                    DeviceType::BeacnMic => {
+                        let value = MicGain(mic_setup.gain as u32);
+                        Message::MicSetup(MicSetup::MicGain(value))
+                    },
+                    DeviceType::BeacnStudio => {
+                        let value = StudioMicGain(mic_setup.gain as u32);
+                        Message::MicSetup(MicSetup::StudioMicGain(value))
+                    }
+                };
                 mic.set_value(message).expect("Failed to Send Message");
             }
 

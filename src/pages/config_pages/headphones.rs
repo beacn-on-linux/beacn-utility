@@ -2,6 +2,7 @@ use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
 use beacn_mic_lib::device::BeacnMic;
+use beacn_mic_lib::manager::DeviceType;
 use beacn_mic_lib::messages::Message;
 use beacn_mic_lib::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
 use beacn_mic_lib::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
@@ -28,14 +29,21 @@ impl ConfigPage for HeadphonesPage {
             ui.add_space(spacing);
             if draw_range(ui, &mut hp.mic_monitor, -100.0..=6.0, "Mic Monitor", "dB") {
                 let value = HPMicMonitorLevel(hp.mic_monitor);
-                let message = Message::Headphones(Headphones::MicMonitor(value));
+                let message = match state.device_type {
+                    DeviceType::BeacnMic => Message::Headphones(Headphones::MicMonitor(value)),
+                    DeviceType::BeacnStudio => {
+                        Message::Headphones(Headphones::StudioMicMonitor(value))
+                    }
+                };
                 mic.set_value(message).expect("Failed to Send Message");
-
                 debug!("Mic Monitor Change: {:?}", hp.mic_monitor);
             }
             if ui.checkbox(&mut hp.linked, "").changed() {
-                // TODO: Check and implement
-                debug!("Link Changed");
+                let message = match state.device_type {
+                    DeviceType::BeacnMic => Message::Headphones(Headphones::MicChannelsLinked(hp.linked)),
+                    DeviceType::BeacnStudio => Message::Headphones(Headphones::StudioChannelsLinked(hp.linked)),
+                };
+                mic.set_value(message).expect("Failed to Send Message");
             }
             if draw_range(ui, &mut hp.level, -70.0..=0.0, "Headphones", "dB") {
                 debug!("HP Level Change: {:?}", hp.level);
