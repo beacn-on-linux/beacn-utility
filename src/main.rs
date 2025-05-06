@@ -117,15 +117,17 @@ impl eframe::App for BeacnMicApp {
         match self.hotplug_recv.try_recv() {
             Ok(msg) => {
                 match msg {
-                    HotPlugMessage::DeviceAttached(d) => {
+                    HotPlugMessage::DeviceAttached(location, device_type) => {
                         // Device has been found / attached, lets handle it.
-                        let device = BeacnMic::open(d).expect("Failed to open Device");
-                        let state = BeacnMicState::load_settings(&device).expect("State Fail");
+                        let device = BeacnMic::open(location).expect("Failed to open Device");
+                        let state =
+                            BeacnMicState::load_settings(&device, device_type).expect("State Fail");
 
                         // Add to state
-                        self.devices.insert(d, MicConfiguration::new(device, state));
+                        self.devices
+                            .insert(location, MicConfiguration::new(device, state));
                         if self.active_device.is_none() {
-                            self.active_device = Some(d);
+                            self.active_device = Some(location);
                         }
                     }
                     HotPlugMessage::DeviceRemoved(d) => {

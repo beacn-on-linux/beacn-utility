@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
+use beacn_mic_lib::manager::DeviceType;
 use beacn_mic_lib::messages::bass_enhancement::BassPreset;
 use beacn_mic_lib::messages::compressor::CompressorMode;
 use beacn_mic_lib::messages::equaliser::{EQBand, EQBandType, EQMode};
@@ -12,6 +12,7 @@ use beacn_mic_lib::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode,
 };
 use beacn_mic_lib::messages::suppressor::SuppressorStyle;
+use beacn_mic_lib::messages::Message;
 use beacn_mic_lib::types::ToInner;
 use enum_map::EnumMap;
 
@@ -24,14 +25,16 @@ use beacn_mic_lib::messages::expander::Expander as MicExpander;
 use beacn_mic_lib::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
 use beacn_mic_lib::messages::headphones::Headphones as MicHeadphones;
 use beacn_mic_lib::messages::lighting::Lighting as MicLighting;
-use beacn_mic_lib::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_mic_lib::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_mic_lib::messages::suppressor::Suppressor as MicSuppressor;
+use beacn_mic_lib::messages::mic_setup::MicSetup as MicMicSetup;
 
 type Rgb = [u8; 3];
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct BeacnMicState {
+    pub device_type: DeviceType,
+
     pub headphones: Headphones,
     pub lighting: Lighting,
     pub equaliser: Equaliser,
@@ -54,6 +57,7 @@ pub struct Headphones {
     pub output_gain: f32, // f32[0.0..=12.0]
     pub headphone_type: HeadphoneTypes,
     pub fx_enabled: bool,
+    pub studio_driverless: bool,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -160,7 +164,8 @@ pub struct Suppressor {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct MicSetup {
-    pub gain: u8, // [3..=20]dB
+    pub gain: u8,      // [3..=20]dB
+    pub phantom: bool, // Phantom Power (Studio)
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -170,11 +175,12 @@ pub struct Subwoofer {
 }
 
 impl BeacnMicState {
-    pub fn load_settings(mic: &BeacnMic) -> Result<Self> {
+    pub fn load_settings(mic: &BeacnMic, device_type: DeviceType) -> Result<Self> {
         let mut state = Self::default();
+        state.device_type = device_type;
 
         // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message();
+        let messages = Message::generate_fetch_message(device_type);
         for message in messages {
             let value = mic.fetch_value(message)?;
 
@@ -270,33 +276,41 @@ impl BeacnMicState {
                 Message::Headphones(h) => match h {
                     MicHeadphones::HeadphoneLevel(v) => state.headphones.level = v.to_inner(),
                     MicHeadphones::MicMonitor(v) => state.headphones.mic_monitor = v.to_inner(),
-                    MicHeadphones::ChannelsLinked(b) => state.headphones.linked = b,
+                    MicHeadphones::StudioMicMonitor(v) => {
+                        state.headphones.mic_monitor = v.to_inner()
+                    }
+                    MicHeadphones::MicChannelsLinked(b) => state.headphones.linked = b,
+                    MicHeadphones::StudioChannelsLinked(b) => state.headphones.linked = b,
                     MicHeadphones::MicOutputGain(v) => state.headphones.output_gain = v.to_inner(),
                     MicHeadphones::HeadphoneType(t) => state.headphones.headphone_type = t,
                     MicHeadphones::FXEnabled(t) => state.headphones.fx_enabled = t,
+                    MicHeadphones::StudioDriverless(t) => state.headphones.studio_driverless = t,
                     _ => {}
                 },
                 Message::Lighting(l) => match l {
                     MicLighting::Mode(m) => state.lighting.mode = m,
-                    //MicLighting::Colour1(c) => state.lighting.colour1 = c,
-                    //MicLighting::Colour2(c) => state.lighting.colour2 = c,
+                    MicLighting::Colour1(c) => state.lighting.colour1 = [c.red, c.green, c.blue],
+                    MicLighting::Colour2(c) => state.lighting.colour2 = [c.red, c.green, c.blue],
                     MicLighting::Speed(v) => state.lighting.speed = v.to_inner(),
                     MicLighting::Brightness(v) => state.lighting.brightness = v.to_inner(),
                     MicLighting::MeterSource(v) => state.lighting.source = v,
                     MicLighting::MeterSensitivity(s) => state.lighting.sensitivity = s.to_inner(),
                     MicLighting::MuteMode(m) => state.lighting.mute_mode = m,
-                    //MicLighting::MuteColour(c) => state.lighting.mute_colour = c,
+                    MicLighting::MuteColour(c) => {
+                        state.lighting.mute_colour = [c.red, c.green, c.blue]
+                    }
                     MicLighting::SuspendMode(m) => state.lighting.suspend_mode = m,
                     MicLighting::SuspendBrightness(b) => {
                         state.lighting.suspend_brightness = b.to_inner()
                     }
                     _ => {}
                 },
-                Message::MicSetup(m) => {
-                    if let MicMicSetup::MicGain(g) = m {
-                        state.mic_setup.gain = g.to_inner() as u8
-                    }
-                }
+                Message::MicSetup(m) => match m {
+                    MicMicSetup::MicGain(g) => state.mic_setup.gain = g.to_inner() as u8,
+                    MicMicSetup::StudioMicGain(g) => state.mic_setup.gain = g.to_inner() as u8,
+                    MicMicSetup::StudioPhantomPower(p) => state.mic_setup.phantom = p,
+                    _ => {}
+                },
                 Message::Subwoofer(s) => match s {
                     MicSubwoofer::Enabled(e) => state.subwoofer.enabled = e,
                     MicSubwoofer::Amount(a) => state.subwoofer.amount = a.to_inner() as u8,
