@@ -3,6 +3,7 @@ pub(crate) mod expander;
 pub(crate) mod headphones;
 pub(crate) mod mic_setup;
 pub(crate) mod suppressor;
+pub(crate) mod equaliser;
 
 use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;

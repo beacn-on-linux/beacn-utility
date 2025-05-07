@@ -6,7 +6,7 @@ use crate::state::BeacnMicState;
 use anyhow::{Result, anyhow};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::{
-    DeviceLocation, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
+    DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
 use eframe::Frame;
 use egui::ahash::HashMap;
@@ -46,6 +46,7 @@ impl MicConfiguration {
 pub struct BeacnMicApp {
     devices: HashMap<DeviceLocation, MicConfiguration>,
     active_device: Option<DeviceLocation>,
+    type_map: HashMap<DeviceLocation, DeviceType>,
 
     hotplug_recv: mpsc::Receiver<HotPlugMessage>,
     hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
@@ -96,6 +97,7 @@ impl BeacnMicApp {
         Self {
             devices: Default::default(),
             active_device: None,
+            type_map: Default::default(),
 
             hotplug_recv: proxy_rx,
             hotplug_send: manage_tx,
@@ -123,16 +125,22 @@ impl eframe::App for BeacnMicApp {
                         let state =
                             BeacnMicState::load_settings(&device, device_type).expect("State Fail");
 
+                        // Add to our type map
+                        self.type_map.insert(location, state.device_type);
+
                         // Add to state
                         self.devices
                             .insert(location, MicConfiguration::new(device, state));
                         if self.active_device.is_none() {
                             self.active_device = Some(location);
                         }
+
+
                     }
                     HotPlugMessage::DeviceRemoved(d) => {
                         // Device removed, update our states
                         self.devices.remove(&d);
+                        self.type_map.remove(&d);
                         if self.active_device == Some(d) {
                             if self.devices.iter().len() == 0 {
                                 self.active_device = None;
@@ -164,9 +172,11 @@ impl eframe::App for BeacnMicApp {
             return;
         }
 
+
+
         // Grab the active device and its settings
-        let devices: Vec<DeviceLocation> = self.devices.keys().cloned().collect();
-        let active_device = self.active_device.unwrap();
+        let device_keys: Vec<DeviceLocation> = self.devices.keys().cloned().collect();
+        let active_device = &self.active_device.unwrap();
         let settings = self.devices.get_mut(&active_device).unwrap();
 
         egui::SidePanel::left("left_panel")
@@ -175,10 +185,17 @@ impl eframe::App for BeacnMicApp {
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     // We need to iterate between devices and pages
-                    for device in devices {
+                    for device in device_keys {
                         ui.add_space(5.0);
+                        if let Some(state) = self.type_map.get(&device) {
+                            match state {
+                                DeviceType::BeacnMic => ui.label("Mic"),
+                                DeviceType::BeacnStudio => ui.label("Studio"),
+                            };
+                        };
+
                         for (index, page) in self.pages.iter().enumerate() {
-                            let selected = active_device == device && self.active_page == index;
+                            let selected = active_device == &device && self.active_page == index;
                             if round_nav_button(ui, page.icon(), selected).clicked() {
                                 self.active_device = Some(device);
                                 self.active_page = index;
