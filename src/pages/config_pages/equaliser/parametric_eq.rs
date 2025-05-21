@@ -3,13 +3,20 @@ use crate::pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, E
 use crate::state::{BeacnMicState, EqualiserBand};
 use crate::widgets::draw_draggable;
 use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::equaliser::{EQBand, EQBandType, EQMode};
+use beacn_mic_lib::messages::Message;
+use beacn_mic_lib::messages::equaliser::EQBandType::{
+    BellBand, HighPassFilter, HighShelf, LowPassFilter, LowShelf, NotSet, NotchFilter,
+};
+use beacn_mic_lib::messages::equaliser::{
+    EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
+};
 use eframe::egui;
 use eframe::egui::{CornerRadius, Mesh, Shape, StrokeKind, pos2, vec2};
 use egui::{
     Color32, FontId, ImageButton, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2, Visuals,
 };
 use enum_map::EnumMap;
+use log::{debug, error, warn};
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
@@ -95,6 +102,53 @@ impl<'a> ParametricEq {
     pub fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) -> Response {
         let bands = &mut state.equaliser.bands[state.equaliser.mode];
 
+        // Firstly, make sure there's at least one active band
+        if bands.values().filter(|b| b.enabled).count() == 0 {
+            warn!("No Active EQ Bands, Finding Band to Enable..");
+            if let Some(band) = bands
+                .values_mut()
+                .find(|t| t.band_type != EQBandType::NotSet)
+            {
+                band.enabled = true;
+            } else {
+                warn!("All bands are disabled or not set, creating a default.");
+                let mode = state.equaliser.mode;
+
+                let eq_freq_1 = EQFrequency(36.0);
+                let eq_freq_2 = EQFrequency(500.0);
+                let eq_freq_3 = EQFrequency(2000.0);
+
+                let gain = EQGain(0.0);
+                let q = EQQ(0.7);
+
+                // This is basically the default setup for the 'Simple' Mode
+                let messages = vec![
+                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
+                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
+                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
+                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band1, HighPassFilter)),
+                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, BellBand)),
+                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, HighShelf)),
+                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
+                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
+                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
+                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
+                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
+                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
+                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
+                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
+                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
+                ];
+
+                for message in messages {
+                    state.set_value(message);
+                }
+            }
+        }
+
+        // Reborrow the bands, we may have made changes.
+        let bands = &mut state.equaliser.bands[state.equaliser.mode];
+
         // We'll do a quick check here to make sure our 'Active' band is actually enabled.
         if bands[self.active_band].enabled == false {
             for band in EQBand::iter() {
@@ -177,17 +231,17 @@ impl<'a> ParametricEq {
 
                         let active = active_band.band_type == band;
                         let icon = match band {
-                            EQBandType::LowPassFilter => "eq_low_pass",
-                            EQBandType::HighPassFilter => "eq_high_pass",
-                            EQBandType::NotchFilter => "eq_notch",
-                            EQBandType::BellBand => "eq_bell",
-                            EQBandType::LowShelf => "eq_low_shelf",
-                            EQBandType::HighShelf => "eq_high_shelf",
+                            LowPassFilter => "eq_low_pass",
+                            HighPassFilter => "eq_high_pass",
+                            NotchFilter => "eq_notch",
+                            BellBand => "eq_bell",
+                            LowShelf => "eq_low_shelf",
+                            HighShelf => "eq_high_shelf",
                             _ => "",
                         };
                         let position = match band {
-                            EQBandType::LowPassFilter => ButtonPosition::First,
-                            EQBandType::HighShelf => ButtonPosition::Last,
+                            LowPassFilter => ButtonPosition::First,
+                            HighShelf => ButtonPosition::Last,
                             _ => ButtonPosition::Middle,
                         };
                         if eq_mode(ui, icon, active, position).clicked() {
@@ -224,6 +278,11 @@ impl<'a> ParametricEq {
                 if bands.values_mut().any(|b| b.enabled == false) {
                     if ui.button("Add Band").clicked() {
                         if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
+                            if eq.band_type == NotSet {
+                                warn!("EQ Band doesn't have type set, defaulting to BellBand");
+                                eq.band_type = BellBand;
+                            }
+
                             eq.enabled = true;
                             self.invalidate_band(band)
                         }
@@ -587,7 +646,6 @@ impl<'a> ParametricEq {
         let plot_rect = Self::get_plot_rect(rect);
         let band = &mut bands[active];
 
-
         if self.eq_mode != EQMode::Simple {
             // Can't change the Frequency in simple mode, only the gain.
             let frequency = Self::x_to_freq(pointer_pos.x, plot_rect);
@@ -701,23 +759,13 @@ impl<'a> ParametricEq {
 
     fn get_coefficient(band: &EqualiserBand) -> BiquadCoefficient {
         match band.band_type {
-            EQBandType::LowShelf => {
-                EQUtil::low_shelf_coefficient(band.frequency as f32, band.gain, band.q)
-            }
-            EQBandType::HighShelf => {
-                EQUtil::high_shelf_coefficient(band.frequency as f32, band.gain, band.q)
-            }
-            EQBandType::BellBand => {
-                EQUtil::bell_coefficient(band.frequency as f32, band.gain, band.q)
-            }
-            EQBandType::NotchFilter => EQUtil::notch_coefficient(band.frequency as f32, band.q),
-            EQBandType::HighPassFilter => {
-                EQUtil::high_pass_coefficient(band.frequency as f32, band.q)
-            }
-            EQBandType::LowPassFilter => {
-                EQUtil::low_pass_coefficient(band.frequency as f32, band.q)
-            }
-            EQBandType::NotSet => panic!("We need to fix this.."),
+            LowShelf => EQUtil::low_shelf_coefficient(band.frequency as f32, band.gain, band.q),
+            HighShelf => EQUtil::high_shelf_coefficient(band.frequency as f32, band.gain, band.q),
+            BellBand => EQUtil::bell_coefficient(band.frequency as f32, band.gain, band.q),
+            NotchFilter => EQUtil::notch_coefficient(band.frequency as f32, band.q),
+            HighPassFilter => EQUtil::high_pass_coefficient(band.frequency as f32, band.q),
+            LowPassFilter => EQUtil::low_pass_coefficient(band.frequency as f32, band.q),
+            NotSet => panic!("We need to fix this.."),
         }
     }
 
@@ -731,7 +779,7 @@ impl<'a> ParametricEq {
     fn band_type_has_gain(band_type: EQBandType) -> bool {
         !matches!(
             band_type,
-            EQBandType::HighPassFilter | EQBandType::LowPassFilter | EQBandType::NotchFilter
+            HighPassFilter | LowPassFilter | NotchFilter
         )
     }
 }
