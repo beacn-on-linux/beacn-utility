@@ -1,7 +1,6 @@
 use crate::pages::MicPage;
 use crate::pages::config_pages::ConfigPage;
 use crate::pages::config_pages::compressor::CompressorPage;
-use crate::pages::config_pages::equaliser::Equaliser;
 use crate::pages::config_pages::expander::ExpanderPage;
 use crate::pages::config_pages::headphones::HeadphonesPage;
 use crate::pages::config_pages::mic_setup::MicSetupPage;
@@ -11,11 +10,11 @@ use crate::widgets::draw_range;
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::headphones::HPMicOutputGain;
 use beacn_mic_lib::types::HasRange;
-use egui::{Ui, vec2};
-use log::debug;
+use egui::{Ui, vec2, Widget};
+use crate::pages::config_pages::equaliser::parametric_eq::ParametricEq;
 
 pub struct Configuration {
-    equaliser: Box<Equaliser>,
+    equaliser_new: Box<ParametricEq>,
 
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
@@ -23,10 +22,8 @@ pub struct Configuration {
 
 impl Configuration {
     pub fn new() -> Self {
-
-
         Self {
-            equaliser: Box::new(Equaliser),
+            equaliser_new: Box::new(ParametricEq::new()),
 
             selected_tab: 0,
             tab_pages: vec![
@@ -50,7 +47,7 @@ impl MicPage for Configuration {
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);
             ui.set_max_size(eq_size);
-            self.equaliser.ui(ui, mic, state);
+            self.equaliser_new.ui(ui, mic, state);
         });
 
         ui.separator();

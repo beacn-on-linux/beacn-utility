@@ -16,6 +16,9 @@ strum = "0.27.1"
 strum_macros = "0.27.1"
 enum-map = "2.7.3"
 
+# Used for SIMD EQ calculations
+wide = "0.7.32"
+
 # UI Framework
 egui = "0.31.0"
 egui_extras = { version = "0.31.0", features = ["svg"] }
