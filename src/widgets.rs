@@ -100,6 +100,24 @@ pub fn toggle_button<'a>(ui: &mut Ui, active: bool, label: &str) -> egui::Button
     egui::Button::new(RichText::new(label).color(text_color)).fill(bg_color)
 }
 
+pub fn draw_draggable<T>(ui: &mut Ui, value: &mut T, range: RangeInclusive<T>, suffix: &str) -> bool
+where
+    T: Copy + Numeric + Debug + NumericType,
+{
+    let drag_speed = drag_speed_from_range(&range, 150);
+    let mut drag = DragValue::new(value)
+        .range(range.clone())
+        .speed(drag_speed)
+        .suffix(suffix);
+
+    if T::IS_FLOAT {
+        drag = drag.fixed_decimals(1);
+    }
+
+    let drag_response = ui.add_sized([75.0, 20.0], drag);
+    drag_response.changed()
+}
+
 pub fn get_slider<T>(
     ui: &mut Ui,
     title: &str,

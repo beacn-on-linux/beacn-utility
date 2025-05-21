@@ -1,10 +1,14 @@
+use crate::SVG;
 use crate::pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::state::{BeacnMicState, EqualiserBand};
+use crate::widgets::draw_draggable;
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::messages::equaliser::{EQBand, EQBandType, EQMode};
 use eframe::egui;
 use eframe::egui::{CornerRadius, Mesh, Shape, StrokeKind, pos2, vec2};
-use egui::{Color32, FontId, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2};
+use egui::{
+    Color32, FontId, ImageButton, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2, Visuals,
+};
 use enum_map::EnumMap;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
@@ -80,7 +84,7 @@ impl<'a> ParametricEq {
             band_mesh: Default::default(),
 
             curve_points: vec![],
-            rect: Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+            rect: Rect::NOTHING,
 
             active_band: EQBand::Band1,
             active_band_drag: None,
@@ -90,13 +94,25 @@ impl<'a> ParametricEq {
     /// Shows the parametric equalizer in the UI
     pub fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) -> Response {
         let bands = &mut state.equaliser.bands[state.equaliser.mode];
+
+        // We'll do a quick check here to make sure our 'Active' band is actually enabled.
+        if bands[self.active_band].enabled == false {
+            for band in EQBand::iter() {
+                if bands[band].enabled {
+                    self.active_band = band;
+                    break;
+                }
+            }
+        }
+
         let (rect, response) = ui.allocate_exact_size(
-            vec2(ui.available_width(), ui.available_height()),
+            vec2(ui.available_width(), ui.available_height() - 20.0),
             Sense::click_and_drag(),
         );
 
         if self.rect != rect || self.eq_mode != state.equaliser.mode {
             // Window has been resized, or we've changed mode. Reset everything.
+            self.eq_mode = state.equaliser.mode;
             self.band_mesh.clear();
             self.band_freq_response.clear();
             self.curve_points.clear();
@@ -105,37 +121,124 @@ impl<'a> ParametricEq {
 
         if ui.is_rect_visible(rect) {
             self.draw_widget(ui, rect, bands);
-
             if response.hovered() {
                 if let Some(pointer_pos) = response.hover_pos() {
                     let scroll = ui.ctx().input(|i| i.raw_scroll_delta).y;
                     if scroll != 0.0 {
                         let scroll_up = scroll > 0.0;
-                        self.handle_scroll(rect, pointer_pos, scroll_up, bands);
+                        self.handle_scroll(rect, pointer_pos, scroll_up, bands, mic);
                     }
                 }
             }
 
             if response.clicked() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_click(rect, pointer_pos, bands);
+                    self.handle_click(rect, pointer_pos, bands, mic);
                 }
             }
 
             if response.drag_started() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_drag_start(rect, pointer_pos, bands);
+                    self.handle_drag_start(rect, pointer_pos, bands, mic);
                 }
             }
             if response.dragged() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_drag(rect, pointer_pos, bands);
+                    self.handle_drag(rect, pointer_pos, bands, mic);
                 }
             }
             if response.drag_stopped() {
                 self.handle_drag_stop();
             }
         }
+
+        ui.horizontal(|ui| {
+            let active_band = &mut bands[self.active_band];
+            ui.add_space(20.0);
+
+            let mut is_advanced = state.equaliser.mode == EQMode::Advanced;
+            if ui.checkbox(&mut is_advanced, "Advanced").changed() {
+                state.equaliser.mode = if is_advanced {
+                    EQMode::Advanced
+                } else {
+                    EQMode::Simple
+                };
+            }
+
+            if is_advanced {
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
+
+                    for band in EQBandType::iter() {
+                        if band == EQBandType::NotSet {
+                            continue;
+                        }
+
+                        let active = active_band.band_type == band;
+                        let icon = match band {
+                            EQBandType::LowPassFilter => "eq_low_pass",
+                            EQBandType::HighPassFilter => "eq_high_pass",
+                            EQBandType::NotchFilter => "eq_notch",
+                            EQBandType::BellBand => "eq_bell",
+                            EQBandType::LowShelf => "eq_low_shelf",
+                            EQBandType::HighShelf => "eq_high_shelf",
+                            _ => "",
+                        };
+                        let position = match band {
+                            EQBandType::LowPassFilter => ButtonPosition::First,
+                            EQBandType::HighShelf => ButtonPosition::Last,
+                            _ => ButtonPosition::Middle,
+                        };
+                        if eq_mode(ui, icon, active, position).clicked() {
+                            active_band.band_type = band;
+                            self.invalidate_band(self.active_band);
+                        }
+                    }
+                });
+
+                ui.separator();
+
+                ui.label("Frequency: ");
+                if draw_draggable(ui, &mut active_band.frequency, 20..=20000, "Hz") {
+                    self.invalidate_band(self.active_band);
+                }
+            }
+            if Self::band_type_has_gain(active_band.band_type) {
+                ui.separator();
+                ui.label("Gain: ");
+                if draw_draggable(ui, &mut active_band.gain, -12.0..=12.0, "dB") {
+                    self.invalidate_band(self.active_band);
+                }
+            }
+
+            if is_advanced {
+                ui.separator();
+
+                ui.label("Q: ");
+                if draw_draggable(ui, &mut active_band.q, 0.1..=10.0, "") {
+                    self.invalidate_band(self.active_band);
+                }
+
+                ui.separator();
+                if bands.values_mut().any(|b| b.enabled == false) {
+                    if ui.button("Add Band").clicked() {
+                        if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
+                            eq.enabled = true;
+                            self.invalidate_band(band)
+                        }
+                    }
+                }
+
+                if bands.values().filter(|b| b.enabled).count() > 1 {
+                    if ui.button("Remove Band").clicked() {
+                        bands[self.active_band].enabled = false;
+                        self.invalidate_band(self.active_band);
+                    }
+                }
+            }
+        });
+        ui.add_space(5.0);
 
         response
     }
@@ -266,6 +369,7 @@ impl<'a> ParametricEq {
     ) {
         if let Some(mesh) = &self.band_mesh[band] {
             painter.add(Shape::mesh(mesh.clone()));
+            return;
         }
 
         let mut curve = self.get_eq_curve_points(rect, band, bands).clone();
@@ -397,6 +501,7 @@ impl<'a> ParametricEq {
 
     /// Draw the band control points
     fn draw_band_points(&self, painter: &egui::Painter, rect: Rect, bands: &Bands) {
+        let db0 = Self::db_to_y(0.0, rect);
         for (index, (band, value)) in bands.iter().enumerate() {
             if !value.enabled {
                 continue;
@@ -405,7 +510,11 @@ impl<'a> ParametricEq {
             let colour = EQ_POINT_COLOURS[index % EQ_POINT_COLOURS.len()];
 
             let x = Self::freq_to_x(value.frequency, rect);
-            let y = Self::db_to_y(value.gain, rect);
+            let y = if Self::band_type_has_gain(value.band_type) {
+                Self::db_to_y(value.gain, rect)
+            } else {
+                db0
+            };
             painter.circle_filled(Pos2::new(x, y), EQ_POINT_RADIUS, colour);
 
             if band == self.active_band {
@@ -454,13 +563,13 @@ impl<'a> ParametricEq {
         closest_band
     }
 
-    fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
+    fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &BeacnMic) {
         if let Some(index) = self.get_point_near_cursor(rect, pointer, bands) {
             self.active_band = index;
         }
     }
 
-    fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
+    fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &BeacnMic) {
         let active = self.get_point_near_cursor(rect, pointer, bands);
         if let Some(active) = active {
             self.active_band = active;
@@ -469,19 +578,22 @@ impl<'a> ParametricEq {
     }
 
     /// Handle drag interactions with the control points
-    fn handle_drag(&mut self, rect: Rect, pointer_pos: Pos2, bands: &mut Bands) {
+    fn handle_drag(&mut self, rect: Rect, pointer_pos: Pos2, bands: &mut Bands, mic: &BeacnMic) {
         // We don't have an active item, so there's nothing to do
         if self.active_band_drag.is_none() {
             return;
         }
         let active = self.active_band_drag.unwrap();
-
         let plot_rect = Self::get_plot_rect(rect);
         let band = &mut bands[active];
 
-        let frequency = Self::x_to_freq(pointer_pos.x, plot_rect);
-        let frequency = frequency.clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
-        band.frequency = frequency as u32;
+
+        if self.eq_mode != EQMode::Simple {
+            // Can't change the Frequency in simple mode, only the gain.
+            let frequency = Self::x_to_freq(pointer_pos.x, plot_rect);
+            let frequency = frequency.clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
+            band.frequency = frequency as u32;
+        }
 
         // If this band supports gain, update it.
         if Self::band_type_has_gain(band.band_type) {
@@ -490,9 +602,7 @@ impl<'a> ParametricEq {
         }
 
         // Clear out the caches for this band as it needs a redraw
-        self.band_freq_response[active] = None;
-        self.band_mesh[active] = None;
-        self.curve_points.clear();
+        self.invalidate_band(active);
     }
 
     fn handle_drag_stop(&mut self) {
@@ -505,7 +615,13 @@ impl<'a> ParametricEq {
         pointer_position: Pos2,
         scroll_up: bool,
         bands: &mut Bands,
+        mic: &BeacnMic,
     ) {
+        if self.eq_mode == EQMode::Simple {
+            // Can't adjust the Q in simple mode
+            return;
+        }
+
         if let Some(band) = self.get_point_near_cursor(rect, pointer_position, bands) {
             self.active_band = band;
 
@@ -516,10 +632,14 @@ impl<'a> ParametricEq {
             bands[self.active_band].q = rounded;
 
             // Invalidate existing renders for this band
-            self.band_freq_response[band] = None;
-            self.band_mesh[band] = None;
-            self.curve_points.clear();
+            self.invalidate_band(band);
         }
+    }
+
+    fn invalidate_band(&mut self, band: EQBand) {
+        self.band_freq_response[band] = None;
+        self.band_mesh[band] = None;
+        self.curve_points.clear();
     }
 
     /// Convert frequency to x-coordinate in plot area
@@ -614,4 +734,39 @@ impl<'a> ParametricEq {
             EQBandType::HighPassFilter | EQBandType::LowPassFilter | EQBandType::NotchFilter
         )
     }
+}
+
+enum ButtonPosition {
+    First,
+    Middle,
+    Last,
+}
+
+pub fn eq_mode<'a>(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Response {
+    let image = SVG.get(img).unwrap().clone();
+
+    let corner_radius = match pos {
+        ButtonPosition::First => CornerRadius {
+            nw: 6,
+            ne: 0,
+            sw: 6,
+            se: 0,
+        },
+        ButtonPosition::Middle => CornerRadius::ZERO,
+        ButtonPosition::Last => CornerRadius {
+            nw: 0,
+            ne: 6,
+            sw: 0,
+            se: 6,
+        },
+    };
+
+    ui.scope(|ui| {
+        ui.add(
+            ImageButton::new(image)
+                .corner_radius(corner_radius)
+                .selected(active),
+        )
+    })
+    .inner
 }

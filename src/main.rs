@@ -29,6 +29,14 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
     map.insert("mic", include_image!("../resources/icons/microphone.svg"));
     map.insert("bulb", include_image!("../resources/icons/lightbulb.svg"));
     map.insert("gear", include_image!("../resources/icons/gear.svg"));
+
+    // EQ Modes
+    map.insert("eq_bell", include_image!("../resources/eq/bell.svg"));
+    map.insert("eq_high_pass", include_image!("../resources/eq/high_pass.svg"));
+    map.insert("eq_high_shelf", include_image!("../resources/eq/high_shelf.svg"));
+    map.insert("eq_low_pass", include_image!("../resources/eq/low_pass.svg"));
+    map.insert("eq_low_shelf", include_image!("../resources/eq/low_shelf.svg"));
+    map.insert("eq_notch", include_image!("../resources/eq/notch.svg"));
     map
 });
 
@@ -200,7 +208,7 @@ impl eframe::App for BeacnMicApp {
                                 self.active_device = Some(device);
                                 self.active_page = index;
                             }
-                            ui.add_space(5.0);
+                            //ui.add_space(5.0);
                         }
                         ui.separator();
                     }
