@@ -100,6 +100,7 @@ impl<'a> ParametricEq {
 
     /// Shows the parametric equalizer in the UI
     pub fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) -> Response {
+        let mode = state.equaliser.mode;
         let bands = &mut state.equaliser.bands[state.equaliser.mode];
 
         // Firstly, make sure there's at least one active band
@@ -141,6 +142,7 @@ impl<'a> ParametricEq {
                 ];
 
                 for message in messages {
+                    let _ = mic.set_value(message);
                     state.set_value(message);
                 }
             }
@@ -159,6 +161,7 @@ impl<'a> ParametricEq {
             }
         }
 
+        let active = self.active_band;
         let (rect, response) = ui.allocate_exact_size(
             vec2(ui.available_width(), ui.available_height() - 20.0),
             Sense::click_and_drag(),
@@ -207,16 +210,18 @@ impl<'a> ParametricEq {
         }
 
         ui.horizontal(|ui| {
-            let active_band = &mut bands[self.active_band];
+            let active_band = &mut bands[active];
             ui.add_space(20.0);
 
             let mut is_advanced = state.equaliser.mode == EQMode::Advanced;
             if ui.checkbox(&mut is_advanced, "Advanced").changed() {
-                state.equaliser.mode = if is_advanced {
+                let new_mode = if is_advanced {
                     EQMode::Advanced
                 } else {
                     EQMode::Simple
                 };
+                state.equaliser.mode = new_mode;
+                let _ = mic.set_value(Message::Equaliser(Equaliser::Mode(new_mode)));
             }
 
             if is_advanced {
@@ -225,11 +230,11 @@ impl<'a> ParametricEq {
                     ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
 
                     for band in EQBandType::iter() {
-                        if band == EQBandType::NotSet {
+                        if band == NotSet {
                             continue;
                         }
 
-                        let active = active_band.band_type == band;
+                        let is_active = active_band.band_type == band;
                         let icon = match band {
                             LowPassFilter => "eq_low_pass",
                             HighPassFilter => "eq_high_pass",
@@ -244,9 +249,12 @@ impl<'a> ParametricEq {
                             HighShelf => ButtonPosition::Last,
                             _ => ButtonPosition::Middle,
                         };
-                        if eq_mode(ui, icon, active, position).clicked() {
+                        if eq_mode(ui, icon, is_active, position).clicked() {
+                            let msg = Equaliser::Type(mode, active, band);
+                            let _ = mic.set_value(Message::Equaliser(msg));
+
                             active_band.band_type = band;
-                            self.invalidate_band(self.active_band);
+                            self.invalidate_band(active);
                         }
                     }
                 });
@@ -255,14 +263,22 @@ impl<'a> ParametricEq {
 
                 ui.label("Frequency: ");
                 if draw_draggable(ui, &mut active_band.frequency, 20..=20000, "Hz") {
-                    self.invalidate_band(self.active_band);
+                    let value = EQFrequency(active_band.frequency as f32);
+                    let msg = Equaliser::Frequency(mode, active, value);
+                    let _ = mic.set_value(Message::Equaliser(msg));
+
+                    self.invalidate_band(active);
                 }
             }
             if Self::band_type_has_gain(active_band.band_type) {
                 ui.separator();
                 ui.label("Gain: ");
                 if draw_draggable(ui, &mut active_band.gain, -12.0..=12.0, "dB") {
-                    self.invalidate_band(self.active_band);
+                    let value = EQGain(active_band.gain);
+                    let msg = Equaliser::Gain(mode, active, value);
+                    let _ = mic.set_value(Message::Equaliser(msg));
+
+                    self.invalidate_band(active);
                 }
             }
 
@@ -271,7 +287,11 @@ impl<'a> ParametricEq {
 
                 ui.label("Q: ");
                 if draw_draggable(ui, &mut active_band.q, 0.1..=10.0, "") {
-                    self.invalidate_band(self.active_band);
+                    let value = EQQ(active_band.q);
+                    let msg = Equaliser::Q(mode, active, value);
+                    let _ = mic.set_value(Message::Equaliser(msg));
+
+                    self.invalidate_band(active);
                 }
 
                 ui.separator();
@@ -280,8 +300,14 @@ impl<'a> ParametricEq {
                         if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
                             if eq.band_type == NotSet {
                                 warn!("EQ Band doesn't have type set, defaulting to BellBand");
+
+                                let msg = Equaliser::Type(mode, band, BellBand);
+                                let _ = mic.set_value(Message::Equaliser(msg));
                                 eq.band_type = BellBand;
                             }
+
+                            let msg = Equaliser::Enabled(mode, band, true);
+                            let _ = mic.set_value(Message::Equaliser(msg));
 
                             eq.enabled = true;
                             self.invalidate_band(band)
@@ -291,8 +317,11 @@ impl<'a> ParametricEq {
 
                 if bands.values().filter(|b| b.enabled).count() > 1 {
                     if ui.button("Remove Band").clicked() {
-                        bands[self.active_band].enabled = false;
-                        self.invalidate_band(self.active_band);
+                        let msg = Equaliser::Enabled(mode, active, false);
+                        let _ = mic.set_value(Message::Equaliser(msg));
+
+                        bands[active].enabled = false;
+                        self.invalidate_band(active);
                     }
                 }
             }
@@ -651,12 +680,20 @@ impl<'a> ParametricEq {
             let frequency = Self::x_to_freq(pointer_pos.x, plot_rect);
             let frequency = frequency.clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
             band.frequency = frequency as u32;
+
+            let value = EQFrequency(band.frequency as f32);
+            let msg = Equaliser::Frequency(self.eq_mode, active, value);
+            let _ = mic.set_value(Message::Equaliser(msg));
         }
 
         // If this band supports gain, update it.
         if Self::band_type_has_gain(band.band_type) {
             let gain = Self::y_to_db(pointer_pos.y, plot_rect).clamp(MIN_GAIN, MAX_GAIN);
             band.gain = (gain * 10.0).round() / 10.0;
+
+            let value = EQGain(band.gain);
+            let msg = Equaliser::Gain(self.eq_mode, active, value);
+            let _ = mic.set_value(Message::Equaliser(msg));
         }
 
         // Clear out the caches for this band as it needs a redraw
@@ -688,6 +725,9 @@ impl<'a> ParametricEq {
             let new = new_q.clamp(0.1, 10.0);
             let rounded = (new * 10.0).round() / 10.0;
             bands[self.active_band].q = rounded;
+
+            let msg = Equaliser::Q(self.eq_mode, band, EQQ(rounded));
+            let _ = mic.set_value(Message::Equaliser(msg));
 
             // Invalidate existing renders for this band
             self.invalidate_band(band);
@@ -777,10 +817,7 @@ impl<'a> ParametricEq {
     }
 
     fn band_type_has_gain(band_type: EQBandType) -> bool {
-        !matches!(
-            band_type,
-            HighPassFilter | LowPassFilter | NotchFilter
-        )
+        !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
     }
 }
 
