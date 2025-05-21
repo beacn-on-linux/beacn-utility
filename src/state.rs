@@ -183,153 +183,157 @@ impl BeacnMicState {
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
             let value = mic.fetch_value(message)?;
+            state.set_value(value);
 
-            match value {
-                Message::BassEnhancement(b) => match b {
-                    MicBaseEnhancement::Enabled(v) => state.bass_enhancement.enabled = v,
-                    MicBaseEnhancement::Preset(v) => state.bass_enhancement.preset = v,
-                    MicBaseEnhancement::Amount(v) => {
-                        state.bass_enhancement.amount = v.to_inner() as i8
-                    }
-                    _ => {}
-                },
-                Message::Compressor(c) => match c {
-                    MicCompressor::Mode(mode) => state.compressor.mode = mode,
-                    MicCompressor::Attack(mode, value) => {
-                        state.compressor.values[mode].attack = value.to_inner() as u16
-                    }
-                    MicCompressor::Release(mode, value) => {
-                        state.compressor.values[mode].release = value.to_inner() as u16
-                    }
-                    MicCompressor::Threshold(mode, value) => {
-                        state.compressor.values[mode].threshold = value.to_inner() as i8
-                    }
-                    MicCompressor::Ratio(mode, value) => {
-                        state.compressor.values[mode].ratio = value.to_inner()
-                    }
-                    MicCompressor::MakeupGain(mode, value) => {
-                        state.compressor.values[mode].makeup = value.to_inner()
-                    }
-                    MicCompressor::Enabled(mode, value) => {
-                        state.compressor.values[mode].enabled = value
-                    }
-                    _ => {}
-                },
-                Message::DeEsser(d) => match d {
-                    MicDeEsser::Amount(value) => state.de_esser.amount = value.to_inner() as u8,
-                    MicDeEsser::Enabled(value) => state.de_esser.enabled = value,
-                    _ => {}
-                },
-                Message::Equaliser(e) => match e {
-                    MicEqualiser::Mode(mode) => state.equaliser.mode = mode,
-                    MicEqualiser::Type(mode, band, value) => {
-                        state.equaliser.bands[mode][band].band_type = value
-                    }
-                    MicEqualiser::Gain(mode, band, value) => {
-                        state.equaliser.bands[mode][band].gain = value.to_inner()
-                    }
-                    MicEqualiser::Frequency(mode, band, value) => {
-                        state.equaliser.bands[mode][band].frequency = value.to_inner() as u32
-                    }
-                    MicEqualiser::Q(mode, band, value) => {
-                        state.equaliser.bands[mode][band].q = value.to_inner()
-                    }
-                    MicEqualiser::Enabled(mode, band, value) => {
-                        state.equaliser.bands[mode][band].enabled = value
-                    }
-                    _ => {}
-                },
-                Message::Exciter(e) => match e {
-                    MicExciter::Amount(value) => state.exciter.amount = value.to_inner() as u8,
-                    MicExciter::Frequency(value) => state.exciter.freq = value.to_inner() as u16,
-                    MicExciter::Enabled(value) => state.exciter.enabled = value,
-                    _ => {}
-                },
-                Message::Expander(e) => match e {
-                    MicExpander::Mode(mode) => state.expander.mode = mode,
-                    MicExpander::Threshold(mode, value) => {
-                        state.expander.values[mode].threshold = value.to_inner() as i8
-                    }
-                    MicExpander::Ratio(mode, value) => {
-                        state.expander.values[mode].ratio = value.to_inner()
-                    }
-                    MicExpander::Enabled(mode, value) => {
-                        state.expander.values[mode].enabled = value
-                    }
-                    MicExpander::Attack(mode, value) => {
-                        state.expander.values[mode].attack = value.to_inner() as u16
-                    }
-                    MicExpander::Release(mode, value) => {
-                        state.expander.values[mode].release = value.to_inner() as u16
-                    }
-                    _ => {}
-                },
-                Message::HeadphoneEQ(h) => match h {
-                    MicHeadphoneEQ::Amount(eq_type, value) => {
-                        state.headphone_eq.eq[eq_type].amount = value.to_inner()
-                    }
-                    MicHeadphoneEQ::Enabled(eq_type, value) => {
-                        state.headphone_eq.eq[eq_type].enabled = value
-                    }
-                    _ => {}
-                },
-                Message::Headphones(h) => match h {
-                    MicHeadphones::HeadphoneLevel(v) => state.headphones.level = v.to_inner(),
-                    MicHeadphones::MicMonitor(v) => state.headphones.mic_monitor = v.to_inner(),
-                    MicHeadphones::StudioMicMonitor(v) => {
-                        state.headphones.mic_monitor = v.to_inner()
-                    }
-                    MicHeadphones::MicChannelsLinked(b) => state.headphones.linked = b,
-                    MicHeadphones::StudioChannelsLinked(b) => state.headphones.linked = b,
-                    MicHeadphones::MicOutputGain(v) => state.headphones.output_gain = v.to_inner(),
-                    MicHeadphones::HeadphoneType(t) => state.headphones.headphone_type = t,
-                    MicHeadphones::FXEnabled(t) => state.headphones.fx_enabled = t,
-                    MicHeadphones::StudioDriverless(t) => state.headphones.studio_driverless = t,
-                    _ => {}
-                },
-                Message::Lighting(l) => match l {
-                    MicLighting::Mode(m) => state.lighting.mode = m,
-                    MicLighting::Colour1(c) => state.lighting.colour1 = [c.red, c.green, c.blue],
-                    MicLighting::Colour2(c) => state.lighting.colour2 = [c.red, c.green, c.blue],
-                    MicLighting::Speed(v) => state.lighting.speed = v.to_inner(),
-                    MicLighting::Brightness(v) => state.lighting.brightness = v.to_inner(),
-                    MicLighting::MeterSource(v) => state.lighting.source = v,
-                    MicLighting::MeterSensitivity(s) => state.lighting.sensitivity = s.to_inner(),
-                    MicLighting::MuteMode(m) => state.lighting.mute_mode = m,
-                    MicLighting::MuteColour(c) => {
-                        state.lighting.mute_colour = [c.red, c.green, c.blue]
-                    }
-                    MicLighting::SuspendMode(m) => state.lighting.suspend_mode = m,
-                    MicLighting::SuspendBrightness(b) => {
-                        state.lighting.suspend_brightness = b.to_inner()
-                    }
-                    _ => {}
-                },
-                Message::MicSetup(m) => match m {
-                    MicMicSetup::MicGain(g) => state.mic_setup.gain = g.to_inner() as u8,
-                    MicMicSetup::StudioMicGain(g) => state.mic_setup.gain = g.to_inner() as u8,
-                    MicMicSetup::StudioPhantomPower(p) => state.mic_setup.phantom = p,
-                    _ => {}
-                },
-                Message::Subwoofer(s) => match s {
-                    MicSubwoofer::Enabled(e) => state.subwoofer.enabled = e,
-                    MicSubwoofer::Amount(a) => state.subwoofer.amount = a.to_inner() as u8,
-                    _ => {}
-                },
-                Message::Suppressor(s) => match s {
-                    MicSuppressor::Enabled(e) => state.suppressor.enabled = e,
-                    MicSuppressor::Amount(a) => state.suppressor.amount = a.to_inner() as u8,
-                    MicSuppressor::Style(s) => state.suppressor.style = s,
-                    MicSuppressor::Sensitivity(s) => {
-                        // Convert this to a percent
-                        let percent = ((s.to_inner() + 120.0) / 60.0) * 100.0;
-                        state.suppressor.sense = percent as u8
-                    }
-                    _ => {}
-                },
-            }
         }
 
         Ok(state)
+    }
+
+    pub(crate) fn set_value(&mut self, value: Message) {
+        match value {
+            Message::BassEnhancement(b) => match b {
+                MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
+                MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
+                MicBaseEnhancement::Amount(v) => {
+                    self.bass_enhancement.amount = v.to_inner() as i8
+                }
+                _ => {}
+            },
+            Message::Compressor(c) => match c {
+                MicCompressor::Mode(mode) => self.compressor.mode = mode,
+                MicCompressor::Attack(mode, value) => {
+                    self.compressor.values[mode].attack = value.to_inner() as u16
+                }
+                MicCompressor::Release(mode, value) => {
+                    self.compressor.values[mode].release = value.to_inner() as u16
+                }
+                MicCompressor::Threshold(mode, value) => {
+                    self.compressor.values[mode].threshold = value.to_inner() as i8
+                }
+                MicCompressor::Ratio(mode, value) => {
+                    self.compressor.values[mode].ratio = value.to_inner()
+                }
+                MicCompressor::MakeupGain(mode, value) => {
+                    self.compressor.values[mode].makeup = value.to_inner()
+                }
+                MicCompressor::Enabled(mode, value) => {
+                    self.compressor.values[mode].enabled = value
+                }
+                _ => {}
+            },
+            Message::DeEsser(d) => match d {
+                MicDeEsser::Amount(value) => self.de_esser.amount = value.to_inner() as u8,
+                MicDeEsser::Enabled(value) => self.de_esser.enabled = value,
+                _ => {}
+            },
+            Message::Equaliser(e) => match e {
+                MicEqualiser::Mode(mode) => self.equaliser.mode = mode,
+                MicEqualiser::Type(mode, band, value) => {
+                    self.equaliser.bands[mode][band].band_type = value
+                }
+                MicEqualiser::Gain(mode, band, value) => {
+                    self.equaliser.bands[mode][band].gain = value.to_inner()
+                }
+                MicEqualiser::Frequency(mode, band, value) => {
+                    self.equaliser.bands[mode][band].frequency = value.to_inner() as u32
+                }
+                MicEqualiser::Q(mode, band, value) => {
+                    self.equaliser.bands[mode][band].q = value.to_inner()
+                }
+                MicEqualiser::Enabled(mode, band, value) => {
+                    self.equaliser.bands[mode][band].enabled = value
+                }
+                _ => {}
+            },
+            Message::Exciter(e) => match e {
+                MicExciter::Amount(value) => self.exciter.amount = value.to_inner() as u8,
+                MicExciter::Frequency(value) => self.exciter.freq = value.to_inner() as u16,
+                MicExciter::Enabled(value) => self.exciter.enabled = value,
+                _ => {}
+            },
+            Message::Expander(e) => match e {
+                MicExpander::Mode(mode) => self.expander.mode = mode,
+                MicExpander::Threshold(mode, value) => {
+                    self.expander.values[mode].threshold = value.to_inner() as i8
+                }
+                MicExpander::Ratio(mode, value) => {
+                    self.expander.values[mode].ratio = value.to_inner()
+                }
+                MicExpander::Enabled(mode, value) => {
+                    self.expander.values[mode].enabled = value
+                }
+                MicExpander::Attack(mode, value) => {
+                    self.expander.values[mode].attack = value.to_inner() as u16
+                }
+                MicExpander::Release(mode, value) => {
+                    self.expander.values[mode].release = value.to_inner() as u16
+                }
+                _ => {}
+            },
+            Message::HeadphoneEQ(h) => match h {
+                MicHeadphoneEQ::Amount(eq_type, value) => {
+                    self.headphone_eq.eq[eq_type].amount = value.to_inner()
+                }
+                MicHeadphoneEQ::Enabled(eq_type, value) => {
+                    self.headphone_eq.eq[eq_type].enabled = value
+                }
+                _ => {}
+            },
+            Message::Headphones(h) => match h {
+                MicHeadphones::HeadphoneLevel(v) => self.headphones.level = v.to_inner(),
+                MicHeadphones::MicMonitor(v) => self.headphones.mic_monitor = v.to_inner(),
+                MicHeadphones::StudioMicMonitor(v) => {
+                    self.headphones.mic_monitor = v.to_inner()
+                }
+                MicHeadphones::MicChannelsLinked(b) => self.headphones.linked = b,
+                MicHeadphones::StudioChannelsLinked(b) => self.headphones.linked = b,
+                MicHeadphones::MicOutputGain(v) => self.headphones.output_gain = v.to_inner(),
+                MicHeadphones::HeadphoneType(t) => self.headphones.headphone_type = t,
+                MicHeadphones::FXEnabled(t) => self.headphones.fx_enabled = t,
+                MicHeadphones::StudioDriverless(t) => self.headphones.studio_driverless = t,
+                _ => {}
+            },
+            Message::Lighting(l) => match l {
+                MicLighting::Mode(m) => self.lighting.mode = m,
+                MicLighting::Colour1(c) => self.lighting.colour1 = [c.red, c.green, c.blue],
+                MicLighting::Colour2(c) => self.lighting.colour2 = [c.red, c.green, c.blue],
+                MicLighting::Speed(v) => self.lighting.speed = v.to_inner(),
+                MicLighting::Brightness(v) => self.lighting.brightness = v.to_inner(),
+                MicLighting::MeterSource(v) => self.lighting.source = v,
+                MicLighting::MeterSensitivity(s) => self.lighting.sensitivity = s.to_inner(),
+                MicLighting::MuteMode(m) => self.lighting.mute_mode = m,
+                MicLighting::MuteColour(c) => {
+                    self.lighting.mute_colour = [c.red, c.green, c.blue]
+                }
+                MicLighting::SuspendMode(m) => self.lighting.suspend_mode = m,
+                MicLighting::SuspendBrightness(b) => {
+                    self.lighting.suspend_brightness = b.to_inner()
+                }
+                _ => {}
+            },
+            Message::MicSetup(m) => match m {
+                MicMicSetup::MicGain(g) => self.mic_setup.gain = g.to_inner() as u8,
+                MicMicSetup::StudioMicGain(g) => self.mic_setup.gain = g.to_inner() as u8,
+                MicMicSetup::StudioPhantomPower(p) => self.mic_setup.phantom = p,
+                _ => {}
+            },
+            Message::Subwoofer(s) => match s {
+                MicSubwoofer::Enabled(e) => self.subwoofer.enabled = e,
+                MicSubwoofer::Amount(a) => self.subwoofer.amount = a.to_inner() as u8,
+                _ => {}
+            },
+            Message::Suppressor(s) => match s {
+                MicSuppressor::Enabled(e) => self.suppressor.enabled = e,
+                MicSuppressor::Amount(a) => self.suppressor.amount = a.to_inner() as u8,
+                MicSuppressor::Style(s) => self.suppressor.style = s,
+                MicSuppressor::Sensitivity(s) => {
+                    // Convert this to a percent
+                    let percent = ((s.to_inner() + 120.0) / 60.0) * 100.0;
+                    self.suppressor.sense = percent as u8
+                }
+                _ => {}
+            },
+        }
     }
 }
