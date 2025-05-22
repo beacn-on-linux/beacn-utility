@@ -232,8 +232,12 @@ fn main() -> Result<()> {
         ColorChoice::Auto,
     )])?;
 
+    let viewport = egui::ViewportBuilder::default();
+    let viewport = viewport.with_inner_size([1024.0, 500.0]);
+    let viewport = viewport.with_min_inner_size([1024.0, 500.0]);
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1100., 520.]),
+        viewport,
         ..Default::default()
     };
 
