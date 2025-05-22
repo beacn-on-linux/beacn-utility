@@ -48,10 +48,10 @@ static EQ_COLOURS: [[u8; 3]; 4] = [
 
 static EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     [
-        Color32::from_rgba_unmultiplied(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2], 5),
-        Color32::from_rgba_unmultiplied(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2], 5),
-        Color32::from_rgba_unmultiplied(EQ_COLOURS[2][0], EQ_COLOURS[2][1], EQ_COLOURS[2][2], 5),
-        Color32::from_rgba_unmultiplied(EQ_COLOURS[3][0], EQ_COLOURS[3][1], EQ_COLOURS[3][2], 5),
+        Color32::from_rgba_unmultiplied(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2], 128),
+        Color32::from_rgba_unmultiplied(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2], 128),
+        Color32::from_rgba_unmultiplied(EQ_COLOURS[2][0], EQ_COLOURS[2][1], EQ_COLOURS[2][2], 128),
+        Color32::from_rgba_unmultiplied(EQ_COLOURS[3][0], EQ_COLOURS[3][1], EQ_COLOURS[3][2], 128),
     ]
 });
 
@@ -226,7 +226,7 @@ impl<'a> ParametricEq {
 
             if is_advanced {
                 ui.separator();
-                ui.horizontal(|ui| {
+                ui.horizontal_centered(|ui| {
                     ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
 
                     for band in EQBandType::iter() {
@@ -475,22 +475,37 @@ impl<'a> ParametricEq {
         // Clamp the points inside our bounds
         curve.iter_mut().for_each(|f| f.y = f.y.clamp(min_y, max_y));
 
+        // Prune values where Y hasn't changed
+        let curve = Self::prune_flat_points(&curve, 1.0);
         let mut mesh = Mesh::default();
-        for pair in curve.windows(2) {
-            let [p1, p2] = [pair[0], pair[1]];
 
+        let feather_width = 1.0;
+        let premultiply = |c: Color32, alpha_factor: f32| -> Color32 {
+            let a = (c.a() as f32 * alpha_factor).round() as u8;
+            let alpha_norm = a as f32 / 255.0;
+            let r = (c.r() as f32 * alpha_norm).round() as u8;
+            let g = (c.g() as f32 * alpha_norm).round() as u8;
+            let b = (c.b() as f32 * alpha_norm).round() as u8;
+            Color32::from_rgba_premultiplied(r, g, b, a)
+        };
+
+        let base_colour = premultiply(colour, 1.0);
+        let feather_colour = premultiply(colour, 0.0);
+
+        for pair in curve.windows(2) {
+            // -- Render the Base Fill
+            let [p1, p2] = [pair[0], pair[1]];
             let p1_base = Pos2::new(p1.x, zero_db_y);
             let p2_base = Pos2::new(p2.x, zero_db_y);
 
             let base_idx = mesh.vertices.len() as u32;
+            mesh.colored_vertex(p1, base_colour);
+            mesh.colored_vertex(p2, base_colour);
+            mesh.colored_vertex(p1_base, base_colour);
 
-            mesh.colored_vertex(p1, colour);
-            mesh.colored_vertex(p2, colour);
-            mesh.colored_vertex(p1_base, colour);
-
-            mesh.colored_vertex(p2, colour);
-            mesh.colored_vertex(p2_base, colour);
-            mesh.colored_vertex(p1_base, colour);
+            mesh.colored_vertex(p2, base_colour);
+            mesh.colored_vertex(p2_base, base_colour);
+            mesh.colored_vertex(p1_base, base_colour);
 
             mesh.indices.extend([
                 base_idx,
@@ -500,12 +515,69 @@ impl<'a> ParametricEq {
                 base_idx + 4,
                 base_idx + 5,
             ]);
+
+            // -- Render the Feather
+            let direction = p2 - p1;
+            let perpendicular = vec2(-direction.y, direction.x).normalized();
+
+            // Work out if we're going positive or negative from the 0dB point
+            let sign = if p1.y < zero_db_y && p2.y < zero_db_y { -1.0 } else { 1.0 };
+            let feather_vec = perpendicular * feather_width * sign;
+
+            let p1_outer = p1 + feather_vec;
+            let p2_outer = p2 + feather_vec;
+
+            let base_idx = mesh.vertices.len() as u32;
+            mesh.colored_vertex(p1, base_colour);
+            mesh.colored_vertex(p2, base_colour);
+            mesh.colored_vertex(p1_outer, feather_colour);
+
+            mesh.colored_vertex(p2, base_colour);
+            mesh.colored_vertex(p2_outer, feather_colour);
+            mesh.colored_vertex(p1_outer, feather_colour);
+
+            mesh.indices.extend([
+                base_idx,
+                base_idx + 1,
+                base_idx + 2,
+                base_idx + 3,
+                base_idx + 4,
+                base_idx + 5,
+            ]);
+
         }
+
         let mesh = Arc::new(mesh);
         self.band_mesh[band] = Some(mesh.clone());
 
         painter.add(Shape::mesh(mesh));
-        //painter.add(Shape::line(curve, Stroke::new(1.0, Color32::WHITE)));
+    }
+
+    fn prune_flat_points(points: &[Pos2], threshold: f32) -> Vec<Pos2> {
+        let mut result = Vec::with_capacity(points.len());
+        let mut last_y = f32::NAN;
+
+        // Push the first point onto the stack
+        if let Some(&first) = points.first() {
+            result.push(first);
+            last_y = first.y;
+        }
+
+        // Iterate through the remaining points
+        for &point in &points[1..] {
+            if (point.y - last_y).abs() >= threshold {
+                result.push(point);
+                last_y = point.y;
+            }
+        }
+
+        // Push the last point if it's not there already
+        if result.last() != points.last() {
+            if let Some(&last) = points.last() {
+                result.push(last)
+            }
+        }
+        result
     }
 
     /// Get the EQ Curve based on band
