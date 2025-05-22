@@ -12,9 +12,11 @@ use beacn_mic_lib::messages::equaliser::{
 };
 use eframe::egui;
 use eframe::egui::{CornerRadius, Mesh, Shape, StrokeKind, pos2, vec2};
+use eframe::emath::Align;
+use egui::accesskit::Size;
 use egui::{
-    Button, Color32, FontId, ImageButton, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2,
-    Visuals,
+    Button, Color32, FontId, ImageButton, Layout, Pos2, Rect, Response, RichText, Sense, Stroke,
+    Ui, Vec2, Visuals,
 };
 use enum_map::EnumMap;
 use log::{debug, error, warn};
@@ -213,56 +215,71 @@ impl<'a> ParametricEq {
             }
         }
 
+        ui.add_space(5.0);
+        let mut is_advanced = state.equaliser.mode == EQMode::Advanced;
+
+        // We need to force a 28px height here, so that we center
         ui.horizontal(|ui| {
+            ui.allocate_ui_with_layout(
+                vec2(f32::INFINITY, 26.0),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.add_space(20.0);
+
+                    if ui.checkbox(&mut is_advanced, "Advanced").changed() {
+                        let new_mode = if is_advanced {
+                            EQMode::Advanced
+                        } else {
+                            EQMode::Simple
+                        };
+                        state.equaliser.mode = new_mode;
+                        let _ = mic.set_value(Message::Equaliser(Equaliser::Mode(new_mode)));
+                    }
+                },
+            );
+
             let active_band = &mut bands[active];
-            ui.add_space(20.0);
-
-            let mut is_advanced = state.equaliser.mode == EQMode::Advanced;
-            if ui.checkbox(&mut is_advanced, "Advanced").changed() {
-                let new_mode = if is_advanced {
-                    EQMode::Advanced
-                } else {
-                    EQMode::Simple
-                };
-                state.equaliser.mode = new_mode;
-                let _ = mic.set_value(Message::Equaliser(Equaliser::Mode(new_mode)));
-            }
-
             if is_advanced {
                 ui.separator();
-                ui.horizontal_centered(|ui| {
-                    ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
 
-                    for band in EQBandType::iter() {
-                        if band == NotSet {
-                            continue;
-                        }
+                ui.allocate_ui_with_layout(
+                    vec2(f32::INFINITY, 26.0),
+                    Layout::left_to_right(Align::Center),
+                    |ui| {
+                        ui.horizontal_centered(|ui| {
+                            ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
 
-                        let is_active = active_band.band_type == band;
-                        let icon = match band {
-                            LowPassFilter => "eq_low_pass",
-                            HighPassFilter => "eq_high_pass",
-                            NotchFilter => "eq_notch",
-                            BellBand => "eq_bell",
-                            LowShelf => "eq_low_shelf",
-                            HighShelf => "eq_high_shelf",
-                            _ => "",
-                        };
-                        let position = match band {
-                            LowPassFilter => ButtonPosition::First,
-                            HighShelf => ButtonPosition::Last,
-                            _ => ButtonPosition::Middle,
-                        };
-                        if eq_mode(ui, icon, is_active, position).clicked() {
-                            let msg = Equaliser::Type(mode, active, band);
-                            let _ = mic.set_value(Message::Equaliser(msg));
+                            for band in EQBandType::iter() {
+                                if band == NotSet {
+                                    continue;
+                                }
 
-                            active_band.band_type = band;
-                            self.invalidate_band(active);
-                        }
-                    }
-                });
+                                let is_active = active_band.band_type == band;
+                                let icon = match band {
+                                    LowPassFilter => "eq_low_pass",
+                                    HighPassFilter => "eq_high_pass",
+                                    NotchFilter => "eq_notch",
+                                    BellBand => "eq_bell",
+                                    LowShelf => "eq_low_shelf",
+                                    HighShelf => "eq_high_shelf",
+                                    _ => "",
+                                };
+                                let position = match band {
+                                    LowPassFilter => ButtonPosition::First,
+                                    HighShelf => ButtonPosition::Last,
+                                    _ => ButtonPosition::Middle,
+                                };
+                                if eq_mode(ui, icon, is_active, position).clicked() {
+                                    let msg = Equaliser::Type(mode, active, band);
+                                    let _ = mic.set_value(Message::Equaliser(msg));
 
+                                    active_band.band_type = band;
+                                    self.invalidate_band(active);
+                                }
+                            }
+                        });
+                    },
+                );
                 ui.separator();
 
                 ui.label("Frequency: ");
@@ -902,7 +919,7 @@ impl<'a> ParametricEq {
     fn get_plot_rect(rect: Rect) -> Rect {
         Rect::from_min_max(
             rect.min + Vec2::new(EQ_MARGIN.x, EQ_MARGIN.y),
-            rect.max - Vec2::new(EQ_MARGIN.x, 0.0),
+            rect.max - Vec2::new(0.0, 0.0),
         )
     }
 
@@ -919,6 +936,12 @@ enum ButtonPosition {
 
 pub fn eq_mode<'a>(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Response {
     let image = SVG.get(img).unwrap().clone();
+
+    let tint_colour = if active {
+        Color32::WHITE
+    } else {
+        Color32::from_rgb(120, 120, 120)
+    };
 
     let corner_radius = match pos {
         ButtonPosition::First => CornerRadius {
@@ -940,6 +963,7 @@ pub fn eq_mode<'a>(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) ->
         ui.add(
             ImageButton::new(image)
                 .corner_radius(corner_radius)
+                .tint(tint_colour)
                 .selected(active),
         )
     })
