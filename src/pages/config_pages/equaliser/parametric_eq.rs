@@ -336,8 +336,6 @@ impl<'a> ParametricEq {
                 }
             }
         });
-        ui.add_space(5.0);
-
         response
     }
 
@@ -897,7 +895,7 @@ impl<'a> ParametricEq {
     fn get_plot_rect(rect: Rect) -> Rect {
         Rect::from_min_max(
             rect.min + Vec2::new(EQ_MARGIN.x, EQ_MARGIN.y),
-            rect.max - Vec2::new(EQ_MARGIN.x, EQ_MARGIN.y),
+            rect.max - Vec2::new(EQ_MARGIN.x, 0.0),
         )
     }
 
