@@ -279,7 +279,14 @@ impl<'a> ParametricEq {
             ui.separator();
             ui.label("Gain: ");
             let enabled = Self::band_type_has_gain(active_band.band_type);
-            let drag = draw_draggable(&mut active_band.gain, -12.0..=12.0, "dB");
+            let mut zero = 0.0;
+            let value = if enabled {
+                &mut active_band.gain
+            } else {
+                &mut zero
+            };
+
+            let drag = draw_draggable(value, -12.0..=12.0, "dB");
             if ui
                 .add_enabled(enabled, |ui: &mut Ui| ui.add_sized([75.0, 20.0], drag))
                 .changed()
