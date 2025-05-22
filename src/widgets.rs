@@ -69,7 +69,7 @@ where
     changed
 }
 
-fn drag_speed_from_range<T>(range: &std::ops::RangeInclusive<T>, steps: usize) -> f64
+fn drag_speed_from_range<T>(range: &RangeInclusive<T>, steps: usize) -> f64
 where
     T: Numeric,
 {
@@ -100,7 +100,7 @@ pub fn toggle_button<'a>(ui: &mut Ui, active: bool, label: &str) -> egui::Button
     egui::Button::new(RichText::new(label).color(text_color)).fill(bg_color)
 }
 
-pub fn draw_draggable<T>(ui: &mut Ui, value: &mut T, range: RangeInclusive<T>, suffix: &str) -> bool
+pub fn draw_draggable<'a, T>(value: &'a mut T, range: RangeInclusive<T>, suffix: &str) -> DragValue<'a>
 where
     T: Copy + Numeric + Debug + NumericType,
 {
@@ -114,8 +114,9 @@ where
         drag = drag.fixed_decimals(1);
     }
 
-    let drag_response = ui.add_sized([75.0, 20.0], drag);
-    drag_response.changed()
+    // let drag_response = ui.add_sized([75.0, 20.0], drag);
+    // drag_response.changed()
+    drag
 }
 
 pub fn get_slider<T>(

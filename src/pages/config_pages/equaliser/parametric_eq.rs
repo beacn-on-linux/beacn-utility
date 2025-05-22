@@ -13,7 +13,8 @@ use beacn_mic_lib::messages::equaliser::{
 use eframe::egui;
 use eframe::egui::{CornerRadius, Mesh, Shape, StrokeKind, pos2, vec2};
 use egui::{
-    Color32, FontId, ImageButton, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2, Visuals,
+    Button, Color32, FontId, ImageButton, Pos2, Rect, Response, RichText, Sense, Stroke, Ui, Vec2,
+    Visuals,
 };
 use enum_map::EnumMap;
 use log::{debug, error, warn};
@@ -22,6 +23,9 @@ use strum::IntoEnumIterator;
 use wide::f32x8;
 
 type Bands = EnumMap<EQBand, EqualiserBand>;
+
+// Size of the DragValues
+static DRAG_SIZE: [f64; 2] = [75.0, 20.0];
 
 // The frequency range to be rendered
 static MIN_FREQUENCY: u32 = 20;
@@ -262,7 +266,8 @@ impl<'a> ParametricEq {
                 ui.separator();
 
                 ui.label("Frequency: ");
-                if draw_draggable(ui, &mut active_band.frequency, 20..=20000, "Hz") {
+                let drag = draw_draggable(&mut active_band.frequency, 20..=20000, "Hz");
+                if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQFrequency(active_band.frequency as f32);
                     let msg = Equaliser::Frequency(mode, active, value);
                     let _ = mic.set_value(Message::Equaliser(msg));
@@ -270,23 +275,28 @@ impl<'a> ParametricEq {
                     self.invalidate_band(active);
                 }
             }
-            if Self::band_type_has_gain(active_band.band_type) {
-                ui.separator();
-                ui.label("Gain: ");
-                if draw_draggable(ui, &mut active_band.gain, -12.0..=12.0, "dB") {
-                    let value = EQGain(active_band.gain);
-                    let msg = Equaliser::Gain(mode, active, value);
-                    let _ = mic.set_value(Message::Equaliser(msg));
 
-                    self.invalidate_band(active);
-                }
+            ui.separator();
+            ui.label("Gain: ");
+            let enabled = Self::band_type_has_gain(active_band.band_type);
+            let drag = draw_draggable(&mut active_band.gain, -12.0..=12.0, "dB");
+            if ui
+                .add_enabled(enabled, |ui: &mut Ui| ui.add_sized([75.0, 20.0], drag))
+                .changed()
+            {
+                let value = EQGain(active_band.gain);
+                let msg = Equaliser::Gain(mode, active, value);
+                let _ = mic.set_value(Message::Equaliser(msg));
+
+                self.invalidate_band(active);
             }
 
             if is_advanced {
                 ui.separator();
 
                 ui.label("Q: ");
-                if draw_draggable(ui, &mut active_band.q, 0.1..=10.0, "") {
+                let drag = draw_draggable(&mut active_band.q, 0.1..=10.0, "");
+                if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQQ(active_band.q);
                     let msg = Equaliser::Q(mode, active, value);
                     let _ = mic.set_value(Message::Equaliser(msg));
@@ -295,34 +305,34 @@ impl<'a> ParametricEq {
                 }
 
                 ui.separator();
-                if bands.values_mut().any(|b| b.enabled == false) {
-                    if ui.button("Add Band").clicked() {
-                        if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
-                            if eq.band_type == NotSet {
-                                warn!("EQ Band doesn't have type set, defaulting to BellBand");
+                let enabled = bands.values_mut().any(|b| b.enabled == false);
+                let button = Button::new("Add Band");
+                if ui.add_enabled(enabled, button).clicked() {
+                    if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
+                        if eq.band_type == NotSet {
+                            warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
-                                let msg = Equaliser::Type(mode, band, BellBand);
-                                let _ = mic.set_value(Message::Equaliser(msg));
-                                eq.band_type = BellBand;
-                            }
-
-                            let msg = Equaliser::Enabled(mode, band, true);
+                            let msg = Equaliser::Type(mode, band, BellBand);
                             let _ = mic.set_value(Message::Equaliser(msg));
-
-                            eq.enabled = true;
-                            self.invalidate_band(band)
+                            eq.band_type = BellBand;
                         }
+
+                        let msg = Equaliser::Enabled(mode, band, true);
+                        let _ = mic.set_value(Message::Equaliser(msg));
+
+                        eq.enabled = true;
+                        self.invalidate_band(band)
                     }
                 }
 
-                if bands.values().filter(|b| b.enabled).count() > 1 {
-                    if ui.button("Remove Band").clicked() {
-                        let msg = Equaliser::Enabled(mode, active, false);
-                        let _ = mic.set_value(Message::Equaliser(msg));
+                let enabled = bands.values().filter(|b| b.enabled).count() > 1;
+                let button = Button::new("-");
+                if ui.add_enabled(enabled, button).clicked() {
+                    let msg = Equaliser::Enabled(mode, active, false);
+                    let _ = mic.set_value(Message::Equaliser(msg));
 
-                        bands[active].enabled = false;
-                        self.invalidate_band(active);
-                    }
+                    bands[active].enabled = false;
+                    self.invalidate_band(active);
                 }
             }
         });
@@ -521,7 +531,11 @@ impl<'a> ParametricEq {
             let perpendicular = vec2(-direction.y, direction.x).normalized();
 
             // Work out if we're going positive or negative from the 0dB point
-            let sign = if p1.y < zero_db_y && p2.y < zero_db_y { -1.0 } else { 1.0 };
+            let sign = if p1.y < zero_db_y && p2.y < zero_db_y {
+                -1.0
+            } else {
+                1.0
+            };
             let feather_vec = perpendicular * feather_width * sign;
 
             let p1_outer = p1 + feather_vec;
@@ -544,7 +558,6 @@ impl<'a> ParametricEq {
                 base_idx + 4,
                 base_idx + 5,
             ]);
-
         }
 
         let mesh = Arc::new(mesh);
