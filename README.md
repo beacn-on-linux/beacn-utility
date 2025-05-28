@@ -29,7 +29,7 @@ on-board storage so values changed here should persist across device reboots.
 
 1) Install the [ALSA UCM profiles](https://github.com/beacn-on-linux/beacn-ucm-profiles) for the Beacn Hardware.
 2) Copy `50-beacn-mic.rules` from this repository to `/etc/udev/rules.d/`
-3) Run `udevadm control --reload-rules && udevadm trigger`
+3) Run `sudo udevadm control --reload-rules && sudo udevadm trigger`
 4) Unplug, then re-plug your Beacn Mic
 
 Once that's done, your Beacn Mic should show up with a 'Headphones' and 'Microphone' channel.
@@ -39,7 +39,7 @@ Once that's done, your Beacn Mic should show up with a 'Headphones' and 'Microph
 If you simply want to just run this app, you can do so with the following:
 
 1) Check out this repository
-2) Run `cargo run`
+2) Run `cargo run --release`
 
 ### Building this App
 
@@ -54,13 +54,10 @@ If you instead want to build the app and have a useful binary you can link to:
 ## Current Status
 
 Not Yet Implemented:
-
-* EQ
 * Lighting
 * Probably a button or two, let me know if you spot one.
 
 Not Planned:
-
 * Profiles
 * Audio Visualisations ([egui_canvas](https://gitlab.com/urciteniefilipdubina/egui_canvas) might be a candiate)
 
