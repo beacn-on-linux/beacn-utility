@@ -16,7 +16,7 @@ In addition, this project accepts no responsibility or liability for any use of 
 which may occur from its use. Please read the LICENSE for more information.
 
 ***
-![img_1.png](.github/resources/img.png)
+![img.png](.github/resources/img.png)
 
 Currently, this tool is quite barebones and basic and is likely going to stay that way, it's just for adjusting
 values on the Mic or Studio. This app may also might be slightly buggy, so expect issues. The Beacn Mic and Studio have
