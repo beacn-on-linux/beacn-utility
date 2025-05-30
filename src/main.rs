@@ -1,7 +1,7 @@
 use crate::pages::MicPage;
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
-use crate::pages::lighting::Lighting;
+use crate::pages::lighting::LightingPage;
 use crate::state::BeacnMicState;
 use anyhow::{Result, anyhow};
 use beacn_mic_lib::device::BeacnMic;
@@ -113,7 +113,7 @@ impl BeacnMicApp {
             active_page: 0,
             pages: vec![
                 Box::new(Configuration::new()),
-                Box::new(Lighting::new()),
+                Box::new(LightingPage::new()),
                 Box::new(About::new()),
             ],
             //textures: svgs,
