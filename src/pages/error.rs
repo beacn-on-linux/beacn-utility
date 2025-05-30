@@ -26,11 +26,14 @@ impl MicPage for ErrorPage {
             ui.add_sized(ui.available_size(), |ui: &mut Ui| {
                 ui.vertical(|ui| {
                     ui.label("Device in Error State");
-                    if let Some(error) = &state.device_state.error {
-                        ui.label(format!("Error: {:?}", error));
-                    }
-                    if let Some(message) = &state.device_state.panic_message {
-                        ui.label(format!("Message: {:?}", message));
+                    for message in &state.device_state.errors {
+                        ui.add_space(15.0);
+                        if let Some(error) = &message.error_text {
+                            ui.label(format!("Error: {:?}", error));
+                        }
+                        if let Some(message) = &message.failed_message {
+                            ui.label(format!("Message: {:?}", message));
+                        }
                     }
                 }).response
             })

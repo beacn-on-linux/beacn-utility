@@ -55,8 +55,13 @@ pub struct BeacnMicState {
 #[derive(Debug, Default, Clone)]
 pub struct DeviceState {
     pub state: LoadState,
-    pub error: Option<String>,
-    pub panic_message: Option<Message>,
+    pub errors: Vec<ErrorMessage>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ErrorMessage {
+    pub error_text: Option<String>,
+    pub failed_message: Option<Message>,
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -201,18 +206,24 @@ impl BeacnMicState {
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
             let value = panic::catch_unwind(|| mic.fetch_value(message));
-            if let Err(panic) = value {
-                let msg = panic.downcast_ref::<String>();
-                warn!("PANIC OCCURRED FETCHING VALUES: {:?}", msg);
-                state.device_state.state = LoadState::ERROR;
-                state.device_state.error = panic.downcast_ref::<String>().cloned();
-                state.device_state.panic_message = Some(message);
-
-                return state;
-            }
-
-            if let Ok(Ok(value)) = value {
-                state.set_value(value);
+            match value {
+                Ok(Ok(value)) => state.set_value(value),
+                Ok(Err(value)) => {
+                    // fetch_value didn't panic, but it did error
+                    state.device_state.state = LoadState::ERROR;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some(format!("{:?}", value)),
+                        failed_message: Some(message),
+                    })
+                }
+                Err(panic) => {
+                    // fetch_value panicked
+                    state.device_state.state = LoadState::ERROR;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: panic.downcast_ref::<String>().cloned(),
+                        failed_message: Some(message),
+                    });
+                }
             }
         }
         state
