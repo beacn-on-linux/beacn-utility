@@ -20,6 +20,11 @@ impl MicPage for About {
         "gear"
     }
 
+    fn show_on_error(&self) -> bool {
+        false
+    }
+
+
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         match state.device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),

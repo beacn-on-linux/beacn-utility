@@ -8,8 +8,7 @@ use beacn_mic_lib::messages::lighting::LightingMode::{
     Spectrum,
 };
 use beacn_mic_lib::types::RGB;
-use eframe::glow::RGB;
-use egui::{Align, Label, Layout, Rect, Response, RichText, Ui};
+use egui::{Align, Label, Layout, Response, RichText, Ui};
 
 use crate::state::Lighting as LightingState;
 
@@ -26,6 +25,11 @@ impl MicPage for LightingPage {
     fn icon(&self) -> &'static str {
         "bulb"
     }
+
+    fn show_on_error(&self) -> bool {
+        false
+    }
+
 
     fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
         // Lighting is relatively simple, we have a persistent bottom pane, and a top pane

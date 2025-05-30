@@ -1,4 +1,5 @@
-use anyhow::Result;
+use std::panic;
+use anyhow::{bail, Result};
 
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::DeviceType;
@@ -28,12 +29,14 @@ use beacn_mic_lib::messages::lighting::Lighting as MicLighting;
 use beacn_mic_lib::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_mic_lib::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_mic_lib::messages::mic_setup::MicSetup as MicMicSetup;
+use log::warn;
 
 type Rgb = [u8; 3];
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct BeacnMicState {
     pub device_type: DeviceType,
+    pub device_state: DeviceState,
 
     pub headphones: Headphones,
     pub lighting: Lighting,
@@ -47,6 +50,21 @@ pub struct BeacnMicState {
     pub suppressor: Suppressor,
     pub mic_setup: MicSetup,
     pub subwoofer: Subwoofer,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct DeviceState {
+    pub state: LoadState,
+    pub error: Option<String>,
+    pub panic_message: Option<Message>,
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub enum LoadState {
+    #[default]
+    LOADING,
+    RUNNING,
+    ERROR,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -175,19 +193,29 @@ pub struct Subwoofer {
 }
 
 impl BeacnMicState {
-    pub fn load_settings(mic: &BeacnMic, device_type: DeviceType) -> Result<Self> {
+    pub fn load_settings(mic: &BeacnMic, device_type: DeviceType) -> Self {
         let mut state = Self::default();
         state.device_type = device_type;
 
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
-            let value = mic.fetch_value(message)?;
-            state.set_value(value);
+            let value = panic::catch_unwind(|| mic.fetch_value(message));
+            if let Err(panic) = value {
+                let msg = panic.downcast_ref::<String>();
+                warn!("PANIC OCCURRED FETCHING VALUES: {:?}", msg);
+                state.device_state.state = LoadState::ERROR;
+                state.device_state.error = panic.downcast_ref::<String>().cloned();
+                state.device_state.panic_message = Some(message);
 
+                return state;
+            }
+
+            if let Ok(Ok(value)) = value {
+                state.set_value(value);
+            }
         }
-
-        Ok(state)
+        state
     }
 
     pub(crate) fn set_value(&mut self, value: Message) {

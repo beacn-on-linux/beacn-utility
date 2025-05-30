@@ -2,7 +2,7 @@ use crate::pages::MicPage;
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
 use crate::pages::lighting::LightingPage;
-use crate::state::BeacnMicState;
+use crate::state::{BeacnMicState, LoadState};
 use anyhow::{Result, anyhow};
 use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::{
@@ -17,6 +17,7 @@ use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
+use crate::pages::error::ErrorPage;
 
 mod numbers;
 mod pages;
@@ -29,6 +30,7 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
     map.insert("mic", include_image!("../resources/icons/microphone.svg"));
     map.insert("bulb", include_image!("../resources/icons/lightbulb.svg"));
     map.insert("gear", include_image!("../resources/icons/gear.svg"));
+    map.insert("error", include_image!("../resources/icons/error.svg"));
 
     // EQ Modes
     map.insert("eq_bell", include_image!("../resources/eq/bell.svg"));
@@ -115,6 +117,7 @@ impl BeacnMicApp {
                 Box::new(Configuration::new()),
                 Box::new(LightingPage::new()),
                 Box::new(About::new()),
+                Box::new(ErrorPage::new()),
             ],
             //textures: svgs,
         }
@@ -130,8 +133,7 @@ impl eframe::App for BeacnMicApp {
                     HotPlugMessage::DeviceAttached(location, device_type) => {
                         // Device has been found / attached, lets handle it.
                         let device = BeacnMic::open(location).expect("Failed to open Device");
-                        let state =
-                            BeacnMicState::load_settings(&device, device_type).expect("State Fail");
+                        let state = BeacnMicState::load_settings(&device, device_type);
 
                         // Add to our type map
                         self.type_map.insert(location, state.device_type);
@@ -185,7 +187,7 @@ impl eframe::App for BeacnMicApp {
         // Grab the active device and its settings
         let device_keys: Vec<DeviceLocation> = self.devices.keys().cloned().collect();
         let active_device = &self.active_device.unwrap();
-        let settings = self.devices.get_mut(&active_device).unwrap();
+        //
 
         egui::SidePanel::left("left_panel")
             .resizable(false)
@@ -194,6 +196,8 @@ impl eframe::App for BeacnMicApp {
                 ui.vertical_centered(|ui| {
                     // We need to iterate between devices and pages
                     for device in device_keys {
+                        let device_state = self.devices.get(&device).unwrap();
+
                         ui.add_space(5.0);
                         if let Some(state) = self.type_map.get(&device) {
                             match state {
@@ -204,16 +208,29 @@ impl eframe::App for BeacnMicApp {
 
                         for (index, page) in self.pages.iter().enumerate() {
                             let selected = active_device == &device && self.active_page == index;
-                            if round_nav_button(ui, page.icon(), selected).clicked() {
-                                self.active_device = Some(device);
-                                self.active_page = index;
+                            let error = &device_state.state.device_state.state == &LoadState::ERROR;
+
+                            if page.show_on_error() == error {
+                                if round_nav_button(ui, page.icon(), selected).clicked() {
+                                    self.active_device = Some(device);
+                                    self.active_page = index;
+                                }
                             }
-                            //ui.add_space(5.0);
                         }
                         ui.separator();
                     }
                 })
             });
+
+        let settings = self.devices.get_mut(&active_device).unwrap();
+
+        // If we're in error, we need to force our index to an error page.
+        if settings.state.device_state.state == LoadState::ERROR {
+            if let Some(page) = self.pages.iter().position(|p| p.show_on_error()) {
+                self.active_page = page;
+            }
+
+        }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.pages[self.active_page].ui(ui, &settings.mic, &mut settings.state);
