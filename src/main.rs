@@ -1,8 +1,8 @@
-use crate::pages::AudioPage;
-use crate::pages::about::About;
-use crate::pages::config::Configuration;
-use crate::pages::error::ErrorPage;
-use crate::pages::lighting::LightingPage;
+use crate::audio_pages::AudioPage;
+use crate::audio_pages::about::About;
+use crate::audio_pages::config::Configuration;
+use crate::audio_pages::error::ErrorPage;
+use crate::audio_pages::lighting::LightingPage;
 use crate::states::audio_state::{BeacnAudioState, LoadState};
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
@@ -21,7 +21,7 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 
 mod numbers;
-mod pages;
+mod audio_pages;
 mod states;
 mod widgets;
 

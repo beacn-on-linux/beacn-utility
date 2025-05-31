@@ -1,4 +1,4 @@
-use crate::pages::config_pages::ConfigPage;
+use crate::audio_pages::config_pages::ConfigPage;
 use crate::states::audio_state::BeacnAudioState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
 use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};

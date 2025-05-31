@@ -1,4 +1,4 @@
-use crate::pages::AudioPage;
+use crate::audio_pages::AudioPage;
 use crate::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;

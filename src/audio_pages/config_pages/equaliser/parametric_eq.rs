@@ -1,5 +1,5 @@
 use crate::SVG;
-use crate::pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
+use crate::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::widgets::draw_draggable;
 use beacn_lib::audio::BeacnAudioDevice;

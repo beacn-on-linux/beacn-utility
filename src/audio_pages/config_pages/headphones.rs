@@ -1,4 +1,4 @@
-use crate::pages::config_pages::ConfigPage;
+use crate::audio_pages::config_pages::ConfigPage;
 use crate::states::audio_state::BeacnAudioState;
 use crate::widgets::draw_range;
 use beacn_lib::audio::BeacnAudioDevice;
