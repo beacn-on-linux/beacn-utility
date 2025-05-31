@@ -1,14 +1,14 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{draw_range, toggle_button};
-use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::bass_enhancement::BassPreset::{Preset1, Preset2, Preset3, Preset4};
-use beacn_mic_lib::messages::bass_enhancement::{BassAmount, BassEnhancement};
-use beacn_mic_lib::messages::deesser::DeEsser;
-use beacn_mic_lib::messages::exciter::{Exciter, ExciterFreq};
-use beacn_mic_lib::messages::mic_setup::{MicGain, MicSetup, StudioMicGain};
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::bass_enhancement::BassPreset::{Preset1, Preset2, Preset3, Preset4};
+use beacn_mic_lib::audio::messages::bass_enhancement::{BassAmount, BassEnhancement};
+use beacn_mic_lib::audio::messages::deesser::DeEsser;
+use beacn_mic_lib::audio::messages::exciter::{Exciter, ExciterFreq};
+use beacn_mic_lib::audio::messages::mic_setup::{MicGain, MicSetup, StudioMicGain};
 use beacn_mic_lib::types::Percent;
 use egui::{Align, Label, Layout, Ui};
 use log::debug;
@@ -20,7 +20,7 @@ impl ConfigPage for MicSetupPage {
         "Mic Setup"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let spacing = 10.0;
 
         ui.horizontal_centered(|ui| {

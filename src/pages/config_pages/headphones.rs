@@ -1,16 +1,16 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
-use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
-use beacn_mic_lib::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
-use beacn_mic_lib::messages::headphones::HeadphoneTypes::{
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
+use beacn_mic_lib::audio::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
+use beacn_mic_lib::audio::messages::headphones::HeadphoneTypes::{
     HighImpedance, InEarMonitors, LineLevel, NormalPower,
 };
-use beacn_mic_lib::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
-use beacn_mic_lib::messages::subwoofer::Subwoofer;
+use beacn_mic_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
+use beacn_mic_lib::audio::messages::subwoofer::Subwoofer;
 use egui::Ui;
 use log::debug;
 
@@ -21,7 +21,7 @@ impl ConfigPage for HeadphonesPage {
         "Headphones"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let spacing = 10.0;
 
         ui.horizontal_centered(|ui| {

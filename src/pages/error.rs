@@ -1,4 +1,4 @@
-use beacn_mic_lib::device::BeacnMic;
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 use crate::pages::MicPage;
 use crate::state::BeacnMicState;
@@ -21,7 +21,7 @@ impl MicPage for ErrorPage {
     }
 
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         ui.add_sized([ui.available_width(), ui.available_height()], |ui: &mut Ui| {
             ui.add_sized(ui.available_size(), |ui: &mut Ui| {
                 ui.vertical(|ui| {

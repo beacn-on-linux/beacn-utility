@@ -1,9 +1,9 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::MicPage;
 use crate::state::BeacnMicState;
-use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::headphones::Headphones;
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::headphones::Headphones;
 use egui::{RichText, Ui};
 
 #[allow(unused)]
@@ -25,7 +25,7 @@ impl MicPage for About {
     }
 
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         match state.device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
             DeviceType::BeacnStudio => ui.heading("About Beacn Studio"),

@@ -1,10 +1,10 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
-use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::expander::ExpanderMode::{Advanced, Simple};
-use beacn_mic_lib::messages::expander::{Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold};
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::expander::ExpanderMode::{Advanced, Simple};
+use beacn_mic_lib::audio::messages::expander::{Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold};
 use beacn_mic_lib::types::TimeFrame;
 use egui::Ui;
 use strum::IntoEnumIterator;
@@ -16,7 +16,7 @@ impl ConfigPage for ExpanderPage {
         "Expander"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let expander = &mut state.expander;
 
         // Extract out all the current values

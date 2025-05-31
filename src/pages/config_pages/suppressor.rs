@@ -1,10 +1,10 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
-use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};
-use beacn_mic_lib::messages::suppressor::{Suppressor, SuppressorSensitivity};
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};
+use beacn_mic_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity};
 use beacn_mic_lib::types::Percent;
 use egui::SelectableLabel;
 use egui::Ui;
@@ -17,7 +17,7 @@ impl ConfigPage for NoiseSuppressionPage {
         "Noise Suppression"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let spacing = 5.0;
 
         let ns = &mut state.suppressor;

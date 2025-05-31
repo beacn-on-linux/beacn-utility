@@ -2,12 +2,11 @@ use crate::SVG;
 use crate::pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::state::{BeacnMicState, EqualiserBand};
 use crate::widgets::draw_draggable;
-use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::equaliser::EQBandType::{
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::equaliser::EQBandType::{
     BellBand, HighPassFilter, HighShelf, LowPassFilter, LowShelf, NotSet, NotchFilter,
 };
-use beacn_mic_lib::messages::equaliser::{
+use beacn_mic_lib::audio::messages::equaliser::{
     EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
 };
 use eframe::egui;
@@ -21,6 +20,7 @@ use egui::{
 use enum_map::EnumMap;
 use log::{debug, error, warn};
 use std::sync::{Arc, LazyLock};
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use strum::IntoEnumIterator;
 use wide::f32x8;
 
@@ -105,7 +105,7 @@ impl<'a> ParametricEq {
     }
 
     /// Shows the parametric equalizer in the UI
-    pub fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) -> Response {
+    pub fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) -> Response {
         let mode = state.equaliser.mode;
         let bands = &mut state.equaliser.bands[state.equaliser.mode];
 
@@ -758,13 +758,13 @@ impl<'a> ParametricEq {
         closest_band
     }
 
-    fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &BeacnMic) {
+    fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &Box<dyn BeacnAudioDevice>) {
         if let Some(index) = self.get_point_near_cursor(rect, pointer, bands) {
             self.active_band = index;
         }
     }
 
-    fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &BeacnMic) {
+    fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands, mic: &Box<dyn BeacnAudioDevice>) {
         let active = self.get_point_near_cursor(rect, pointer, bands);
         if let Some(active) = active {
             self.active_band = active;
@@ -773,7 +773,7 @@ impl<'a> ParametricEq {
     }
 
     /// Handle drag interactions with the control points
-    fn handle_drag(&mut self, rect: Rect, pointer_pos: Pos2, bands: &mut Bands, mic: &BeacnMic) {
+    fn handle_drag(&mut self, rect: Rect, pointer_pos: Pos2, bands: &mut Bands, mic: &Box<dyn BeacnAudioDevice>) {
         // We don't have an active item, so there's nothing to do
         if self.active_band_drag.is_none() {
             return;
@@ -817,7 +817,7 @@ impl<'a> ParametricEq {
         pointer_position: Pos2,
         scroll_up: bool,
         bands: &mut Bands,
-        mic: &BeacnMic,
+        mic: &Box<dyn BeacnAudioDevice>,
     ) {
         if self.eq_mode == EQMode::Simple {
             // Can't adjust the Q in simple mode

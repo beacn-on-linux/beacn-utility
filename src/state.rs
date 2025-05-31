@@ -1,32 +1,31 @@
 use std::panic;
 use anyhow::{bail, Result};
-
-use beacn_mic_lib::device::BeacnMic;
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::messages::bass_enhancement::BassPreset;
-use beacn_mic_lib::messages::compressor::CompressorMode;
-use beacn_mic_lib::messages::equaliser::{EQBand, EQBandType, EQMode};
-use beacn_mic_lib::messages::expander::ExpanderMode;
-use beacn_mic_lib::messages::headphone_equaliser::HPEQType;
-use beacn_mic_lib::messages::headphones::HeadphoneTypes;
-use beacn_mic_lib::messages::lighting::{LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode};
-use beacn_mic_lib::messages::suppressor::SuppressorStyle;
-use beacn_mic_lib::messages::Message;
+use beacn_mic_lib::audio::messages::bass_enhancement::BassPreset;
+use beacn_mic_lib::audio::messages::compressor::CompressorMode;
+use beacn_mic_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
+use beacn_mic_lib::audio::messages::expander::ExpanderMode;
+use beacn_mic_lib::audio::messages::headphone_equaliser::HPEQType;
+use beacn_mic_lib::audio::messages::headphones::HeadphoneTypes;
+use beacn_mic_lib::audio::messages::lighting::{LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode};
+use beacn_mic_lib::audio::messages::suppressor::SuppressorStyle;
+use beacn_mic_lib::audio::messages::Message;
 use beacn_mic_lib::types::ToInner;
 use enum_map::EnumMap;
 
-use beacn_mic_lib::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
-use beacn_mic_lib::messages::compressor::Compressor as MicCompressor;
-use beacn_mic_lib::messages::deesser::DeEsser as MicDeEsser;
-use beacn_mic_lib::messages::equaliser::Equaliser as MicEqualiser;
-use beacn_mic_lib::messages::exciter::Exciter as MicExciter;
-use beacn_mic_lib::messages::expander::Expander as MicExpander;
-use beacn_mic_lib::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
-use beacn_mic_lib::messages::headphones::Headphones as MicHeadphones;
-use beacn_mic_lib::messages::lighting::Lighting as MicLighting;
-use beacn_mic_lib::messages::subwoofer::Subwoofer as MicSubwoofer;
-use beacn_mic_lib::messages::suppressor::Suppressor as MicSuppressor;
-use beacn_mic_lib::messages::mic_setup::MicSetup as MicMicSetup;
+use beacn_mic_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
+use beacn_mic_lib::audio::messages::compressor::Compressor as MicCompressor;
+use beacn_mic_lib::audio::messages::deesser::DeEsser as MicDeEsser;
+use beacn_mic_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
+use beacn_mic_lib::audio::messages::exciter::Exciter as MicExciter;
+use beacn_mic_lib::audio::messages::expander::Expander as MicExpander;
+use beacn_mic_lib::audio::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
+use beacn_mic_lib::audio::messages::headphones::Headphones as MicHeadphones;
+use beacn_mic_lib::audio::messages::lighting::Lighting as MicLighting;
+use beacn_mic_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
+use beacn_mic_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
+use beacn_mic_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use log::warn;
 
 type Rgb = [u8; 3];
@@ -197,7 +196,7 @@ pub struct Subwoofer {
 }
 
 impl BeacnMicState {
-    pub fn load_settings(mic: &BeacnMic, device_type: DeviceType) -> Self {
+    pub fn load_settings(mic: &Box<dyn BeacnAudioDevice>, device_type: DeviceType) -> Self {
         let mut state = Self::default();
         state.device_type = device_type;
 

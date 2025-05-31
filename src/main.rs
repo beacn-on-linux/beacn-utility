@@ -5,7 +5,6 @@ use crate::pages::error::ErrorPage;
 use crate::pages::lighting::LightingPage;
 use crate::state::{BeacnMicState, LoadState};
 use anyhow::{Result, anyhow};
-use beacn_mic_lib::device::BeacnMic;
 use beacn_mic_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
@@ -18,6 +17,7 @@ use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::sync::{mpsc, Arc};
 use std::sync::mpsc::TryRecvError;
 use std::thread;
+use beacn_mic_lib::audio::{open_audio_device, BeacnAudioDevice};
 use eframe::icon_data::from_png_bytes;
 
 mod numbers;
@@ -47,12 +47,12 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
 });
 
 pub struct MicConfiguration {
-    pub mic: BeacnMic,
+    pub mic: Box<dyn BeacnAudioDevice>,
     pub state: BeacnMicState,
 }
 
 impl MicConfiguration {
-    pub fn new(mic: BeacnMic, state: BeacnMicState) -> Self {
+    pub fn new(mic: Box<dyn BeacnAudioDevice>, state: BeacnMicState) -> Self {
         Self { mic, state }
     }
 }
@@ -136,7 +136,7 @@ impl eframe::App for BeacnMicApp {
                 match msg {
                     HotPlugMessage::DeviceAttached(location, device_type) => {
                         // Device has been found / attached, lets handle it.
-                        let device = BeacnMic::open(location).expect("Failed to open Device");
+                        let device = open_audio_device(location).expect("Unable to open Device");
                         let state = BeacnMicState::load_settings(&device, device_type);
 
                         // Add to our type map

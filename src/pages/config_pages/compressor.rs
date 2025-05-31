@@ -1,10 +1,10 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
-use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::Message;
-use beacn_mic_lib::messages::compressor::CompressorMode::{Advanced, Simple};
-use beacn_mic_lib::messages::compressor::{
+use beacn_mic_lib::audio::messages::Message;
+use beacn_mic_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
+use beacn_mic_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
 };
 use beacn_mic_lib::types::{MakeUpGain, TimeFrame};
@@ -18,7 +18,7 @@ impl ConfigPage for CompressorPage {
         "Compressor"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let comp = &mut state.compressor;
 
         // Extract out all the current values

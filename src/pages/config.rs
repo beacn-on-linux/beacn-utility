@@ -1,3 +1,4 @@
+use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::MicPage;
 use crate::pages::config_pages::ConfigPage;
 use crate::pages::config_pages::compressor::CompressorPage;
@@ -7,8 +8,7 @@ use crate::pages::config_pages::mic_setup::MicSetupPage;
 use crate::pages::config_pages::suppressor::NoiseSuppressionPage;
 use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
-use beacn_mic_lib::device::BeacnMic;
-use beacn_mic_lib::messages::headphones::HPMicOutputGain;
+use beacn_mic_lib::audio::messages::headphones::HPMicOutputGain;
 use beacn_mic_lib::types::HasRange;
 use egui::{Ui, vec2, Widget};
 use crate::pages::config_pages::equaliser::parametric_eq::ParametricEq;
@@ -47,7 +47,7 @@ impl MicPage for Configuration {
     }
 
 
-    fn ui(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);
