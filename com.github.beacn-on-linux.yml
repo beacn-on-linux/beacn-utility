@@ -25,7 +25,7 @@ modules:
       env:
         CARGO_HOME: /run/build/beacn-mic-ui/cargo
     build-commands:
-      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline fetch --locked --verbose
       - cargo --offline build --release --verbose
       - install -Dm755 ./target/release/beacn-mic-ui -t /app/bin/
       - install -Dm644 com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
