@@ -1,5 +1,5 @@
 use beacn_mic_lib::audio::BeacnAudioDevice;
-use crate::pages::MicPage;
+use crate::pages::AudioPage;
 use crate::pages::config_pages::ConfigPage;
 use crate::pages::config_pages::compressor::CompressorPage;
 use crate::pages::config_pages::expander::ExpanderPage;
@@ -37,7 +37,7 @@ impl Configuration {
     }
 }
 
-impl MicPage for Configuration {
+impl AudioPage for Configuration {
     fn icon(&self) -> &'static str {
         "mic"
     }

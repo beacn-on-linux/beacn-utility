@@ -1,5 +1,5 @@
 use beacn_mic_lib::audio::BeacnAudioDevice;
-use crate::pages::MicPage;
+use crate::pages::AudioPage;
 use crate::state::BeacnMicState;
 use beacn_mic_lib::manager::DeviceType;
 use beacn_mic_lib::audio::messages::{Message};
@@ -22,7 +22,7 @@ impl LightingPage {
     }
 }
 
-impl MicPage for LightingPage {
+impl AudioPage for LightingPage {
     fn icon(&self) -> &'static str {
         "bulb"
     }

@@ -1,4 +1,4 @@
-use crate::pages::MicPage;
+use crate::pages::AudioPage;
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
 use crate::pages::error::ErrorPage;
@@ -58,17 +58,17 @@ impl MicConfiguration {
 }
 
 pub struct BeacnMicApp {
-    devices: HashMap<DeviceLocation, MicConfiguration>,
+    device_list: HashMap<DeviceLocation, DeviceType>,
     active_device: Option<DeviceLocation>,
-    type_map: HashMap<DeviceLocation, DeviceType>,
+
+    audio_devices: HashMap<DeviceLocation, MicConfiguration>,
+    audio_pages: Vec<Box<dyn AudioPage>>,
 
     hotplug_recv: mpsc::Receiver<HotPlugMessage>,
     hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
 
     active_page: usize,
-    pages: Vec<Box<dyn MicPage>>,
-    // Used for icons
-    //textures: HashMap<String, Image>,
+
 }
 
 impl BeacnMicApp {
@@ -109,21 +109,21 @@ impl BeacnMicApp {
         });
 
         Self {
-            devices: Default::default(),
+            device_list: HashMap::default(),
             active_device: None,
-            type_map: Default::default(),
 
-            hotplug_recv: proxy_rx,
-            hotplug_send: manage_tx,
-
-            active_page: 0,
-            pages: vec![
+            audio_devices: Default::default(),
+            audio_pages: vec![
                 Box::new(Configuration::new()),
                 Box::new(LightingPage::new()),
                 Box::new(About::new()),
                 Box::new(ErrorPage::new()),
             ],
-            //textures: svgs,
+
+            hotplug_recv: proxy_rx,
+            hotplug_send: manage_tx,
+
+            active_page: 0,
         }
     }
 }
@@ -135,34 +135,38 @@ impl eframe::App for BeacnMicApp {
             Ok(msg) => {
                 match msg {
                     HotPlugMessage::DeviceAttached(location, device_type) => {
-                        // Device has been found / attached, lets handle it.
-                        let device = open_audio_device(location).expect("Unable to open Device");
-                        let state = BeacnMicState::load_settings(&device, device_type);
+                        match device_type {
+                            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                                let device = open_audio_device(location).expect("Unable to open Device");
+                                let state = BeacnMicState::load_settings(&device, device_type);
 
-                        // Add to our type map
-                        self.type_map.insert(location, state.device_type);
+                                // Add to our type map
+                                self.device_list.insert(location, state.device_type);
 
-                        // Add to state
-                        self.devices
-                            .insert(location, MicConfiguration::new(device, state));
-                        if self.active_device.is_none() {
-                            self.active_device = Some(location);
-                        }
-
-
-                    }
-                    HotPlugMessage::DeviceRemoved(d) => {
-                        // Device removed, update our states
-                        self.devices.remove(&d);
-                        self.type_map.remove(&d);
-                        if self.active_device == Some(d) {
-                            if self.devices.iter().len() == 0 {
-                                self.active_device = None;
-                            } else {
-                                // Switch to the first device
-                                let dev = self.devices.keys().next().unwrap();
-                                self.active_device = Some(*dev)
+                                // Add to global list and state
+                                self.device_list.insert(location, device_type);
+                                self.audio_devices.insert(location, MicConfiguration::new(device, state));
+                                if self.active_device.is_none() {
+                                    self.active_device = Some(location);
+                                }
                             }
+                            _ => {}
+                        }
+                    }
+                    HotPlugMessage::DeviceRemoved(device) => {
+                        if let Some(device_type) = self.device_list.remove(&device) {
+                            match device_type {
+                                DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                                    self.audio_devices.remove(&device);
+                                }
+                                _ => {}
+                            }
+
+                            if self.active_device == Some(device) {
+                                // If there are any devices left, select the first
+                                self.active_device = self.device_list.keys().next().cloned();
+                            }
+
                         }
                     }
                     HotPlugMessage::ThreadStopped => {
@@ -186,64 +190,100 @@ impl eframe::App for BeacnMicApp {
             return;
         }
 
-
-
-        // Grab the active device and its settings
-        let device_keys: Vec<DeviceLocation> = self.devices.keys().cloned().collect();
-        let active_device = &self.active_device.unwrap();
-        //
-
         egui::SidePanel::left("left_panel")
             .resizable(false)
             .default_width(80.0)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    // We need to iterate between devices and pages
-                    for device in device_keys {
-                        let device_state = self.devices.get(&device).unwrap();
-
-                        ui.add_space(5.0);
-                        if let Some(state) = self.type_map.get(&device) {
-                            match state {
-                                DeviceType::BeacnMic => ui.label("Mic"),
-                                DeviceType::BeacnStudio => ui.label("Studio"),
-                            };
-                        };
-
-                        for (index, page) in self.pages.iter().enumerate() {
-                            let selected = active_device == &device && self.active_page == index;
-                            let error = &device_state.state.device_state.state == &LoadState::ERROR;
-
-                            if page.show_on_error() == error {
-                                if round_nav_button(ui, page.icon(), selected).clicked() {
-                                    self.active_device = Some(device);
-                                    self.active_page = index;
-                                }
-                            }
-                        }
-                        ui.separator();
+                    let devices: Vec<_> = self.device_list.keys().cloned().collect();
+                    for location in devices {
+                        self.draw_device_buttons(ui, location);
                     }
                 })
             });
 
-        let settings = self.devices.get_mut(&active_device).unwrap();
-
-        // If we're in error, we need to force our index to an error page.
-        if settings.state.device_state.state == LoadState::ERROR {
-            if let Some(page) = self.pages.iter().position(|p| p.show_on_error()) {
-                self.active_page = page;
-            }
-
-        }
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            self.pages[self.active_page].ui(ui, &settings.mic, &mut settings.state);
-        });
+        // Render the main page
+        self.render_content(ctx, self.active_device.unwrap());
     }
+
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         let _ = self.hotplug_send.send(HotPlugThreadManagement::Quit);
     }
 }
+
+impl BeacnMicApp {
+    fn draw_device_buttons(&mut self, ui: &mut Ui, location: DeviceLocation) {
+        let device = self.device_list.get(&location).unwrap();
+        if self.active_device.is_none() {
+            return;
+        }
+        let active_device = self.active_device.unwrap();
+        match device {
+            // These are probably going to eventually need to be separated, when
+            // Studio Link support is added, a new page will be needed
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                let device_state = self.audio_devices.get(&location).unwrap();
+                ui.add_space(5.0);
+
+                match device {
+                    DeviceType::BeacnMic => ui.label("Mic"),
+                    DeviceType::BeacnStudio => ui.label("Studio"),
+                    _ => ui.label("ERROR")
+                };
+
+                let audio_pages = self.audio_pages.iter().enumerate();
+                for (index, page) in audio_pages {
+                    let selected = active_device == location && self.active_page == index;
+                    let error = &device_state.state.device_state.state == &LoadState::ERROR;
+
+                    if page.show_on_error() == error {
+                        if round_nav_button(ui, page.icon(), selected).clicked() {
+                            self.active_device = Some(location);
+                            self.active_page = index;
+                        }
+                    }
+                }
+                ui.add_space(5.0);
+                ui.separator();
+            }
+            _ => {},
+        }
+    }
+
+    fn render_content(&mut self, ctx: &Context, location: DeviceLocation) {
+        if self.active_device.is_none() {
+            return;
+        }
+        let device = self.device_list.get(&location).unwrap();
+        let active_device = self.active_device.unwrap();
+
+        match device {
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                // Get the currently active device
+                let settings = self.audio_devices.get_mut(&active_device).unwrap();
+
+                // If our device is in an error state, we need to force the active page to a page
+                // designed to show in an error state.
+                if settings.state.device_state.state == LoadState::ERROR {
+                    let position = self.audio_pages.iter().position(|p| p.show_on_error());
+                    if let Some(page) = position {
+                        self.active_page = page;
+                    }
+                }
+
+                // Now render the Central Panel showing the correct page.
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    self.audio_pages[self.active_page].ui(ui, &settings.mic, &mut settings.state);
+                });
+            }
+            _ => {
+                // This will be different for 'Control' devices :)
+            }
+        }
+    }
+}
+
+
 
 fn main() -> Result<()> {
     CombinedLogger::init(vec![TermLogger::new(

@@ -1,6 +1,6 @@
 use beacn_mic_lib::audio::BeacnAudioDevice;
 use egui::Ui;
-use crate::pages::MicPage;
+use crate::pages::AudioPage;
 use crate::state::BeacnMicState;
 
 pub struct ErrorPage {}
@@ -11,7 +11,7 @@ impl ErrorPage {
     }
 }
 
-impl MicPage for ErrorPage {
+impl AudioPage for ErrorPage {
     fn icon(&self) -> &'static str {
         "error"
     }

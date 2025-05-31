@@ -9,7 +9,7 @@ pub(crate) mod error;
 
 mod config_pages;
 
-pub trait MicPage {
+pub trait AudioPage {
     fn icon(&self) -> &'static str;
     fn show_on_error(&self) -> bool;
     fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState);
