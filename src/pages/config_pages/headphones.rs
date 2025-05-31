@@ -34,6 +34,7 @@ impl ConfigPage for HeadphonesPage {
                     DeviceType::BeacnStudio => {
                         Message::Headphones(Headphones::StudioMicMonitor(value))
                     }
+                    _ => panic!("This shouldn't happen.")
                 };
                 mic.set_value(message).expect("Failed to Send Message");
                 debug!("Mic Monitor Change: {:?}", hp.mic_monitor);
@@ -42,6 +43,7 @@ impl ConfigPage for HeadphonesPage {
                 let message = match state.device_type {
                     DeviceType::BeacnMic => Message::Headphones(Headphones::MicChannelsLinked(hp.linked)),
                     DeviceType::BeacnStudio => Message::Headphones(Headphones::StudioChannelsLinked(hp.linked)),
+                    _ => panic!("This shouldn't happen"),
                 };
                 mic.set_value(message).expect("Failed to Send Message");
             }

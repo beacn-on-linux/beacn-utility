@@ -32,6 +32,7 @@ impl ConfigPage for MicSetupPage {
             let range = match state.device_type {
                 DeviceType::BeacnMic => 3..=20,
                 DeviceType::BeacnStudio => 0..=69,  // Nice.
+                _ => panic!("This shouldn't happen"),
             };
             if draw_range(ui, &mut mic_setup.gain, range, "Mic Gain", "dB") {
                 let message = match state.device_type {
@@ -43,6 +44,7 @@ impl ConfigPage for MicSetupPage {
                         let value = StudioMicGain(mic_setup.gain as u32);
                         Message::MicSetup(MicSetup::StudioMicGain(value))
                     }
+                    _ => panic!("This shouldn't happen"),
                 };
                 mic.set_value(message).expect("Failed to Send Message");
             }

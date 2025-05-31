@@ -29,6 +29,7 @@ impl AudioPage for About {
         match state.device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
             DeviceType::BeacnStudio => ui.heading("About Beacn Studio"),
+            _ => ui.heading("ERROR")
         };
 
         let serial = RichText::new("Serial: ").strong().size(14.0);

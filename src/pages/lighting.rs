@@ -49,6 +49,7 @@ impl AudioPage for LightingPage {
                                         match state.device_type {
                                             DeviceType::BeacnMic => self.draw_types_mic(ui, mic, &mut state.lighting),
                                             DeviceType::BeacnStudio => self.draw_types_studio(ui, mic, &mut state.lighting),
+                                            _ => { ui.label("You shouldn't see this :)"); },
                                         }
                                     });
                                 })
