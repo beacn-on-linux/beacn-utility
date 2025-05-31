@@ -9,9 +9,7 @@ use beacn_mic_lib::messages::equaliser::{EQBand, EQBandType, EQMode};
 use beacn_mic_lib::messages::expander::ExpanderMode;
 use beacn_mic_lib::messages::headphone_equaliser::HPEQType;
 use beacn_mic_lib::messages::headphones::HeadphoneTypes;
-use beacn_mic_lib::messages::lighting::{
-    LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode,
-};
+use beacn_mic_lib::messages::lighting::{LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode};
 use beacn_mic_lib::messages::suppressor::SuppressorStyle;
 use beacn_mic_lib::messages::Message;
 use beacn_mic_lib::types::ToInner;
@@ -85,7 +83,8 @@ pub struct Headphones {
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Lighting {
-    pub mode: LightingMode,
+    pub mic_mode: LightingMode,
+    pub studio_mode: StudioLightingMode,
     pub colour1: Rgb,
     pub colour2: Rgb,
     pub speed: i32,
@@ -334,7 +333,8 @@ impl BeacnMicState {
                 _ => {}
             },
             Message::Lighting(l) => match l {
-                MicLighting::Mode(m) => self.lighting.mode = m,
+                MicLighting::Mode(m) => self.lighting.mic_mode = m,
+                MicLighting::StudioMode(m) => self.lighting.studio_mode = m,
                 MicLighting::Colour1(c) => self.lighting.colour1 = [c.red, c.green, c.blue],
                 MicLighting::Colour2(c) => self.lighting.colour2 = [c.red, c.green, c.blue],
                 MicLighting::Speed(v) => self.lighting.speed = v.to_inner(),

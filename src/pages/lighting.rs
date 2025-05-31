@@ -1,6 +1,7 @@
 use crate::pages::MicPage;
 use crate::state::BeacnMicState;
 use beacn_mic_lib::device::BeacnMic;
+use beacn_mic_lib::manager::DeviceType;
 use beacn_mic_lib::messages::{Message};
 use beacn_mic_lib::messages::lighting::{Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingMode, LightingSpeed};
 use beacn_mic_lib::messages::lighting::LightingMode::{
@@ -45,7 +46,10 @@ impl MicPage for LightingPage {
                                 ui.horizontal(|ui| {
                                     ui.add_space(15.);
                                     ui.vertical(|ui| {
-                                        self.draw_types(ui, mic, &mut state.lighting);
+                                        match state.device_type {
+                                            DeviceType::BeacnMic => self.draw_types_mic(ui, mic, &mut state.lighting),
+                                            DeviceType::BeacnStudio => self.draw_types_studio(ui, mic, &mut state.lighting),
+                                        }
                                     });
                                 })
                                 .inner
@@ -75,8 +79,8 @@ impl MicPage for LightingPage {
 }
 
 impl LightingPage {
-    fn draw_types(&self, ui: &mut Ui, mic: &BeacnMic, state: &mut LightingState) {
-        let mode = state.mode;
+    fn draw_types_mic(&self, ui: &mut Ui, mic: &BeacnMic, state: &mut LightingState) {
+        let mode = state.mic_mode;
 
         let solid = mode == Solid;
         let gradient = mode == Gradient;
@@ -85,13 +89,13 @@ impl LightingPage {
         let spectrum = mode == Spectrum;
 
         if ui.selectable_label(solid, "Solid Colour").clicked() {
-            state.mode = Solid;
+            state.mic_mode = Solid;
             let message = Message::Lighting(Lighting::Mode(Solid));
             let _ = mic.set_value(message);
         };
         ui.add_space(10.0);
         if ui.selectable_label(gradient, "Gradient").clicked() {
-            state.mode = Gradient;
+            state.mic_mode = Gradient;
             let message = Message::Lighting(Lighting::Mode(Gradient));
             let _ = mic.set_value(message);
         };
@@ -101,14 +105,14 @@ impl LightingPage {
             if !reactive {
                 let message = Message::Lighting(Lighting::Mode(ReactiveRing));
                 let _ = mic.set_value(message);
-                state.mode = ReactiveRing;
+                state.mic_mode = ReactiveRing;
             }
         };
         ui.add_space(10.0);
         if ui.selectable_label(sparkle, "Sparkle").clicked() {
             // Only change this if we're not already set to a sparkle mode.
             if !sparkle {
-                state.mode = SparkleMeter;
+                state.mic_mode = SparkleMeter;
                 let message = Message::Lighting(Lighting::Mode(SparkleMeter));
                 let _ = mic.set_value(message);
             }
@@ -117,12 +121,16 @@ impl LightingPage {
         if ui.selectable_label(spectrum, "Spectrum Cycle").clicked() {
             let message = Message::Lighting(Lighting::Mode(Spectrum));
             let _ = mic.set_value(message);
-            state.mode = Spectrum;
+            state.mic_mode = Spectrum;
         };
     }
 
+    fn draw_types_studio(&self, ui: &mut Ui, mic: &BeacnMic, state: &mut LightingState) {
+
+    }
+
     fn draw_area(&mut self, ui: &mut Ui, mic: &BeacnMic, state: &mut LightingState) -> Response {
-        match state.mode {
+        match state.mic_mode {
             Solid => self.draw_solid(ui, mic, state),
             Spectrum => self.draw_spectrum(ui, mic, state),
             Gradient => self.draw_gradient(ui, mic, state),
@@ -152,16 +160,16 @@ impl LightingPage {
             ui.label("Behaviour");
 
             ui.vertical(|ui| {
-                if ui.radio_value(&mut state.mode, ReactiveRing, "Whole Ring Meter").changed() {
-                    let message = Message::Lighting(Lighting::Mode(state.mode));
+                if ui.radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter").changed() {
+                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mode, ReactiveMeterUp, "Bar Meter Up").changed() {
-                    let message = Message::Lighting(Lighting::Mode(state.mode));
+                if ui.radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up").changed() {
+                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mode, ReactiveMeterDown, "Bar Meter Down").changed() {
-                    let message = Message::Lighting(Lighting::Mode(state.mode));
+                if ui.radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down").changed() {
+                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
             });
@@ -179,12 +187,12 @@ impl LightingPage {
             ui.label("Behaviour");
 
             ui.horizontal(|ui| {
-                if ui.radio_value(&mut state.mode, SparkleRandom, "Sparkle Random").changed() {
-                    let message = Message::Lighting(Lighting::Mode(state.mode));
+                if ui.radio_value(&mut state.mic_mode, SparkleRandom, "Sparkle Random").changed() {
+                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mode, SparkleMeter, "Sparkle Meter").changed() {
-                    let message = Message::Lighting(Lighting::Mode(state.mode));
+                if ui.radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter").changed() {
+                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
             });
