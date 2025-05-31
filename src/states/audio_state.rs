@@ -31,7 +31,7 @@ use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 type Rgb = [u8; 3];
 
 #[derive(Debug, Default, Clone)]
-pub struct BeacnMicState {
+pub struct BeacnAudioState {
     pub device_type: DeviceType,
     pub device_state: DeviceState,
 
@@ -195,7 +195,7 @@ pub struct Subwoofer {
     pub amount: u8, // [0..=10]
 }
 
-impl BeacnMicState {
+impl BeacnAudioState {
     pub fn load_settings(mic: &Box<dyn BeacnAudioDevice>, device_type: DeviceType) -> Self {
         let mut state = Self::default();
         state.device_type = device_type;

@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState;
+use crate::states::audio_state::BeacnAudioState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
 use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
 use beacn_lib::audio::messages::compressor::{
@@ -18,7 +18,7 @@ impl ConfigPage for CompressorPage {
         "Compressor"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
         let comp = &mut state.compressor;
 
         // Extract out all the current values

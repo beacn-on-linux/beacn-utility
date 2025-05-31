@@ -1,5 +1,5 @@
 use crate::pages::AudioPage;
-use crate::state::BeacnMicState;
+use crate::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::lighting::LightingMode::{
@@ -13,7 +13,7 @@ use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGB;
 use egui::{Align, Label, Layout, Response, RichText, Ui};
 
-use crate::state::Lighting as LightingState;
+use crate::states::audio_state::Lighting as LightingState;
 
 #[allow(unused)]
 pub struct LightingPage {}
@@ -33,7 +33,7 @@ impl AudioPage for LightingPage {
         false
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
         // Lighting is relatively simple, we have a persistent bottom pane, and a top pane
         ui.add_sized(
             [ui.available_width(), ui.available_height() - 200.],

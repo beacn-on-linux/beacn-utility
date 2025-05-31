@@ -1,5 +1,5 @@
 use crate::pages::config_pages::ConfigPage;
-use crate::state::BeacnMicState;
+use crate::states::audio_state::BeacnAudioState;
 use crate::widgets::draw_range;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
@@ -21,7 +21,7 @@ impl ConfigPage for HeadphonesPage {
         "Headphones"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
         let spacing = 10.0;
 
         ui.horizontal_centered(|ui| {

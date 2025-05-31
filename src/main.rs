@@ -3,7 +3,7 @@ use crate::pages::about::About;
 use crate::pages::config::Configuration;
 use crate::pages::error::ErrorPage;
 use crate::pages::lighting::LightingPage;
-use crate::state::{BeacnMicState, LoadState};
+use crate::states::audio_state::{BeacnAudioState, LoadState};
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
 use beacn_lib::manager::{
@@ -22,7 +22,7 @@ use std::thread;
 
 mod numbers;
 mod pages;
-mod state;
+mod states;
 mod widgets;
 
 // Main Window Icon
@@ -60,11 +60,11 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
 
 pub struct MicConfiguration {
     pub mic: Box<dyn BeacnAudioDevice>,
-    pub state: BeacnMicState,
+    pub state: BeacnAudioState,
 }
 
 impl MicConfiguration {
-    pub fn new(mic: Box<dyn BeacnAudioDevice>, state: BeacnMicState) -> Self {
+    pub fn new(mic: Box<dyn BeacnAudioDevice>, state: BeacnAudioState) -> Self {
         Self { mic, state }
     }
 }
@@ -76,6 +76,7 @@ pub struct BeacnMicApp {
     audio_devices: HashMap<DeviceLocation, MicConfiguration>,
     audio_pages: Vec<Box<dyn AudioPage>>,
 
+    //control_devices: HashMap<DeviceLocation, >
     hotplug_recv: mpsc::Receiver<HotPlugMessage>,
     hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
 
@@ -155,7 +156,7 @@ impl eframe::App for BeacnMicApp {
                                     Err(_) => panic!("Failed to Open Device"),
                                 };
 
-                                let state = BeacnMicState::load_settings(&device, device_type);
+                                let state = BeacnAudioState::load_settings(&device, device_type);
 
                                 // Add to our type map
                                 self.device_list.insert(location, state.device_type);

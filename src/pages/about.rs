@@ -1,5 +1,5 @@
 use crate::pages::AudioPage;
-use crate::state::BeacnMicState;
+use crate::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::BeacnAudioDevice;
@@ -24,7 +24,7 @@ impl AudioPage for About {
         false
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
+    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
         match state.device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
             DeviceType::BeacnStudio => ui.heading("About Beacn Studio"),

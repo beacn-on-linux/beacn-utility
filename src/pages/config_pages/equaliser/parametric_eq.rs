@@ -1,6 +1,6 @@
 use crate::SVG;
 use crate::pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
-use crate::state::{BeacnMicState, EqualiserBand};
+use crate::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::widgets::draw_draggable;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
@@ -109,7 +109,7 @@ impl<'a> ParametricEq {
         &mut self,
         ui: &mut Ui,
         mic: &Box<dyn BeacnAudioDevice>,
-        state: &mut BeacnMicState,
+        state: &mut BeacnAudioState,
     ) -> Response {
         let mode = state.equaliser.mode;
         let bands = &mut state.equaliser.bands[state.equaliser.mode];
