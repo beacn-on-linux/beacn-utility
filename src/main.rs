@@ -1,6 +1,7 @@
 use crate::pages::MicPage;
 use crate::pages::about::About;
 use crate::pages::config::Configuration;
+use crate::pages::error::ErrorPage;
 use crate::pages::lighting::LightingPage;
 use crate::state::{BeacnMicState, LoadState};
 use anyhow::{Result, anyhow};
@@ -14,15 +15,18 @@ use egui::{Color32, Context, ImageButton, ImageSource, Response, Ui, include_ima
 use log::{LevelFilter, debug, error};
 use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::sync::mpsc::TryRecvError;
 use std::thread;
-use crate::pages::error::ErrorPage;
+use eframe::icon_data::from_png_bytes;
 
 mod numbers;
 mod pages;
 mod state;
 mod widgets;
+
+// Main Window Icon
+static ICON: &[u8] = include_bytes!("../resources/com.github.beacn-on-linux.png");
 
 // SVG Images
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
@@ -251,7 +255,12 @@ fn main() -> Result<()> {
 
     let viewport = egui::ViewportBuilder::default();
     let viewport = viewport.with_inner_size([1024.0, 500.0]);
-    let viewport = viewport.with_min_inner_size([1024.0, 500.0]);
+    let mut viewport = viewport.with_min_inner_size([1024.0, 500.0]);
+
+    // This is only for X11, on Wayland the icon is inherited from the .desktop file
+    if let Ok(icon) = from_png_bytes(ICON) {
+        viewport.icon = Some(Arc::new(icon));
+    }
 
     let options = eframe::NativeOptions {
         viewport,
@@ -290,3 +299,4 @@ fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     })
     .inner
 }
+
