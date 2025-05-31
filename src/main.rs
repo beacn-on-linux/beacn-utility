@@ -3,9 +3,12 @@ use crate::audio_pages::about::About;
 use crate::audio_pages::config::Configuration;
 use crate::audio_pages::error::ErrorPage;
 use crate::audio_pages::lighting::LightingPage;
+use crate::controller_pages::ControllerPage;
 use crate::states::audio_state::{BeacnAudioState, LoadState};
+use crate::states::controller_state::ControlState;
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
+use beacn_lib::controller::{BeacnControlDevice, open_control_device};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
@@ -20,8 +23,9 @@ use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, mpsc};
 use std::thread;
 
-mod numbers;
 mod audio_pages;
+mod controller_pages;
+mod numbers;
 mod states;
 mod widgets;
 
@@ -69,6 +73,17 @@ impl MicConfiguration {
     }
 }
 
+pub struct ConfigConfiguration {
+    pub dev: Box<dyn BeacnControlDevice>,
+    pub state: ControlState,
+}
+
+impl ConfigConfiguration {
+    pub fn new(dev: Box<dyn BeacnControlDevice>, state: ControlState) -> Self {
+        Self { dev, state }
+    }
+}
+
 pub struct BeacnMicApp {
     device_list: HashMap<DeviceLocation, DeviceType>,
     active_device: Option<DeviceLocation>,
@@ -76,7 +91,9 @@ pub struct BeacnMicApp {
     audio_devices: HashMap<DeviceLocation, MicConfiguration>,
     audio_pages: Vec<Box<dyn AudioPage>>,
 
-    //control_devices: HashMap<DeviceLocation, >
+    control_devices: HashMap<DeviceLocation, ConfigConfiguration>,
+    control_pages: Vec<Box<dyn ControllerPage>>,
+
     hotplug_recv: mpsc::Receiver<HotPlugMessage>,
     hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
 
@@ -132,6 +149,9 @@ impl BeacnMicApp {
                 Box::new(ErrorPage::new()),
             ],
 
+            control_devices: Default::default(),
+            control_pages: vec![Box::new(controller_pages::about::About::new())],
+
             hotplug_recv: proxy_rx,
             hotplug_send: manage_tx,
 
@@ -169,7 +189,25 @@ impl eframe::App for BeacnMicApp {
                                     self.active_device = Some(location);
                                 }
                             }
-                            _ => {}
+                            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                                let device = open_control_device(location);
+                                let device = match device {
+                                    Ok(d) => d,
+                                    Err(_) => panic!("Failed to Open Device"),
+                                };
+                                let state = ControlState::load_settings(&device, device_type);
+
+                                // Add to our type map
+                                self.device_list.insert(location, state.device_type);
+
+                                // Add to global list and state
+                                self.device_list.insert(location, device_type);
+                                let config = ConfigConfiguration::new(device, state);
+                                self.control_devices.insert(location, config);
+                                if self.active_device.is_none() {
+                                    self.active_device = Some(location);
+                                }
+                            }
                         }
                     }
                     HotPlugMessage::DeviceRemoved(device) => {
@@ -178,7 +216,9 @@ impl eframe::App for BeacnMicApp {
                                 DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                     self.audio_devices.remove(&device);
                                 }
-                                _ => {}
+                                DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                                    self.control_devices.remove(&device);
+                                }
                             }
 
                             if self.active_device == Some(device) {
@@ -264,7 +304,28 @@ impl BeacnMicApp {
                 ui.add_space(5.0);
                 ui.separator();
             }
-            _ => {}
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                // We need to check for errors later.
+                let device_state = self.control_devices.get(&location).unwrap();
+                ui.add_space(5.0);
+
+                match device {
+                    DeviceType::BeacnMix => ui.label("Mix"),
+                    DeviceType::BeacnMixCreate => ui.label("Mix Create"),
+                    _ => ui.label("ERROR"),
+                };
+
+                let control_pages = self.control_pages.iter().enumerate();
+                for (index, page) in control_pages {
+                    let selected = active_device == location && self.active_page == index;
+                    if round_nav_button(ui, page.icon(), selected).clicked() {
+                        self.active_device = Some(location);
+                        self.active_page = index;
+                    }
+                }
+                ui.add_space(5.0);
+                ui.separator();
+            }
         }
     }
 
@@ -294,7 +355,12 @@ impl BeacnMicApp {
                     self.audio_pages[self.active_page].ui(ui, &settings.mic, &mut settings.state);
                 });
             }
-            _ => {
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                let settings = self.control_devices.get_mut(&active_device).unwrap();
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    self.control_pages[self.active_page].ui(ui, &settings.dev, &mut settings.state);
+                });
+
                 // This will be different for 'Control' devices :)
             }
         }
