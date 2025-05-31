@@ -1,2 +1,6 @@
 /target
 ./.idea
+generated-sources.json
+/.flatpak-builder
+/build-dir
+/repo
