@@ -28,6 +28,10 @@ modules:
       - cargo --offline fetch --manifest-path Cargo.toml --verbose
       - cargo --offline build --release --verbose
       - install -Dm755 ./target/release/beacn-mic-ui -t /app/bin/
+      - install -Dm644 com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
+      - install -Dm644 resources/com.github.beacn-on-linux.svg /app/share/icons/hicolor/scalable/apps/com.github.beacn-on-linux.svg
+      - install -Dm644 com.github.beacn-on-linux.metainfo.xml /app/share/metainfo/com.github.beacn-on-linux.metainfo.xml
+
     sources:
       - type: dir
         path: .

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Beacn UI
+Comment=Control interface for Beacn microphones
+GenericName=Beacn Audio Device Control
+Exec=beacn-mic-ui
+Icon=com.github.beacn-on-linux
+Terminal=false
+Type=Application
+Categories=Audio;AudioVideo;Settings;HardwareSettings;
+Keywords=microphone;audio;beacn;mic;recording;
+StartupNotify=true
+StartupWMClass=beacn-mic-ui
+X-Flatpak=com.github.beacn-on-linux
