@@ -51,6 +51,23 @@ If you instead want to build the app and have a useful binary you can link to:
 
 ***
 
+## Getting Started (flatpak)
+
+### First time setup
+pip install flatpak-cargo-generator
+flatpak-cargo-generator Cargo.lock -o generated-sources.json
+flatpak-builder --repo=repo --force-clean build-dir com.github.beacn-on-linux.yml
+
+(local install from repo for the moment)
+
+### Setup local flatpak repo (only need to do once)
+flatpak --user remote-add --no-gpg-verify beacn-repo repo
+flatpak install --user beacn-repo com.github.beacn-on-linux
+
+### For builds afterwards
+flatpak-builder --repo=repo build-dir com.github.beacn-on-linux.yml
+flatpak update
+
 ## Current Status
 
 Not Yet Implemented:

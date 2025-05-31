@@ -1,0 +1,38 @@
+app-id: com.github.beacn-on-linux
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: beacn-mic-ui
+
+finish-args:
+  # USB device access
+  # - --device=all
+  # Alternative: more specific USB access
+  - --device=usb
+  
+  # Basic permissions most apps need
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+
+modules:
+  - name: beacn-mic-ui
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        CARGO_HOME: /run/build/beacn-mic-ui/cargo
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --verbose
+      - install -Dm755 ./target/release/beacn-mic-ui -t /app/bin/
+      - install -Dm644 com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
+      - install -Dm644 resources/com.github.beacn-on-linux.svg /app/share/icons/hicolor/scalable/apps/com.github.beacn-on-linux.svg
+      - install -Dm644 com.github.beacn-on-linux.metainfo.xml /app/share/metainfo/com.github.beacn-on-linux.metainfo.xml
+
+    sources:
+      - type: dir
+        path: .
+      - generated-sources.json
