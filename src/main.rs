@@ -137,7 +137,13 @@ impl eframe::App for BeacnMicApp {
                     HotPlugMessage::DeviceAttached(location, device_type) => {
                         match device_type {
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                                let device = open_audio_device(location).expect("Unable to open Device");
+                                let device = open_audio_device(location);
+                                let device = match device {
+                                    Ok(d) => d,
+                                    // TODO: This should create a BeacnMicState in 'Error' State
+                                    Err(_) => panic!("Failed to Open Device")
+                                };
+
                                 let state = BeacnMicState::load_settings(&device, device_type);
 
                                 // Add to our type map
@@ -145,7 +151,8 @@ impl eframe::App for BeacnMicApp {
 
                                 // Add to global list and state
                                 self.device_list.insert(location, device_type);
-                                self.audio_devices.insert(location, MicConfiguration::new(device, state));
+                                let config = MicConfiguration::new(device, state);
+                                self.audio_devices.insert(location, config);
                                 if self.active_device.is_none() {
                                     self.active_device = Some(location);
                                 }
