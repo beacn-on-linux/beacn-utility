@@ -1,11 +1,11 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::audio::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};
-use beacn_mic_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity};
-use beacn_mic_lib::types::Percent;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};
+use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity};
+use beacn_lib::types::Percent;
 use egui::SelectableLabel;
 use egui::Ui;
 use log::debug;

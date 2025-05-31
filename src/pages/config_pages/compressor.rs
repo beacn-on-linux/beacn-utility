@@ -1,13 +1,13 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
-use beacn_mic_lib::audio::messages::compressor::{
+use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
+use beacn_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
 };
-use beacn_mic_lib::types::{MakeUpGain, TimeFrame};
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::types::{MakeUpGain, TimeFrame};
 use egui::Ui;
 use strum::IntoEnumIterator;
 

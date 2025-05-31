@@ -1,14 +1,16 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::AudioPage;
 use crate::state::BeacnMicState;
-use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::audio::messages::{Message};
-use beacn_mic_lib::audio::messages::lighting::{Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingMode, LightingSpeed};
-use beacn_mic_lib::audio::messages::lighting::LightingMode::{
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,
     Spectrum,
 };
-use beacn_mic_lib::types::RGB;
+use beacn_lib::audio::messages::lighting::{
+    Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingSpeed,
+};
+use beacn_lib::manager::DeviceType;
+use beacn_lib::types::RGB;
 use egui::{Align, Label, Layout, Response, RichText, Ui};
 
 use crate::state::Lighting as LightingState;
@@ -31,7 +33,6 @@ impl AudioPage for LightingPage {
         false
     }
 
-
     fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         // Lighting is relatively simple, we have a persistent bottom pane, and a top pane
         ui.add_sized(
@@ -45,11 +46,15 @@ impl AudioPage for LightingPage {
                                 ui.add_space(15.0);
                                 ui.horizontal(|ui| {
                                     ui.add_space(15.);
-                                    ui.vertical(|ui| {
-                                        match state.device_type {
-                                            DeviceType::BeacnMic => self.draw_types_mic(ui, mic, &mut state.lighting),
-                                            DeviceType::BeacnStudio => self.draw_types_studio(ui, mic, &mut state.lighting),
-                                            _ => { ui.label("You shouldn't see this :)"); },
+                                    ui.vertical(|ui| match state.device_type {
+                                        DeviceType::BeacnMic => {
+                                            self.draw_types_mic(ui, mic, &mut state.lighting)
+                                        }
+                                        DeviceType::BeacnStudio => {
+                                            self.draw_types_studio(ui, mic, &mut state.lighting)
+                                        }
+                                        _ => {
+                                            ui.label("You shouldn't see this :)");
                                         }
                                     });
                                 })
@@ -80,7 +85,12 @@ impl AudioPage for LightingPage {
 }
 
 impl LightingPage {
-    fn draw_types_mic(&self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) {
+    fn draw_types_mic(
+        &self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) {
         let mode = state.mic_mode;
 
         let solid = mode == Solid;
@@ -126,11 +136,20 @@ impl LightingPage {
         };
     }
 
-    fn draw_types_studio(&self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) {
-
+    fn draw_types_studio(
+        &self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) {
     }
 
-    fn draw_area(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_area(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         match state.mic_mode {
             Solid => self.draw_solid(ui, mic, state),
             Spectrum => self.draw_spectrum(ui, mic, state),
@@ -142,34 +161,60 @@ impl LightingPage {
         }
     }
 
-    fn draw_solid(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_solid(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         ui.vertical(|ui| {
             self.draw_primary_colour(ui, mic, &mut state.colour1);
             self.draw_ring_brightness(ui, mic, &mut state.brightness);
-        }).response
+        })
+        .response
     }
-    fn draw_gradient(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_gradient(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         ui.vertical(|ui| {
             self.draw_primary_colour(ui, mic, &mut state.colour1);
             self.draw_secondary_colour(ui, mic, &mut state.colour2);
             self.draw_speed_direction(ui, mic, &mut state.speed);
             self.draw_ring_brightness(ui, mic, &mut state.brightness);
-        }).response
+        })
+        .response
     }
-    fn draw_reactive(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_reactive(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         ui.vertical(|ui| {
             ui.label("Behaviour");
 
             ui.vertical(|ui| {
-                if ui.radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter").changed() {
+                if ui
+                    .radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up").changed() {
+                if ui
+                    .radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down").changed() {
+                if ui
+                    .radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
@@ -181,18 +226,30 @@ impl LightingPage {
             self.draw_meter_sensitivity(ui, mic, &mut state.sensitivity);
             self.draw_ring_brightness(ui, mic, &mut state.brightness);
             self.draw_meter_source(ui, mic, &mut state.source);
-        }).response
+        })
+        .response
     }
-    fn draw_sparkle(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_sparkle(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         ui.vertical(|ui| {
             ui.label("Behaviour");
 
             ui.horizontal(|ui| {
-                if ui.radio_value(&mut state.mic_mode, SparkleRandom, "Sparkle Random").changed() {
+                if ui
+                    .radio_value(&mut state.mic_mode, SparkleRandom, "Sparkle Random")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
-                if ui.radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter").changed() {
+                if ui
+                    .radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
                     let _ = mic.set_value(message);
                 }
@@ -205,16 +262,28 @@ impl LightingPage {
             self.draw_speed_direction(ui, mic, &mut state.speed);
             self.draw_ring_brightness(ui, mic, &mut state.brightness);
             self.draw_meter_source(ui, mic, &mut state.source);
-        }).response
+        })
+        .response
     }
-    fn draw_spectrum(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut LightingState) -> Response {
+    fn draw_spectrum(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut LightingState,
+    ) -> Response {
         ui.vertical(|ui| {
             self.draw_speed_direction(ui, mic, &mut state.speed);
             self.draw_ring_brightness(ui, mic, &mut state.brightness);
-        }).response
+        })
+        .response
     }
 
-    fn draw_primary_colour(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, colour: &mut [u8; 3]) {
+    fn draw_primary_colour(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        colour: &mut [u8; 3],
+    ) {
         ui.label("Primary Colour");
         if ui.color_edit_button_srgb(colour).changed() {
             let message = RGB {
@@ -229,7 +298,12 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_secondary_colour(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, colour: &mut [u8; 3],) {
+    fn draw_secondary_colour(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        colour: &mut [u8; 3],
+    ) {
         ui.label("Secondary Colour");
         if ui.color_edit_button_srgb(colour).changed() {
             let message = RGB {
@@ -244,7 +318,12 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_speed_direction(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, speed: &mut i32) {
+    fn draw_speed_direction(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        speed: &mut i32,
+    ) {
         ui.label("Speed and Direction");
         if ui.add(egui::Slider::new(speed, -10..=10)).changed() {
             let message = Message::Lighting(Lighting::Speed(LightingSpeed(*speed)));
@@ -253,7 +332,12 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_meter_sensitivity(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, sensitivity: &mut f32) {
+    fn draw_meter_sensitivity(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        sensitivity: &mut f32,
+    ) {
         ui.label("Meter Sensitivity");
         if ui.add(egui::Slider::new(sensitivity, 0.0..=10.0)).changed() {
             let value = Lighting::MeterSensitivity(LightingMeterSensitivty(*sensitivity));
@@ -263,22 +347,31 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_meter_source(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, source: &mut LightingMeterSource) {
+    fn draw_meter_source(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        source: &mut LightingMeterSource,
+    ) {
         ui.label("Meter Source");
         egui::ComboBox::from_label("")
-            .selected_text(
-                match source {
-                    LightingMeterSource::Microphone => "Microphone",
-                    LightingMeterSource::Headphones => "Headphones",
-                }
-            )
+            .selected_text(match source {
+                LightingMeterSource::Microphone => "Microphone",
+                LightingMeterSource::Headphones => "Headphones",
+            })
             .show_ui(ui, |ui| {
                 // TODO: There are better ways to do this
-                if ui.selectable_value(source, LightingMeterSource::Microphone, "Microphone").changed() {
+                if ui
+                    .selectable_value(source, LightingMeterSource::Microphone, "Microphone")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::MeterSource(*source));
                     let _ = mic.set_value(message);
                 }
-                if ui.selectable_value(source, LightingMeterSource::Headphones, "Headphones").changed() {
+                if ui
+                    .selectable_value(source, LightingMeterSource::Headphones, "Headphones")
+                    .changed()
+                {
                     let message = Message::Lighting(Lighting::MeterSource(*source));
                     let _ = mic.set_value(message);
                 }
@@ -286,7 +379,12 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_ring_brightness(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, brightness: &mut i32) {
+    fn draw_ring_brightness(
+        &mut self,
+        ui: &mut Ui,
+        mic: &Box<dyn BeacnAudioDevice>,
+        brightness: &mut i32,
+    ) {
         ui.label("Ring Brightness");
         if ui.add(egui::Slider::new(brightness, 0..=100)).changed() {
             let value = Lighting::Brightness(LightingBrightness(*brightness));

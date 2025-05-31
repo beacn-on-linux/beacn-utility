@@ -5,20 +5,20 @@ use crate::pages::error::ErrorPage;
 use crate::pages::lighting::LightingPage;
 use crate::state::{BeacnMicState, LoadState};
 use anyhow::{Result, anyhow};
-use beacn_mic_lib::manager::{
+use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
+use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
 };
 use eframe::Frame;
+use eframe::icon_data::from_png_bytes;
 use egui::ahash::HashMap;
 use egui::{Color32, Context, ImageButton, ImageSource, Response, Ui, include_image, vec2};
 use log::{LevelFilter, debug, error};
 use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::sync::{mpsc, Arc};
 use std::sync::mpsc::TryRecvError;
+use std::sync::{Arc, mpsc};
 use std::thread;
-use beacn_mic_lib::audio::{open_audio_device, BeacnAudioDevice};
-use eframe::icon_data::from_png_bytes;
 
 mod numbers;
 mod pages;
@@ -38,10 +38,22 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
 
     // EQ Modes
     map.insert("eq_bell", include_image!("../resources/eq/bell.svg"));
-    map.insert("eq_high_pass", include_image!("../resources/eq/high_pass.svg"));
-    map.insert("eq_high_shelf", include_image!("../resources/eq/high_shelf.svg"));
-    map.insert("eq_low_pass", include_image!("../resources/eq/low_pass.svg"));
-    map.insert("eq_low_shelf", include_image!("../resources/eq/low_shelf.svg"));
+    map.insert(
+        "eq_high_pass",
+        include_image!("../resources/eq/high_pass.svg"),
+    );
+    map.insert(
+        "eq_high_shelf",
+        include_image!("../resources/eq/high_shelf.svg"),
+    );
+    map.insert(
+        "eq_low_pass",
+        include_image!("../resources/eq/low_pass.svg"),
+    );
+    map.insert(
+        "eq_low_shelf",
+        include_image!("../resources/eq/low_shelf.svg"),
+    );
     map.insert("eq_notch", include_image!("../resources/eq/notch.svg"));
     map
 });
@@ -68,7 +80,6 @@ pub struct BeacnMicApp {
     hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
 
     active_page: usize,
-
 }
 
 impl BeacnMicApp {
@@ -141,7 +152,7 @@ impl eframe::App for BeacnMicApp {
                                 let device = match device {
                                     Ok(d) => d,
                                     // TODO: This should create a BeacnMicState in 'Error' State
-                                    Err(_) => panic!("Failed to Open Device")
+                                    Err(_) => panic!("Failed to Open Device"),
                                 };
 
                                 let state = BeacnMicState::load_settings(&device, device_type);
@@ -173,7 +184,6 @@ impl eframe::App for BeacnMicApp {
                                 // If there are any devices left, select the first
                                 self.active_device = self.device_list.keys().next().cloned();
                             }
-
                         }
                     }
                     HotPlugMessage::ThreadStopped => {
@@ -235,7 +245,7 @@ impl BeacnMicApp {
                 match device {
                     DeviceType::BeacnMic => ui.label("Mic"),
                     DeviceType::BeacnStudio => ui.label("Studio"),
-                    _ => ui.label("ERROR")
+                    _ => ui.label("ERROR"),
                 };
 
                 let audio_pages = self.audio_pages.iter().enumerate();
@@ -253,7 +263,7 @@ impl BeacnMicApp {
                 ui.add_space(5.0);
                 ui.separator();
             }
-            _ => {},
+            _ => {}
         }
     }
 
@@ -289,8 +299,6 @@ impl BeacnMicApp {
         }
     }
 }
-
-
 
 fn main() -> Result<()> {
     CombinedLogger::init(vec![TermLogger::new(
@@ -346,4 +354,3 @@ fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     })
     .inner
 }
-

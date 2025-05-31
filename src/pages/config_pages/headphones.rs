@@ -1,16 +1,16 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
-use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::audio::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
-use beacn_mic_lib::audio::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
-use beacn_mic_lib::audio::messages::headphones::HeadphoneTypes::{
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
+use beacn_lib::audio::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
+use beacn_lib::audio::messages::headphones::HeadphoneTypes::{
     HighImpedance, InEarMonitors, LineLevel, NormalPower,
 };
-use beacn_mic_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
-use beacn_mic_lib::audio::messages::subwoofer::Subwoofer;
+use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
+use beacn_lib::audio::messages::subwoofer::Subwoofer;
+use beacn_lib::manager::DeviceType;
 use egui::Ui;
 use log::debug;
 
@@ -34,15 +34,19 @@ impl ConfigPage for HeadphonesPage {
                     DeviceType::BeacnStudio => {
                         Message::Headphones(Headphones::StudioMicMonitor(value))
                     }
-                    _ => panic!("This shouldn't happen.")
+                    _ => panic!("This shouldn't happen."),
                 };
                 mic.set_value(message).expect("Failed to Send Message");
                 debug!("Mic Monitor Change: {:?}", hp.mic_monitor);
             }
             if ui.checkbox(&mut hp.linked, "").changed() {
                 let message = match state.device_type {
-                    DeviceType::BeacnMic => Message::Headphones(Headphones::MicChannelsLinked(hp.linked)),
-                    DeviceType::BeacnStudio => Message::Headphones(Headphones::StudioChannelsLinked(hp.linked)),
+                    DeviceType::BeacnMic => {
+                        Message::Headphones(Headphones::MicChannelsLinked(hp.linked))
+                    }
+                    DeviceType::BeacnStudio => {
+                        Message::Headphones(Headphones::StudioChannelsLinked(hp.linked))
+                    }
                     _ => panic!("This shouldn't happen"),
                 };
                 mic.set_value(message).expect("Failed to Send Message");

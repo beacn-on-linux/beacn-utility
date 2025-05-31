@@ -1,9 +1,9 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::AudioPage;
 use crate::state::BeacnMicState;
-use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::audio::messages::headphones::Headphones;
+use beacn_lib::audio::messages::headphones::Headphones;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::manager::DeviceType;
 use egui::{RichText, Ui};
 
 #[allow(unused)]
@@ -24,12 +24,11 @@ impl AudioPage for About {
         false
     }
 
-
     fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         match state.device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
             DeviceType::BeacnStudio => ui.heading("About Beacn Studio"),
-            _ => ui.heading("ERROR")
+            _ => ui.heading("ERROR"),
         };
 
         let serial = RichText::new("Serial: ").strong().size(14.0);

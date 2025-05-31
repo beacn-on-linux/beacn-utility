@@ -1,32 +1,32 @@
-use std::panic;
-use anyhow::{bail, Result};
-use beacn_mic_lib::audio::BeacnAudioDevice;
-use beacn_mic_lib::manager::DeviceType;
-use beacn_mic_lib::audio::messages::bass_enhancement::BassPreset;
-use beacn_mic_lib::audio::messages::compressor::CompressorMode;
-use beacn_mic_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
-use beacn_mic_lib::audio::messages::expander::ExpanderMode;
-use beacn_mic_lib::audio::messages::headphone_equaliser::HPEQType;
-use beacn_mic_lib::audio::messages::headphones::HeadphoneTypes;
-use beacn_mic_lib::audio::messages::lighting::{LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode};
-use beacn_mic_lib::audio::messages::suppressor::SuppressorStyle;
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::types::ToInner;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::bass_enhancement::BassPreset;
+use beacn_lib::audio::messages::compressor::CompressorMode;
+use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
+use beacn_lib::audio::messages::expander::ExpanderMode;
+use beacn_lib::audio::messages::headphone_equaliser::HPEQType;
+use beacn_lib::audio::messages::headphones::HeadphoneTypes;
+use beacn_lib::audio::messages::lighting::{
+    LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
+};
+use beacn_lib::audio::messages::suppressor::SuppressorStyle;
+use beacn_lib::manager::DeviceType;
+use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
+use std::panic;
 
-use beacn_mic_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
-use beacn_mic_lib::audio::messages::compressor::Compressor as MicCompressor;
-use beacn_mic_lib::audio::messages::deesser::DeEsser as MicDeEsser;
-use beacn_mic_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
-use beacn_mic_lib::audio::messages::exciter::Exciter as MicExciter;
-use beacn_mic_lib::audio::messages::expander::Expander as MicExpander;
-use beacn_mic_lib::audio::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
-use beacn_mic_lib::audio::messages::headphones::Headphones as MicHeadphones;
-use beacn_mic_lib::audio::messages::lighting::Lighting as MicLighting;
-use beacn_mic_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
-use beacn_mic_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
-use beacn_mic_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
-use log::warn;
+use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
+use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
+use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
+use beacn_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
+use beacn_lib::audio::messages::exciter::Exciter as MicExciter;
+use beacn_lib::audio::messages::expander::Expander as MicExpander;
+use beacn_lib::audio::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
+use beacn_lib::audio::messages::headphones::Headphones as MicHeadphones;
+use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
+use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
+use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
+use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 
 type Rgb = [u8; 3];
 
@@ -232,9 +232,7 @@ impl BeacnMicState {
             Message::BassEnhancement(b) => match b {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
                 MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
-                MicBaseEnhancement::Amount(v) => {
-                    self.bass_enhancement.amount = v.to_inner() as i8
-                }
+                MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as i8,
                 _ => {}
             },
             Message::Compressor(c) => match c {
@@ -254,9 +252,7 @@ impl BeacnMicState {
                 MicCompressor::MakeupGain(mode, value) => {
                     self.compressor.values[mode].makeup = value.to_inner()
                 }
-                MicCompressor::Enabled(mode, value) => {
-                    self.compressor.values[mode].enabled = value
-                }
+                MicCompressor::Enabled(mode, value) => self.compressor.values[mode].enabled = value,
                 _ => {}
             },
             Message::DeEsser(d) => match d {
@@ -297,9 +293,7 @@ impl BeacnMicState {
                 MicExpander::Ratio(mode, value) => {
                     self.expander.values[mode].ratio = value.to_inner()
                 }
-                MicExpander::Enabled(mode, value) => {
-                    self.expander.values[mode].enabled = value
-                }
+                MicExpander::Enabled(mode, value) => self.expander.values[mode].enabled = value,
                 MicExpander::Attack(mode, value) => {
                     self.expander.values[mode].attack = value.to_inner() as u16
                 }
@@ -320,9 +314,7 @@ impl BeacnMicState {
             Message::Headphones(h) => match h {
                 MicHeadphones::HeadphoneLevel(v) => self.headphones.level = v.to_inner(),
                 MicHeadphones::MicMonitor(v) => self.headphones.mic_monitor = v.to_inner(),
-                MicHeadphones::StudioMicMonitor(v) => {
-                    self.headphones.mic_monitor = v.to_inner()
-                }
+                MicHeadphones::StudioMicMonitor(v) => self.headphones.mic_monitor = v.to_inner(),
                 MicHeadphones::MicChannelsLinked(b) => self.headphones.linked = b,
                 MicHeadphones::StudioChannelsLinked(b) => self.headphones.linked = b,
                 MicHeadphones::MicOutputGain(v) => self.headphones.output_gain = v.to_inner(),
@@ -341,9 +333,7 @@ impl BeacnMicState {
                 MicLighting::MeterSource(v) => self.lighting.source = v,
                 MicLighting::MeterSensitivity(s) => self.lighting.sensitivity = s.to_inner(),
                 MicLighting::MuteMode(m) => self.lighting.mute_mode = m,
-                MicLighting::MuteColour(c) => {
-                    self.lighting.mute_colour = [c.red, c.green, c.blue]
-                }
+                MicLighting::MuteColour(c) => self.lighting.mute_colour = [c.red, c.green, c.blue],
                 MicLighting::SuspendMode(m) => self.lighting.suspend_mode = m,
                 MicLighting::SuspendBrightness(b) => {
                     self.lighting.suspend_brightness = b.to_inner()

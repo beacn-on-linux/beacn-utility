@@ -1,11 +1,13 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
 use crate::pages::config_pages::ConfigPage;
 use crate::state::BeacnMicState;
 use crate::widgets::{get_slider, toggle_button};
-use beacn_mic_lib::audio::messages::Message;
-use beacn_mic_lib::audio::messages::expander::ExpanderMode::{Advanced, Simple};
-use beacn_mic_lib::audio::messages::expander::{Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold};
-use beacn_mic_lib::types::TimeFrame;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::expander::ExpanderMode::{Advanced, Simple};
+use beacn_lib::audio::messages::expander::{
+    Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold,
+};
+use beacn_lib::types::TimeFrame;
 use egui::Ui;
 use strum::IntoEnumIterator;
 

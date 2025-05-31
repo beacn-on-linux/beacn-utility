@@ -1,17 +1,17 @@
-use beacn_mic_lib::audio::BeacnAudioDevice;
-use crate::pages::AudioPage;
-use crate::pages::config_pages::ConfigPage;
 use crate::pages::config_pages::compressor::CompressorPage;
+use crate::pages::config_pages::equaliser::parametric_eq::ParametricEq;
 use crate::pages::config_pages::expander::ExpanderPage;
 use crate::pages::config_pages::headphones::HeadphonesPage;
 use crate::pages::config_pages::mic_setup::MicSetupPage;
 use crate::pages::config_pages::suppressor::NoiseSuppressionPage;
+use crate::pages::config_pages::ConfigPage;
+use crate::pages::AudioPage;
 use crate::state::BeacnMicState;
 use crate::widgets::draw_range;
-use beacn_mic_lib::audio::messages::headphones::HPMicOutputGain;
-use beacn_mic_lib::types::HasRange;
-use egui::{Ui, vec2, Widget};
-use crate::pages::config_pages::equaliser::parametric_eq::ParametricEq;
+use beacn_lib::audio::messages::headphones::HPMicOutputGain;
+use beacn_lib::audio::BeacnAudioDevice;
+use beacn_lib::types::HasRange;
+use egui::{vec2, Ui, Widget};
 
 pub struct Configuration {
     equaliser_new: Box<ParametricEq>,
@@ -45,7 +45,6 @@ impl AudioPage for Configuration {
     fn show_on_error(&self) -> bool {
         false
     }
-
 
     fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnMicState) {
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
