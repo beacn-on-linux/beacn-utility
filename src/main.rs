@@ -62,12 +62,12 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
     map
 });
 
-pub struct MicConfiguration {
+pub struct AudioConfiguration {
     pub mic: Box<dyn BeacnAudioDevice>,
     pub state: BeacnAudioState,
 }
 
-impl MicConfiguration {
+impl AudioConfiguration {
     pub fn new(mic: Box<dyn BeacnAudioDevice>, state: BeacnAudioState) -> Self {
         Self { mic, state }
     }
@@ -88,7 +88,7 @@ pub struct BeacnMicApp {
     device_list: HashMap<DeviceLocation, DeviceType>,
     active_device: Option<DeviceLocation>,
 
-    audio_devices: HashMap<DeviceLocation, MicConfiguration>,
+    audio_devices: HashMap<DeviceLocation, AudioConfiguration>,
     audio_pages: Vec<Box<dyn AudioPage>>,
 
     control_devices: HashMap<DeviceLocation, ConfigConfiguration>,
@@ -183,7 +183,7 @@ impl eframe::App for BeacnMicApp {
 
                                 // Add to global list and state
                                 self.device_list.insert(location, device_type);
-                                let config = MicConfiguration::new(device, state);
+                                let config = AudioConfiguration::new(device, state);
                                 self.audio_devices.insert(location, config);
                                 if self.active_device.is_none() {
                                     self.active_device = Some(location);
