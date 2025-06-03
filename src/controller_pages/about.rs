@@ -1,9 +1,8 @@
-use beacn_lib::audio::BeacnAudioDevice;
+use crate::controller_pages::ControllerPage;
+use crate::states::controller_state::ControlState;
 use beacn_lib::controller::BeacnControlDevice;
 use beacn_lib::manager::DeviceType;
 use egui::{RichText, Ui};
-use crate::controller_pages::ControllerPage;
-use crate::states::controller_state::ControlState;
 
 #[allow(unused)]
 pub struct About {}

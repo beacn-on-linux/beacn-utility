@@ -1,7 +1,5 @@
-use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::controller::BeacnControlDevice;
 use beacn_lib::manager::DeviceType;
-use crate::states::audio_state::BeacnAudioState;
 
 // Literally nothing to do here right now
 #[derive(Debug, Default, Clone)]

@@ -1,4 +1,3 @@
-use crate::SVG;
 use crate::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::widgets::draw_draggable;
@@ -10,24 +9,18 @@ use beacn_lib::audio::messages::equaliser::EQBandType::{
 use beacn_lib::audio::messages::equaliser::{
     EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
 };
-use eframe::egui;
-use eframe::egui::{CornerRadius, Mesh, Shape, StrokeKind, pos2, vec2};
-use eframe::emath::Align;
-use egui::accesskit::Size;
 use egui::{
-    Button, Color32, FontId, ImageButton, Layout, Pos2, Rect, Response, RichText, Sense, Stroke,
-    Ui, Vec2, Visuals,
+    Align, Button, Color32, CornerRadius, FontId, ImageButton, Layout, Mesh, Pos2, Rect, Response,
+    Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
 use enum_map::EnumMap;
-use log::{debug, error, warn};
+use log::warn;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
+use crate::app::SVG;
 
 type Bands = EnumMap<EQBand, EqualiserBand>;
-
-// Size of the DragValues
-static DRAG_SIZE: [f64; 2] = [75.0, 20.0];
 
 // The frequency range to be rendered
 static MIN_FREQUENCY: u32 = 20;

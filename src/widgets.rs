@@ -1,6 +1,6 @@
 use crate::numbers::NumericType;
-use eframe::emath::{Align, Numeric};
-use egui::{DragValue, Layout, Response, RichText, Slider, Ui, Visuals};
+use egui::emath::Numeric;
+use egui::{Align, DragValue, Layout, Response, RichText, Slider, Ui, Visuals};
 use std::fmt::Debug;
 use std::ops::RangeInclusive;
 
@@ -100,7 +100,11 @@ pub fn toggle_button<'a>(ui: &mut Ui, active: bool, label: &str) -> egui::Button
     egui::Button::new(RichText::new(label).color(text_color)).fill(bg_color)
 }
 
-pub fn draw_draggable<'a, T>(value: &'a mut T, range: RangeInclusive<T>, suffix: &str) -> DragValue<'a>
+pub fn draw_draggable<'a, T>(
+    value: &'a mut T,
+    range: RangeInclusive<T>,
+    suffix: &str,
+) -> DragValue<'a>
 where
     T: Copy + Numeric + Debug + NumericType,
 {

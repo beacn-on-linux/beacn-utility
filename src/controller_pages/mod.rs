@@ -1,9 +1,8 @@
 pub(crate) mod about;
 
-use beacn_lib::audio::BeacnAudioDevice;
+use crate::states::controller_state::ControlState;
 use beacn_lib::controller::BeacnControlDevice;
 use egui::Ui;
-use crate::states::controller_state::ControlState;
 
 pub trait ControllerPage {
     fn icon(&self) -> &'static str;

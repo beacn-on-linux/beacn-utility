@@ -1,0 +1,307 @@
+use egui_winit::winit::dpi::LogicalSize;
+use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
+use egui_winit::winit::{
+    application::ApplicationHandler,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    window::{Window, WindowId},
+};
+use std::sync::Arc;
+use std::time::Instant;
+
+use egui_glow::glow;
+use egui_glow::glow::HasContext;
+use egui_winit::winit;
+use glutin::prelude::GlSurface;
+use winit::raw_window_handle::HasRawDisplayHandle;
+
+pub trait App {
+    fn update(&mut self, ctx: &egui::Context);
+    fn on_exit(&mut self);
+}
+
+pub struct WindowRunner {
+    app: Box<dyn App>,
+    window: Option<Arc<Window>>,
+    renderer: Option<GlowRenderer>,
+    app_start_time: Instant,
+    context: egui::Context,
+
+    // TODO: Split these into context related struct
+    initial_size: LogicalSize<u32>,
+    minimum_size: LogicalSize<u32>,
+    title: String,
+}
+
+struct GlowRenderer {
+    gl_context: glutin::context::PossiblyCurrentContext,
+    gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    winit_state: egui_winit::State,
+    painter: egui_glow::Painter,
+    gl: Arc<glow::Context>,
+}
+
+impl WindowRunner {
+    pub fn new(
+        app: Box<dyn App>,
+        context: egui::Context,
+        initial_size: LogicalSize<u32>,
+        minimum_size: LogicalSize<u32>,
+        title: String,
+    ) -> Self {
+        Self {
+            app,
+            window: None,
+            renderer: None,
+            app_start_time: Instant::now(),
+
+            context,
+
+            initial_size,
+            minimum_size,
+            title,
+        }
+    }
+
+    pub fn get_egui_context() -> egui::Context {
+        egui::Context::default()
+    }
+
+    pub fn run(mut self, event_loop: &mut EventLoop<()>) -> Result<(), Box<dyn std::error::Error>> {
+        event_loop.set_control_flow(ControlFlow::Wait);
+
+        // Use run_app_on_demand instead of run() so it can return when window closes
+        event_loop.run_app_on_demand(&mut self)?;
+
+        Ok(())
+    }
+
+    fn render_frame(&mut self) {
+        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+            let mut raw_input = renderer.winit_state.take_egui_input(window);
+            raw_input.time = Some(self.app_start_time.elapsed().as_secs_f64());
+
+            let full_output = self.context.run(raw_input, |ctx| {
+                self.app.update(ctx);
+            });
+
+            renderer
+                .winit_state
+                .handle_platform_output(window, full_output.platform_output.clone());
+
+            renderer.render_egui(&full_output, &self.context);
+
+            // Swap buffers
+            renderer
+                .gl_surface
+                .swap_buffers(&renderer.gl_context)
+                .unwrap();
+        }
+    }
+}
+
+impl ApplicationHandler for WindowRunner {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none() {
+            let window_attributes = Window::default_attributes()
+                .with_title(&self.title)
+                .with_inner_size(self.initial_size)
+                .with_min_inner_size(self.minimum_size);
+
+            let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+            let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
+
+            self.window = Some(window);
+            self.renderer = Some(renderer);
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+            let response = renderer.winit_state.on_window_event(window, &event);
+
+            // Request redraw if egui wants it OR if it's not a RedrawRequested event
+            if response.repaint && !matches!(&event, WindowEvent::RedrawRequested) {
+                window.request_redraw();
+            }
+
+            match event {
+                WindowEvent::CloseRequested => {
+                    // We need to close and destroy our window.
+                    // First, tell the App we're on our way out.
+                    self.app.on_exit();
+
+                    // Clear variables
+                    self.window = None;
+                    self.renderer = None;
+
+                    // Exit the event loop when window closes so run() can return
+                    event_loop.exit();
+                }
+                WindowEvent::Resized(physical_size) => renderer.resize(physical_size),
+                _ => {}
+            }
+
+            // Always handle RedrawRequested
+            if matches!(event, WindowEvent::RedrawRequested) {
+                self.render_frame();
+            }
+        }
+    }
+}
+
+impl GlowRenderer {
+    fn new(window: Arc<Window>, egui_ctx: &egui::Context) -> Self {
+        use glutin::config::ConfigTemplateBuilder;
+        use glutin::context::{ContextApi, ContextAttributesBuilder};
+        use glutin::display::GetGlDisplay;
+        use glutin::prelude::*;
+        use glutin::surface::SurfaceAttributesBuilder;
+        use winit::raw_window_handle::HasRawWindowHandle;
+
+        let raw_window_handle = window.raw_window_handle().unwrap();
+        let raw_display_handle = window.raw_display_handle().unwrap();
+
+        // Create OpenGL display
+        let gl_display = unsafe {
+            glutin::display::Display::new(
+                raw_display_handle,
+                glutin::display::DisplayApiPreference::Egl,
+            )
+            .unwrap()
+        };
+
+        // Create OpenGL config
+        let config_template = ConfigTemplateBuilder::new()
+            .with_alpha_size(8)
+            .with_transparency(false)
+            .build();
+
+        let config = unsafe {
+            gl_display
+                .find_configs(config_template)
+                .unwrap()
+                .reduce(|accum, config| {
+                    let transparency_check = config.supports_transparency().unwrap_or(false)
+                        & !accum.supports_transparency().unwrap_or(false);
+
+                    if transparency_check || config.num_samples() < accum.num_samples() {
+                        config
+                    } else {
+                        accum
+                    }
+                })
+                .unwrap()
+        };
+
+        // Create OpenGL context, we won't specify an API version, glow will pick the best.
+        let context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(None))
+            .build(Some(raw_window_handle));
+
+        let not_current_gl_context = unsafe {
+            gl_display
+                .create_context(&config, &context_attributes)
+                .unwrap()
+        };
+
+        // Create OpenGL surface
+        let size = window.inner_size();
+        let surface_attributes = SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
+            .build(
+                raw_window_handle,
+                size.width.try_into().unwrap(),
+                size.height.try_into().unwrap(),
+            );
+
+        let gl_surface = unsafe {
+            gl_display
+                .create_window_surface(&config, &surface_attributes)
+                .unwrap()
+        };
+
+        // Make context current
+        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+
+        // Create glow context
+        let gl = Arc::new(unsafe {
+            glow::Context::from_loader_function(|s| {
+                let s = std::ffi::CString::new(s)
+                    .expect("failed to construct C string from string for gl proc address");
+
+                gl_display.get_proc_address(&s)
+            })
+        });
+
+        // Set up egui winit state
+        let viewport_id = egui_ctx.viewport_id();
+        let egui_winit = egui_winit::State::new(
+            egui_ctx.clone(),
+            viewport_id,
+            &window,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        );
+
+        // Create egui glow painter
+        let painter = egui_glow::Painter::new(Arc::clone(&gl), "", None, false)
+            .expect("Failed to create egui_glow painter");
+
+        Self {
+            gl_context,
+            gl_surface,
+            winit_state: egui_winit,
+            painter,
+            gl,
+        }
+    }
+
+    fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.gl_surface.resize(
+                &self.gl_context,
+                new_size.width.try_into().unwrap(),
+                new_size.height.try_into().unwrap(),
+            );
+
+            unsafe {
+                self.gl
+                    .viewport(0, 0, new_size.width as i32, new_size.height as i32);
+            }
+        }
+    }
+
+    fn render_egui(&mut self, full_output: &egui::FullOutput, egui_ctx: &egui::Context) {
+        let clipped_primitives =
+            egui_ctx.tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
+
+        let dimensions = [
+            self.gl_surface.width().unwrap(),
+            self.gl_surface.height().unwrap(),
+        ];
+
+        unsafe {
+            self.gl.clear_color(0.1, 0.2, 0.3, 1.0);
+            self.gl.clear(glow::COLOR_BUFFER_BIT);
+        }
+
+        self.painter.paint_and_update_textures(
+            dimensions,
+            full_output.pixels_per_point,
+            &clipped_primitives,
+            &full_output.textures_delta,
+        );
+    }
+}
+
+impl Drop for GlowRenderer {
+    fn drop(&mut self) {
+        self.painter.destroy();
+    }
+}
