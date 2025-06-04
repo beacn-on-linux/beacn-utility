@@ -11,9 +11,6 @@ simplelog = "0.12.2"
 # Error Handling
 anyhow = "1.0.96"
 
-# Crossbeam to handle message channels
-crossbeam = "0.8.4"
-
 # Enum Helpers
 strum = "0.27.1"
 strum_macros = "0.27.1"

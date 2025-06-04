@@ -11,16 +11,18 @@ use anyhow::{Result, bail};
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, open_control_device};
 use beacn_lib::manager::{
-    DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_mic_hotplug_handler,
+    DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
 use egui::ahash::HashMap;
 use egui::{Color32, Context, ImageButton, ImageSource, Response, Ui, include_image, vec2};
 use log::{LevelFilter, debug, error};
 use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::sync::mpsc::TryRecvError;
 use std::sync::{mpsc};
 use std::thread;
+use beacn_lib::crossbeam;
+use beacn_lib::crossbeam::channel;
+use beacn_lib::crossbeam::channel::TryRecvError;
 use egui_winit::winit::event_loop::EventLoop;
 use crate::controller_pages;
 use crate::window_handle::{App, WindowRunner};
@@ -90,8 +92,8 @@ pub struct BeacnMicApp {
     control_devices: HashMap<DeviceLocation, ConfigConfiguration>,
     control_pages: Vec<Box<dyn ControllerPage>>,
 
-    hotplug_recv: mpsc::Receiver<HotPlugMessage>,
-    hotplug_send: mpsc::Sender<HotPlugThreadManagement>,
+    hotplug_recv: channel::Receiver<HotPlugMessage>,
+    hotplug_send: channel::Sender<HotPlugThreadManagement>,
 
     active_page: usize,
 }
@@ -99,11 +101,11 @@ pub struct BeacnMicApp {
 impl BeacnMicApp {
     pub fn new() -> Self {
         // We need to spawn up the hotplug handler to get mic hotplug info
-        let (plug_tx, plug_rx) = mpsc::channel();
-        let (manage_tx, manage_rx) = mpsc::channel();
-        let (proxy_tx, proxy_rx) = mpsc::channel();
+        let (plug_tx, plug_rx) = channel::unbounded();
+        let (manage_tx, manage_rx) = channel::unbounded();
+        let (proxy_tx, proxy_rx) = channel::unbounded();
 
-        spawn_mic_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
+        spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
 
         // We need to proxy messages between the hotplug handler and the main context, egui will
         // not redraw if the mouse isn't inside the window, so we need to grab the messages, forward
