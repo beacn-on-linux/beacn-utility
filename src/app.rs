@@ -1,3 +1,4 @@
+use std::any::Any;
 use crate::audio_pages::AudioPage;
 use crate::audio_pages::about::About;
 use crate::audio_pages::config::Configuration;
@@ -96,9 +97,7 @@ pub struct BeacnMicApp {
 }
 
 impl BeacnMicApp {
-    pub fn new(context: &Context) -> Self {
-        egui_extras::install_image_loaders(context);
-
+    pub fn new() -> Self {
         // We need to spawn up the hotplug handler to get mic hotplug info
         let (plug_tx, plug_rx) = mpsc::channel();
         let (manage_tx, manage_rx) = mpsc::channel();
@@ -109,13 +108,12 @@ impl BeacnMicApp {
         // We need to proxy messages between the hotplug handler and the main context, egui will
         // not redraw if the mouse isn't inside the window, so we need to grab the messages, forward
         // them, then force a redraw.
-        let context_inner = context.clone();
+        // TODO: We can no longer force a redraw from here, this will be moved later.
         thread::spawn(move || {
             loop {
                 match plug_rx.recv() {
                     Ok(m) => {
                         let _ = proxy_tx.send(m);
-                        context_inner.request_repaint();
 
                         if m == HotPlugMessage::ThreadStopped {
                             break;
@@ -125,7 +123,6 @@ impl BeacnMicApp {
                         // The message channel has been disconnected
                         error!("Error Received: {}", e);
                         let _ = proxy_tx.send(HotPlugMessage::ThreadStopped);
-                        context_inner.request_repaint();
                         break;
                     }
                 }
@@ -152,6 +149,12 @@ impl BeacnMicApp {
 
             active_page: 0,
         }
+    }
+}
+
+impl BeacnMicApp {
+    pub fn with_context(&self, ctx: &Context) {
+        egui_extras::install_image_loaders(ctx);
     }
 }
 
@@ -265,6 +268,10 @@ impl App for BeacnMicApp {
 
     fn on_exit(&mut self) {
         let _ = self.hotplug_send.send(HotPlugThreadManagement::Quit);
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

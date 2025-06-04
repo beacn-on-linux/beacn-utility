@@ -1,4 +1,4 @@
-use egui_winit::winit::dpi::LogicalSize;
+use anyhow::Result;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 use egui_winit::winit::{
     application::ApplicationHandler,
@@ -6,18 +6,21 @@ use egui_winit::winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
+use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
+use egui_winit::winit::window::WindowAttributes;
 use glutin::prelude::GlSurface;
 use winit::raw_window_handle::HasRawDisplayHandle;
 
 pub trait App {
     fn update(&mut self, ctx: &egui::Context);
     fn on_exit(&mut self);
+    fn as_any(&mut self) -> &mut dyn Any;
 }
 
 pub struct WindowRunner {
@@ -27,10 +30,7 @@ pub struct WindowRunner {
     app_start_time: Instant,
     context: egui::Context,
 
-    // TODO: Split these into context related struct
-    initial_size: LogicalSize<u32>,
-    minimum_size: LogicalSize<u32>,
-    title: String,
+    window_attributes: WindowAttributes,
 }
 
 struct GlowRenderer {
@@ -45,9 +45,7 @@ impl WindowRunner {
     pub fn new(
         app: Box<dyn App>,
         context: egui::Context,
-        initial_size: LogicalSize<u32>,
-        minimum_size: LogicalSize<u32>,
-        title: String,
+        attributes: WindowAttributes,
     ) -> Self {
         Self {
             app,
@@ -57,23 +55,17 @@ impl WindowRunner {
 
             context,
 
-            initial_size,
-            minimum_size,
-            title,
+            window_attributes: attributes,
         }
     }
 
-    pub fn get_egui_context() -> egui::Context {
-        egui::Context::default()
-    }
-
-    pub fn run(mut self, event_loop: &mut EventLoop<()>) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run(mut self, event_loop: &mut EventLoop<()>) -> Result<(Box<dyn App>, WindowAttributes)> {
         event_loop.set_control_flow(ControlFlow::Wait);
 
         // Use run_app_on_demand instead of run() so it can return when window closes
         event_loop.run_app_on_demand(&mut self)?;
 
-        Ok(())
+        Ok((self.app, self.window_attributes))
     }
 
     fn render_frame(&mut self) {
@@ -103,12 +95,8 @@ impl WindowRunner {
 impl ApplicationHandler for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let window_attributes = Window::default_attributes()
-                .with_title(&self.title)
-                .with_inner_size(self.initial_size)
-                .with_min_inner_size(self.minimum_size);
-
-            let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+            let attributes = self.window_attributes.clone();
+            let window = Arc::new(event_loop.create_window(attributes).unwrap());
             let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
 
             self.window = Some(window);
@@ -125,12 +113,15 @@ impl ApplicationHandler for WindowRunner {
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             let response = renderer.winit_state.on_window_event(window, &event);
 
-            // Request redraw if egui wants it OR if it's not a RedrawRequested event
+            // Request redraw if egui wants it AND we're not already a RedrawRequested event
             if response.repaint && !matches!(&event, WindowEvent::RedrawRequested) {
                 window.request_redraw();
             }
 
             match event {
+                WindowEvent::RedrawRequested => {
+                    self.render_frame();
+                }
                 WindowEvent::CloseRequested => {
                     // We need to close and destroy our window.
                     // First, tell the App we're on our way out.
@@ -143,13 +134,14 @@ impl ApplicationHandler for WindowRunner {
                     // Exit the event loop when window closes so run() can return
                     event_loop.exit();
                 }
-                WindowEvent::Resized(physical_size) => renderer.resize(physical_size),
+                WindowEvent::Resized(physical_size) => {
+                    self.window_attributes.inner_size = Some(physical_size.into());
+                    renderer.resize(physical_size)
+                },
+                WindowEvent::Moved(position) => {
+                    self.window_attributes.position = Some(position.into());
+                }
                 _ => {}
-            }
-
-            // Always handle RedrawRequested
-            if matches!(event, WindowEvent::RedrawRequested) {
-                self.render_frame();
             }
         }
     }
