@@ -1,15 +1,14 @@
-use crate::audio_pages::config_pages::compressor::CompressorPage;
-use crate::audio_pages::config_pages::equaliser::parametric_eq::ParametricEq;
-use crate::audio_pages::config_pages::expander::ExpanderPage;
-use crate::audio_pages::config_pages::headphones::HeadphonesPage;
-use crate::audio_pages::config_pages::mic_setup::MicSetupPage;
-use crate::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
-use crate::audio_pages::config_pages::ConfigPage;
-use crate::audio_pages::AudioPage;
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::audio_pages::config_pages::compressor::CompressorPage;
+use crate::ui::audio_pages::config_pages::equaliser::parametric_eq::ParametricEq;
+use crate::ui::audio_pages::config_pages::expander::ExpanderPage;
+use crate::ui::audio_pages::config_pages::headphones::HeadphonesPage;
+use crate::ui::audio_pages::config_pages::mic_setup::MicSetupPage;
+use crate::ui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
+use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::audio_pages::AudioPage;
+use crate::ui::states::audio_state::BeacnAudioState;
 use crate::widgets::draw_range;
 use beacn_lib::audio::messages::headphones::HPMicOutputGain;
-use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::types::HasRange;
 use egui::{vec2, Ui, Widget};
 
@@ -46,20 +45,20 @@ impl AudioPage for Configuration {
         false
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);
             ui.set_max_size(eq_size);
-            self.equaliser_new.ui(ui, mic, state);
+            self.equaliser_new.ui(ui, state);
         });
 
         ui.separator();
 
         ui.vertical(|ui| {
-            // 🧩 Bottom half
-            let total_available = ui.available_size(); // <- how much space is left
-            let fixed_panel_width = 100.0; // <- you can adjust this width
+            // Bottom half
+            let total_available = ui.available_size();
+            let fixed_panel_width = 100.0;
             let tab_area_width = total_available.x - fixed_panel_width;
 
             ui.horizontal(|ui| {
@@ -82,7 +81,7 @@ impl AudioPage for Configuration {
 
                         // Active tab content
                         if let Some(page) = self.tab_pages.get_mut(self.selected_tab) {
-                            page.ui(ui, mic, state);
+                            page.ui(ui, state);
                         }
                     });
                 });
@@ -90,7 +89,7 @@ impl AudioPage for Configuration {
                 ui.separator();
 
                 // Right: Fixed panel
-                ui.allocate_ui(egui::vec2(fixed_panel_width, total_available.y), |ui| {
+                ui.allocate_ui(vec2(fixed_panel_width, total_available.y), |ui| {
                     let gain = &mut state.headphones;
                     if draw_range(
                         ui,

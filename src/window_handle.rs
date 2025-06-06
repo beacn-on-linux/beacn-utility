@@ -13,13 +13,19 @@ use std::time::Instant;
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
+use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::window::WindowAttributes;
 use glutin::prelude::GlSurface;
 use winit::raw_window_handle::HasRawDisplayHandle;
 
+// These are events we can send into winit to trigger an update
+#[derive(Debug, Clone)]
+pub enum UserEvent {
+    RequestRedraw,
+}
+
 pub trait App {
     fn update(&mut self, ctx: &egui::Context);
-    fn on_exit(&mut self);
     fn as_any(&mut self) -> &mut dyn Any;
 }
 
@@ -29,6 +35,7 @@ pub struct WindowRunner {
     renderer: Option<GlowRenderer>,
     app_start_time: Instant,
     context: egui::Context,
+    event_loop_proxy: Option<EventLoopProxy<UserEvent>>,
 
     window_attributes: WindowAttributes,
 }
@@ -42,11 +49,7 @@ struct GlowRenderer {
 }
 
 impl WindowRunner {
-    pub fn new(
-        app: Box<dyn App>,
-        context: egui::Context,
-        attributes: WindowAttributes,
-    ) -> Self {
+    pub fn new(app: Box<dyn App>, context: egui::Context, attributes: WindowAttributes) -> Self {
         Self {
             app,
             window: None,
@@ -54,13 +57,26 @@ impl WindowRunner {
             app_start_time: Instant::now(),
 
             context,
+            event_loop_proxy: None,
 
             window_attributes: attributes,
         }
     }
 
-    pub fn run(mut self, event_loop: &mut EventLoop<()>) -> Result<(Box<dyn App>, WindowAttributes)> {
+    pub fn run(
+        mut self,
+        event_loop: &mut EventLoop<UserEvent>,
+    ) -> Result<(Box<dyn App>, WindowAttributes)> {
         event_loop.set_control_flow(ControlFlow::Wait);
+
+        // Create the event loop proxy
+        self.event_loop_proxy = Some(event_loop.create_proxy());
+
+        // Set a wakeup for a redraw
+        let proxy = self.event_loop_proxy.as_ref().unwrap().clone();
+        self.context.set_request_repaint_callback(move |_info| {
+            let _ = proxy.send_event(UserEvent::RequestRedraw);
+        });
 
         // Use run_app_on_demand instead of run() so it can return when window closes
         event_loop.run_app_on_demand(&mut self)?;
@@ -92,7 +108,7 @@ impl WindowRunner {
     }
 }
 
-impl ApplicationHandler for WindowRunner {
+impl ApplicationHandler<UserEvent> for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             let attributes = self.window_attributes.clone();
@@ -101,6 +117,16 @@ impl ApplicationHandler for WindowRunner {
 
             self.window = Some(window);
             self.renderer = Some(renderer);
+        }
+    }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::RequestRedraw => {
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+            }
         }
     }
 
@@ -123,10 +149,6 @@ impl ApplicationHandler for WindowRunner {
                     self.render_frame();
                 }
                 WindowEvent::CloseRequested => {
-                    // We need to close and destroy our window.
-                    // First, tell the App we're on our way out.
-                    self.app.on_exit();
-
                     // Clear variables
                     self.window = None;
                     self.renderer = None;
@@ -137,7 +159,7 @@ impl ApplicationHandler for WindowRunner {
                 WindowEvent::Resized(physical_size) => {
                     self.window_attributes.inner_size = Some(physical_size.into());
                     renderer.resize(physical_size)
-                },
+                }
                 WindowEvent::Moved(position) => {
                     self.window_attributes.position = Some(position.into());
                 }

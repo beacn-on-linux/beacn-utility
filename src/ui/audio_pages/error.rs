@@ -1,5 +1,5 @@
-use crate::audio_pages::AudioPage;
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::audio_pages::AudioPage;
+use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 
@@ -20,7 +20,7 @@ impl AudioPage for ErrorPage {
         true
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         ui.add_sized(
             [ui.available_width(), ui.available_height()],
             |ui: &mut Ui| {

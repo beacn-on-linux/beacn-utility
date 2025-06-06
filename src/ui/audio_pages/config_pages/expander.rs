@@ -1,5 +1,5 @@
-use crate::audio_pages::config_pages::ConfigPage;
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::states::audio_state::BeacnAudioState;
 use crate::widgets::{get_slider, toggle_button};
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
@@ -18,8 +18,8 @@ impl ConfigPage for ExpanderPage {
         "Expander"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
-        let expander = &mut state.expander;
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+        let mut expander = state.expander;
 
         // Extract out all the current values
         let values = &mut expander.values[expander.mode];
@@ -29,7 +29,7 @@ impl ConfigPage for ExpanderPage {
                 if ui.checkbox(&mut values.enabled, "Enabled").changed() {
                     for mode in ExpanderMode::iter() {
                         let message = Message::Expander(Expander::Enabled(mode, values.enabled));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                     }
                 }
 
@@ -41,12 +41,12 @@ impl ConfigPage for ExpanderPage {
 
                     if ui.add_sized([105., 20.], s).clicked() {
                         let message = Message::Expander(Expander::Mode(Simple));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                         expander.mode = Simple;
                     }
                     if ui.add_sized([105., 20.], a).clicked() {
                         let message = Message::Expander(Expander::Mode(Advanced));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                         expander.mode = Advanced;
                     }
                 });
@@ -57,7 +57,7 @@ impl ConfigPage for ExpanderPage {
                 if s.changed() {
                     let value = ExpanderThreshold(values.threshold as f32);
                     let message = Message::Expander(Expander::Threshold(expander.mode, value));
-                    mic.set_value(message).expect("Failed to Send Message");
+                    state.send_message(message).expect("Failed to Send Message");
                 }
 
                 ui.add_space(5.);
@@ -71,7 +71,7 @@ impl ConfigPage for ExpanderPage {
                         if s.changed() {
                             let value = ExpanderRatio(values.ratio);
                             let message = Message::Expander(Expander::Ratio(Simple, value));
-                            mic.set_value(message).expect("Failed to Send Message");
+                            state.send_message(message).expect("Failed to Send Message");
                         }
                     });
                 } else if expander.mode == Advanced {
@@ -79,7 +79,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = ExpanderRatio(values.ratio);
                         let message = Message::Expander(Expander::Ratio(Simple, value));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -88,7 +88,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.attack as f32);
                         let message = Message::Expander(Expander::Attack(Advanced, value));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -97,7 +97,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.release as f32);
                         let message = Message::Expander(Expander::Release(Advanced, value));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                     }
                 }
             });

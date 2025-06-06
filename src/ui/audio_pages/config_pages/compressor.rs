@@ -1,5 +1,5 @@
-use crate::audio_pages::config_pages::ConfigPage;
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::states::audio_state::BeacnAudioState;
 use crate::widgets::{draw_range, get_slider, toggle_button};
 use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
 use beacn_lib::audio::messages::compressor::{
@@ -18,8 +18,8 @@ impl ConfigPage for CompressorPage {
         "Compressor"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
-        let comp = &mut state.compressor;
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+        let mut comp = state.compressor;
 
         // Extract out all the current values
         let values = &mut comp.values[comp.mode];
@@ -32,7 +32,7 @@ impl ConfigPage for CompressorPage {
                         for mode in CompressorMode::iter() {
                             let msg =
                                 Message::Compressor(Compressor::Enabled(mode, values.enabled));
-                            let _ = mic.set_value(msg).expect("Failed to Send Message");
+                            let _ = state.send_message(msg);
                         }
                     }
 
@@ -44,12 +44,12 @@ impl ConfigPage for CompressorPage {
 
                         if ui.add_sized([105., 20.], s).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Simple));
-                            mic.set_value(msg).expect("Failed to Send Message");
+                            state.send_message(msg).expect("Failed to Send Message");
                             comp.mode = Simple;
                         }
                         if ui.add_sized([105., 20.], a).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Advanced));
-                            mic.set_value(msg).expect("Failed to Send Message");
+                            state.send_message(msg).expect("Failed to Send Message");
                             comp.mode = Advanced;
                         }
                     });
@@ -61,7 +61,7 @@ impl ConfigPage for CompressorPage {
                     if s.changed() {
                         let value = CompressorThreshold(values.threshold as f32);
                         let msg = Message::Compressor(Compressor::Threshold(comp.mode, value));
-                        mic.set_value(msg).expect("Failed to Send Message");
+                        state.send_message(msg).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -74,7 +74,7 @@ impl ConfigPage for CompressorPage {
                             if s.changed() {
                                 let ratio = CompressorRatio(values.ratio);
                                 let message = Message::Compressor(Compressor::Ratio(Simple, ratio));
-                                mic.set_value(message).expect("Failed to Send Message");
+                                state.send_message(message).expect("Failed to Send Message");
                             }
                         });
                     } else if comp.mode == Advanced {
@@ -82,7 +82,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let ratio = CompressorRatio(values.ratio);
                             let message = Message::Compressor(Compressor::Ratio(Advanced, ratio));
-                            mic.set_value(message).expect("Failed to Send Message");
+                            state.send_message(message).expect("Failed to Send Message");
                         }
 
                         ui.add_space(5.);
@@ -91,7 +91,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let attack = TimeFrame(values.attack as f32);
                             let message = Message::Compressor(Compressor::Attack(Advanced, attack));
-                            mic.set_value(message).expect("Failed to Send Message");
+                            state.send_message(message).expect("Failed to Send Message");
                         }
 
                         ui.add_space(5.);
@@ -101,16 +101,17 @@ impl ConfigPage for CompressorPage {
                             let release = TimeFrame(values.release as f32);
                             let message =
                                 Message::Compressor(Compressor::Release(Advanced, release));
-                            mic.set_value(message).expect("Failed to Send Message");
+                            state.send_message(message).expect("Failed to Send Message");
                         }
                     }
                 });
             });
+
             ui.add_space(20.);
             if draw_range(ui, &mut values.makeup, 0.0..=12.0, "Make-up Gain", "dB") {
                 let makeup = MakeUpGain(values.makeup);
                 let message = Message::Compressor(Compressor::MakeupGain(comp.mode, makeup));
-                mic.set_value(message).expect("Failed to Send Message");
+                state.send_message(message).expect("Failed to Send Message");
             }
         });
     }

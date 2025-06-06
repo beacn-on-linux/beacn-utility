@@ -1,5 +1,5 @@
-use crate::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
-use crate::states::audio_state::{BeacnAudioState, EqualiserBand};
+use crate::ui::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
+use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::widgets::draw_draggable;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
@@ -18,7 +18,7 @@ use log::warn;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
-use crate::app::SVG;
+use crate::ui::SVG;
 
 type Bands = EnumMap<EQBand, EqualiserBand>;
 
@@ -98,22 +98,14 @@ impl<'a> ParametricEq {
     }
 
     /// Shows the parametric equalizer in the UI
-    pub fn ui(
-        &mut self,
-        ui: &mut Ui,
-        mic: &Box<dyn BeacnAudioDevice>,
-        state: &mut BeacnAudioState,
-    ) -> Response {
+    pub fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) -> Response {
         let mode = state.equaliser.mode;
-        let bands = &mut state.equaliser.bands[state.equaliser.mode];
+        let mut bands = state.equaliser.bands[state.equaliser.mode];
 
         // Firstly, make sure there's at least one active band
         if bands.values().filter(|b| b.enabled).count() == 0 {
             warn!("No Active EQ Bands, Finding Band to Enable..");
-            if let Some(band) = bands
-                .values_mut()
-                .find(|t| t.band_type != EQBandType::NotSet)
-            {
+            if let Some(band) = bands.values_mut().find(|t| t.band_type != NotSet) {
                 band.enabled = true;
             } else {
                 warn!("All bands are disabled or not set, creating a default.");
@@ -146,14 +138,14 @@ impl<'a> ParametricEq {
                 ];
 
                 for message in messages {
-                    let _ = mic.set_value(message);
-                    state.set_value(message);
+                    let _ = state.send_message(message);
+                    state.set_local_value(message);
                 }
             }
         }
 
         // Reborrow the bands, we may have made changes.
-        let bands = &mut state.equaliser.bands[state.equaliser.mode];
+        let mut bands = state.equaliser.bands[state.equaliser.mode];
 
         // We'll do a quick check here to make sure our 'Active' band is actually enabled.
         if bands[self.active_band].enabled == false {
@@ -181,31 +173,31 @@ impl<'a> ParametricEq {
         }
 
         if ui.is_rect_visible(rect) {
-            self.draw_widget(ui, rect, bands);
+            self.draw_widget(ui, rect, &mut bands);
             if response.hovered() {
                 if let Some(pointer_pos) = response.hover_pos() {
                     let scroll = ui.ctx().input(|i| i.raw_scroll_delta).y;
                     if scroll != 0.0 {
                         let scroll_up = scroll > 0.0;
-                        self.handle_scroll(rect, pointer_pos, scroll_up, bands, mic);
+                        self.handle_scroll(rect, pointer_pos, scroll_up, &mut bands, state);
                     }
                 }
             }
 
             if response.clicked() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_click(rect, pointer_pos, bands, mic);
+                    self.handle_click(rect, pointer_pos, &mut bands);
                 }
             }
 
             if response.drag_started() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_drag_start(rect, pointer_pos, bands, mic);
+                    self.handle_drag_start(rect, pointer_pos, &mut bands);
                 }
             }
             if response.dragged() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_drag(rect, pointer_pos, bands, mic);
+                    self.handle_drag(rect, pointer_pos, &mut bands, state);
                 }
             }
             if response.drag_stopped() {
@@ -231,7 +223,7 @@ impl<'a> ParametricEq {
                             EQMode::Simple
                         };
                         state.equaliser.mode = new_mode;
-                        let _ = mic.set_value(Message::Equaliser(Equaliser::Mode(new_mode)));
+                        let _ = state.send_message(Message::Equaliser(Equaliser::Mode(new_mode)));
                     }
                 },
             );
@@ -269,7 +261,7 @@ impl<'a> ParametricEq {
                                 };
                                 if eq_mode(ui, icon, is_active, position).clicked() {
                                     let msg = Equaliser::Type(mode, active, band);
-                                    let _ = mic.set_value(Message::Equaliser(msg));
+                                    let _ = state.send_message(Message::Equaliser(msg));
 
                                     active_band.band_type = band;
                                     self.invalidate_band(active);
@@ -285,7 +277,7 @@ impl<'a> ParametricEq {
                 if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQFrequency(active_band.frequency as f32);
                     let msg = Equaliser::Frequency(mode, active, value);
-                    let _ = mic.set_value(Message::Equaliser(msg));
+                    let _ = state.send_message(Message::Equaliser(msg));
 
                     self.invalidate_band(active);
                 }
@@ -308,7 +300,7 @@ impl<'a> ParametricEq {
             {
                 let value = EQGain(active_band.gain);
                 let msg = Equaliser::Gain(mode, active, value);
-                let _ = mic.set_value(Message::Equaliser(msg));
+                let _ = state.send_message(Message::Equaliser(msg));
 
                 self.invalidate_band(active);
             }
@@ -321,7 +313,7 @@ impl<'a> ParametricEq {
                 if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQQ(active_band.q);
                     let msg = Equaliser::Q(mode, active, value);
-                    let _ = mic.set_value(Message::Equaliser(msg));
+                    let _ = state.send_message(Message::Equaliser(msg));
 
                     self.invalidate_band(active);
                 }
@@ -335,12 +327,12 @@ impl<'a> ParametricEq {
                             warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
                             let msg = Equaliser::Type(mode, band, BellBand);
-                            let _ = mic.set_value(Message::Equaliser(msg));
+                            let _ = state.send_message(Message::Equaliser(msg));
                             eq.band_type = BellBand;
                         }
 
                         let msg = Equaliser::Enabled(mode, band, true);
-                        let _ = mic.set_value(Message::Equaliser(msg));
+                        let _ = state.send_message(Message::Equaliser(msg));
 
                         eq.enabled = true;
                         self.invalidate_band(band)
@@ -351,7 +343,7 @@ impl<'a> ParametricEq {
                 let button = Button::new("-");
                 if ui.add_enabled(enabled, button).clicked() {
                     let msg = Equaliser::Enabled(mode, active, false);
-                    let _ = mic.set_value(Message::Equaliser(msg));
+                    let _ = state.send_message(Message::Equaliser(msg));
 
                     bands[active].enabled = false;
                     self.invalidate_band(active);
@@ -756,25 +748,13 @@ impl<'a> ParametricEq {
         closest_band
     }
 
-    fn handle_click(
-        &mut self,
-        rect: Rect,
-        pointer: Pos2,
-        bands: &Bands,
-        mic: &Box<dyn BeacnAudioDevice>,
-    ) {
+    fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
         if let Some(index) = self.get_point_near_cursor(rect, pointer, bands) {
             self.active_band = index;
         }
     }
 
-    fn handle_drag_start(
-        &mut self,
-        rect: Rect,
-        pointer: Pos2,
-        bands: &Bands,
-        mic: &Box<dyn BeacnAudioDevice>,
-    ) {
+    fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
         let active = self.get_point_near_cursor(rect, pointer, bands);
         if let Some(active) = active {
             self.active_band = active;
@@ -788,7 +768,7 @@ impl<'a> ParametricEq {
         rect: Rect,
         pointer_pos: Pos2,
         bands: &mut Bands,
-        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut BeacnAudioState,
     ) {
         // We don't have an active item, so there's nothing to do
         if self.active_band_drag.is_none() {
@@ -806,7 +786,7 @@ impl<'a> ParametricEq {
 
             let value = EQFrequency(band.frequency as f32);
             let msg = Equaliser::Frequency(self.eq_mode, active, value);
-            let _ = mic.set_value(Message::Equaliser(msg));
+            let _ = state.send_message(Message::Equaliser(msg));
         }
 
         // If this band supports gain, update it.
@@ -816,7 +796,7 @@ impl<'a> ParametricEq {
 
             let value = EQGain(band.gain);
             let msg = Equaliser::Gain(self.eq_mode, active, value);
-            let _ = mic.set_value(Message::Equaliser(msg));
+            let _ = state.send_message(Message::Equaliser(msg));
         }
 
         // Clear out the caches for this band as it needs a redraw
@@ -833,7 +813,7 @@ impl<'a> ParametricEq {
         pointer_position: Pos2,
         scroll_up: bool,
         bands: &mut Bands,
-        mic: &Box<dyn BeacnAudioDevice>,
+        state: &mut BeacnAudioState,
     ) {
         if self.eq_mode == EQMode::Simple {
             // Can't adjust the Q in simple mode
@@ -850,7 +830,7 @@ impl<'a> ParametricEq {
             bands[self.active_band].q = rounded;
 
             let msg = Equaliser::Q(self.eq_mode, band, EQQ(rounded));
-            let _ = mic.set_value(Message::Equaliser(msg));
+            let _ = state.send_message(Message::Equaliser(msg));
 
             // Invalidate existing renders for this band
             self.invalidate_band(band);

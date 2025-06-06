@@ -5,11 +5,11 @@ pub(crate) mod headphones;
 pub(crate) mod mic_setup;
 pub(crate) mod suppressor;
 
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 
 pub trait ConfigPage {
     fn title(&self) -> &'static str;
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState);
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
 }

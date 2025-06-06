@@ -1,5 +1,5 @@
-use crate::audio_pages::config_pages::ConfigPage;
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::states::audio_state::BeacnAudioState;
 use crate::widgets::{get_slider, toggle_button};
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
@@ -17,15 +17,15 @@ impl ConfigPage for NoiseSuppressionPage {
         "Noise Suppression"
     }
 
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         let spacing = 5.0;
 
-        let ns = &mut state.suppressor;
+        let mut ns = state.suppressor;
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 if ui.checkbox(&mut ns.enabled, "Enabled").changed() {
                     let message = Message::Suppressor(Suppressor::Enabled(ns.enabled));
-                    mic.set_value(message).expect("Failed to Send Message");
+                    state.send_message(message).expect("Failed to Send Message");
                 }
 
                 ui.add_space(spacing);
@@ -36,12 +36,12 @@ impl ConfigPage for NoiseSuppressionPage {
                     let s = toggle_button(ui, ns.style == Snapshot, "Snapshot");
                     if ui.add_sized(size, a).clicked() {
                         let message = Message::Suppressor(Suppressor::Style(Adaptive));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                         ns.style = Adaptive;
                     }
                     if ui.add_sized(size, s).clicked() {
                         let message = Message::Suppressor(Suppressor::Style(Snapshot));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                         ns.style = Snapshot;
                     }
                 });
@@ -52,7 +52,7 @@ impl ConfigPage for NoiseSuppressionPage {
                 if s.changed() {
                     let value = Percent(ns.amount as f32);
                     let message = Message::Suppressor(Suppressor::Amount(value));
-                    mic.set_value(message).expect("Failed to Send Message");
+                    state.send_message(message).expect("Failed to Send Message");
                 }
 
                 ui.add_space(spacing);
@@ -63,7 +63,7 @@ impl ConfigPage for NoiseSuppressionPage {
                         let value = -120.0 + (60.0 * (ns.sense as f32 / 100.0));
                         let value = SuppressorSensitivity(value);
                         let message = Message::Suppressor(Suppressor::Sensitivity(value));
-                        mic.set_value(message).expect("Failed to Send Message");
+                        state.send_message(message).expect("Failed to Send Message");
                     }
                 } else if ns.style == Snapshot {
                     ui.add_space(15.);

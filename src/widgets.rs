@@ -1,8 +1,32 @@
 use crate::numbers::NumericType;
 use egui::emath::Numeric;
-use egui::{Align, DragValue, Layout, Response, RichText, Slider, Ui, Visuals};
+use egui::{vec2, Align, Color32, DragValue, ImageButton, Layout, Response, RichText, Slider, Ui, Visuals};
 use std::fmt::Debug;
 use std::ops::RangeInclusive;
+use crate::ui::SVG;
+
+pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
+    let tint_colour = if active {
+        Color32::WHITE
+    } else {
+        Color32::from_rgb(120, 120, 120)
+    };
+
+    // We might need to do caching here..
+    let image = SVG.get(img).unwrap().clone();
+
+    ui.scope(|ui| {
+        ui.style_mut().spacing.button_padding = vec2(10.0, 10.0);
+        ui.add_sized(
+            [40.0, 40.0],
+            ImageButton::new(image)
+                .corner_radius(5.0)
+                .tint(tint_colour)
+                .selected(active),
+        )
+    })
+        .inner
+}
 
 pub fn draw_range<T>(
     ui: &mut Ui,

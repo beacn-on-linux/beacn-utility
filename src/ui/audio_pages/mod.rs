@@ -1,4 +1,4 @@
-use crate::states::audio_state::BeacnAudioState;
+use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 
@@ -12,5 +12,5 @@ mod config_pages;
 pub trait AudioPage {
     fn icon(&self) -> &'static str;
     fn show_on_error(&self) -> bool;
-    fn ui(&mut self, ui: &mut Ui, mic: &Box<dyn BeacnAudioDevice>, state: &mut BeacnAudioState);
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
 }

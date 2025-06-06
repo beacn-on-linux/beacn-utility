@@ -1,4 +1,5 @@
-use beacn_lib::audio::BeacnAudioDevice;
+use anyhow::{Result, bail};
+
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
@@ -15,6 +16,7 @@ use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 use std::panic;
 
+use crate::device_manager::{AudioMessage, DeviceDefinition};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -27,13 +29,16 @@ use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
 use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
+use beacn_lib::crossbeam::channel::Sender;
+use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 
 type Rgb = [u8; 3];
 
 #[derive(Debug, Default, Clone)]
 pub struct BeacnAudioState {
-    pub device_type: DeviceType,
+    pub device_definition: DeviceDefinition,
     pub device_state: DeviceState,
+    pub device_sender: Option<Sender<AudioMessage>>,
 
     pub headphones: Headphones,
     pub lighting: Lighting,
@@ -47,26 +52,6 @@ pub struct BeacnAudioState {
     pub suppressor: Suppressor,
     pub mic_setup: MicSetup,
     pub subwoofer: Subwoofer,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct DeviceState {
-    pub state: LoadState,
-    pub errors: Vec<ErrorMessage>,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct ErrorMessage {
-    pub error_text: Option<String>,
-    pub failed_message: Option<Message>,
-}
-
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub enum LoadState {
-    #[default]
-    LOADING,
-    RUNNING,
-    ERROR,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -196,17 +181,55 @@ pub struct Subwoofer {
 }
 
 impl BeacnAudioState {
-    pub fn load_settings(mic: &Box<dyn BeacnAudioDevice>, device_type: DeviceType) -> Self {
+    pub fn get_message(&self, message: Message) -> Result<Message> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Get(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                rx.recv()?
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
+    pub fn send_message(&mut self, message: Message) -> Result<Message> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Set(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                // Quickly intercept the message, and set our local value
+                if let Ok(message) = message {
+                    self.set_local_value(message);
+                }
+                message
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
+    pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
+        let device_type = definition.device_type;
+
         let mut state = Self::default();
-        state.device_type = device_type;
+        state.device_definition = definition;
+        state.device_sender = Some(sender);
+        state.device_state.state = LoadState::LOADING;
 
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
-            let value = panic::catch_unwind(|| mic.fetch_value(message));
+            let value = state.get_message(message);
             match value {
-                Ok(Ok(value)) => state.set_value(value),
-                Ok(Err(value)) => {
+                Ok(value) => state.set_local_value(value),
+                Err(value) => {
                     // fetch_value didn't panic, but it did error
                     state.device_state.state = LoadState::ERROR;
                     state.device_state.errors.push(ErrorMessage {
@@ -214,20 +237,14 @@ impl BeacnAudioState {
                         failed_message: Some(message),
                     })
                 }
-                Err(panic) => {
-                    // fetch_value panicked
-                    state.device_state.state = LoadState::ERROR;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: panic.downcast_ref::<String>().cloned(),
-                        failed_message: Some(message),
-                    });
-                }
             }
         }
+        state.device_state.state = LoadState::RUNNING;
+
         state
     }
 
-    pub(crate) fn set_value(&mut self, value: Message) {
+    pub(crate) fn set_local_value(&mut self, value: Message) {
         match value {
             Message::BassEnhancement(b) => match b {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
