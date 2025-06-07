@@ -98,20 +98,20 @@ impl LightingPage {
         if ui.selectable_label(solid, "Solid Colour").clicked() {
             state.mic_mode = Solid;
             let message = Message::Lighting(Lighting::Mode(Solid));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         };
         ui.add_space(10.0);
         if ui.selectable_label(gradient, "Gradient").clicked() {
             state.mic_mode = Gradient;
             let message = Message::Lighting(Lighting::Mode(Gradient));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         };
         ui.add_space(10.0);
         if ui.selectable_label(reactive, "Reactive Meter").clicked() {
             // Only change this if we're not already set to a reactive mode.
             if !reactive {
                 let message = Message::Lighting(Lighting::Mode(ReactiveRing));
-                let _ = config.send_message(message);
+                let _ = config.handle_message(message);
                 state.mic_mode = ReactiveRing;
             }
         };
@@ -121,13 +121,13 @@ impl LightingPage {
             if !sparkle {
                 state.mic_mode = SparkleMeter;
                 let message = Message::Lighting(Lighting::Mode(SparkleMeter));
-                let _ = config.send_message(message);
+                let _ = config.handle_message(message);
             }
         };
         ui.add_space(10.0);
         if ui.selectable_label(spectrum, "Spectrum Cycle").clicked() {
             let message = Message::Lighting(Lighting::Mode(Spectrum));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
             state.mic_mode = Spectrum;
         };
     }
@@ -198,21 +198,21 @@ impl LightingPage {
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
                 if ui
                     .radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up")
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
                 if ui
                     .radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down")
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
             });
             ui.add_space(4.);
@@ -240,14 +240,14 @@ impl LightingPage {
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
                 if ui
                     .radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter")
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
             });
             ui.add_space(4.);
@@ -289,7 +289,7 @@ impl LightingPage {
                 alpha: 0,
             };
             let message = Message::Lighting(Lighting::Colour1(message));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         }
         ui.add_space(4.);
     }
@@ -309,7 +309,7 @@ impl LightingPage {
                 alpha: 0,
             };
             let message = Message::Lighting(Lighting::Colour2(message));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         }
         ui.add_space(4.);
     }
@@ -318,7 +318,7 @@ impl LightingPage {
         ui.label("Speed and Direction");
         if ui.add(egui::Slider::new(speed, -10..=10)).changed() {
             let message = Message::Lighting(Lighting::Speed(LightingSpeed(*speed)));
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         };
         ui.add_space(4.);
     }
@@ -333,7 +333,7 @@ impl LightingPage {
         if ui.add(egui::Slider::new(sensitivity, 0.0..=10.0)).changed() {
             let value = Lighting::MeterSensitivity(LightingMeterSensitivty(*sensitivity));
             let message = Message::Lighting(value);
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         }
         ui.add_space(4.);
     }
@@ -357,14 +357,14 @@ impl LightingPage {
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::MeterSource(*source));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
                 if ui
                     .selectable_value(source, LightingMeterSource::Headphones, "Headphones")
                     .changed()
                 {
                     let message = Message::Lighting(Lighting::MeterSource(*source));
-                    let _ = config.send_message(message);
+                    let _ = config.handle_message(message);
                 }
             });
         ui.add_space(4.);
@@ -380,7 +380,7 @@ impl LightingPage {
         if ui.add(egui::Slider::new(brightness, 0..=100)).changed() {
             let value = Lighting::Brightness(LightingBrightness(*brightness));
             let message = Message::Lighting(value);
-            let _ = config.send_message(message);
+            let _ = config.handle_message(message);
         }
         ui.add_space(4.)
     }

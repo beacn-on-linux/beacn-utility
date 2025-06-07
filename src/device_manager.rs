@@ -159,8 +159,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             DeviceMap::Audio(dev, _, rx) => {
                                 if let Ok(msg) = operation.recv(rx) {
                                     match msg {
-                                        AudioMessage::Get(msg, resp) => {
-                                            let response = catch_unwind(|| dev.fetch_value(msg));
+                                        AudioMessage::Handle(msg, resp) => {
+                                            let response = catch_unwind(|| dev.handle_message(msg));
                                             if let Err(panic) = response {
                                                 // Downcast this to a standard error
                                                 let error = panic
@@ -172,10 +172,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                                 // Send back the original response
                                                 let _ = resp.send(response.unwrap());
                                             }
-                                        }
-                                        AudioMessage::Set(msg, resp) => {
-                                            let response = dev.set_value(msg);
-                                            let _ = resp.send(response);
                                         }
                                     }
                                 }
@@ -222,8 +218,7 @@ pub enum DeviceArriveMessage {
 }
 
 pub enum AudioMessage {
-    Get(Message, oneshot::Sender<Result<Message>>),
-    Set(Message, oneshot::Sender<Result<Message>>),
+    Handle(Message, oneshot::Sender<Result<Message>>),
 }
 
 pub enum ControlMessage {}

@@ -38,7 +38,7 @@ impl ConfigPage for HeadphonesPage {
                     }
                     _ => panic!("This shouldn't happen."),
                 };
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
                 debug!("Mic Monitor Change: {:?}", hp.mic_monitor);
             }
             if ui.checkbox(&mut hp.linked, "").changed() {
@@ -51,12 +51,12 @@ impl ConfigPage for HeadphonesPage {
                     }
                     _ => panic!("This shouldn't happen"),
                 };
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
             if draw_range(ui, &mut hp.level, -70.0..=0.0, "Headphones", "dB") {
                 debug!("HP Level Change: {:?}", hp.level);
                 let message = Message::Headphones(Headphones::HeadphoneLevel(HPLevel(hp.level)));
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
 
             ui.add_space(spacing);
@@ -73,7 +73,7 @@ impl ConfigPage for HeadphonesPage {
                     Message::Subwoofer(Subwoofer::Enabled(hp.fx_enabled)),
                 ];
                 for message in messages {
-                    state.send_message(message).expect("Failed to Send Message");
+                    state.handle_message(message).expect("Failed to Send Message");
                 }
             };
 
@@ -81,17 +81,17 @@ impl ConfigPage for HeadphonesPage {
             if draw_range(ui, &mut eq.eq[Bass].amount, -12.0..=12.0, "Bass", "") {
                 let value = HPEQValue(eq.eq[Bass].amount);
                 let message = Message::HeadphoneEQ(HeadphoneEQ::Amount(Bass, value));
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
             if draw_range(ui, &mut eq.eq[Mids].amount, -12.0..=12.0, "Mids", "") {
                 let value = HPEQValue(eq.eq[Mids].amount);
                 let message = Message::HeadphoneEQ(HeadphoneEQ::Amount(Mids, value));
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
             if draw_range(ui, &mut eq.eq[Treble].amount, -12.0..=12.0, "Treble", "") {
                 let value = HPEQValue(eq.eq[Treble].amount);
                 let message = Message::HeadphoneEQ(HeadphoneEQ::Amount(Treble, value));
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
 
             let sub = &mut state.subwoofer;
@@ -99,7 +99,7 @@ impl ConfigPage for HeadphonesPage {
                 // Fetch the messages needed for this change
                 let messages = Subwoofer::get_amount_messages(sub.amount);
                 for message in messages {
-                    state.send_message(message).expect("Failed to Send Message");
+                    state.handle_message(message).expect("Failed to Send Message");
                 }
             }
 
@@ -122,7 +122,7 @@ impl ConfigPage for HeadphonesPage {
 
                 if hp.headphone_type != previous {
                     let message = Message::Headphones(Headphones::HeadphoneType(hp.headphone_type));
-                    state.send_message(message).expect("Failed to Send Message");
+                    state.handle_message(message).expect("Failed to Send Message");
                 }
             })
         });

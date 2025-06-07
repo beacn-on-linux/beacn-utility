@@ -29,7 +29,7 @@ impl ConfigPage for ExpanderPage {
                 if ui.checkbox(&mut values.enabled, "Enabled").changed() {
                     for mode in ExpanderMode::iter() {
                         let message = Message::Expander(Expander::Enabled(mode, values.enabled));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                     }
                 }
 
@@ -41,12 +41,12 @@ impl ConfigPage for ExpanderPage {
 
                     if ui.add_sized([105., 20.], s).clicked() {
                         let message = Message::Expander(Expander::Mode(Simple));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                         expander.mode = Simple;
                     }
                     if ui.add_sized([105., 20.], a).clicked() {
                         let message = Message::Expander(Expander::Mode(Advanced));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                         expander.mode = Advanced;
                     }
                 });
@@ -57,7 +57,7 @@ impl ConfigPage for ExpanderPage {
                 if s.changed() {
                     let value = ExpanderThreshold(values.threshold as f32);
                     let message = Message::Expander(Expander::Threshold(expander.mode, value));
-                    state.send_message(message).expect("Failed to Send Message");
+                    state.handle_message(message).expect("Failed to Send Message");
                 }
 
                 ui.add_space(5.);
@@ -71,7 +71,7 @@ impl ConfigPage for ExpanderPage {
                         if s.changed() {
                             let value = ExpanderRatio(values.ratio);
                             let message = Message::Expander(Expander::Ratio(Simple, value));
-                            state.send_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed to Send Message");
                         }
                     });
                 } else if expander.mode == Advanced {
@@ -79,7 +79,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = ExpanderRatio(values.ratio);
                         let message = Message::Expander(Expander::Ratio(Simple, value));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -88,7 +88,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.attack as f32);
                         let message = Message::Expander(Expander::Attack(Advanced, value));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -97,7 +97,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.release as f32);
                         let message = Message::Expander(Expander::Release(Advanced, value));
-                        state.send_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed to Send Message");
                     }
                 }
             });

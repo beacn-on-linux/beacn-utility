@@ -32,7 +32,7 @@ impl ConfigPage for CompressorPage {
                         for mode in CompressorMode::iter() {
                             let msg =
                                 Message::Compressor(Compressor::Enabled(mode, values.enabled));
-                            let _ = state.send_message(msg);
+                            let _ = state.handle_message(msg);
                         }
                     }
 
@@ -44,12 +44,12 @@ impl ConfigPage for CompressorPage {
 
                         if ui.add_sized([105., 20.], s).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Simple));
-                            state.send_message(msg).expect("Failed to Send Message");
+                            state.handle_message(msg).expect("Failed to Send Message");
                             comp.mode = Simple;
                         }
                         if ui.add_sized([105., 20.], a).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Advanced));
-                            state.send_message(msg).expect("Failed to Send Message");
+                            state.handle_message(msg).expect("Failed to Send Message");
                             comp.mode = Advanced;
                         }
                     });
@@ -61,7 +61,7 @@ impl ConfigPage for CompressorPage {
                     if s.changed() {
                         let value = CompressorThreshold(values.threshold as f32);
                         let msg = Message::Compressor(Compressor::Threshold(comp.mode, value));
-                        state.send_message(msg).expect("Failed to Send Message");
+                        state.handle_message(msg).expect("Failed to Send Message");
                     }
 
                     ui.add_space(5.);
@@ -74,7 +74,7 @@ impl ConfigPage for CompressorPage {
                             if s.changed() {
                                 let ratio = CompressorRatio(values.ratio);
                                 let message = Message::Compressor(Compressor::Ratio(Simple, ratio));
-                                state.send_message(message).expect("Failed to Send Message");
+                                state.handle_message(message).expect("Failed to Send Message");
                             }
                         });
                     } else if comp.mode == Advanced {
@@ -82,7 +82,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let ratio = CompressorRatio(values.ratio);
                             let message = Message::Compressor(Compressor::Ratio(Advanced, ratio));
-                            state.send_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed to Send Message");
                         }
 
                         ui.add_space(5.);
@@ -91,7 +91,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let attack = TimeFrame(values.attack as f32);
                             let message = Message::Compressor(Compressor::Attack(Advanced, attack));
-                            state.send_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed to Send Message");
                         }
 
                         ui.add_space(5.);
@@ -101,7 +101,7 @@ impl ConfigPage for CompressorPage {
                             let release = TimeFrame(values.release as f32);
                             let message =
                                 Message::Compressor(Compressor::Release(Advanced, release));
-                            state.send_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed to Send Message");
                         }
                     }
                 });
@@ -111,7 +111,7 @@ impl ConfigPage for CompressorPage {
             if draw_range(ui, &mut values.makeup, 0.0..=12.0, "Make-up Gain", "dB") {
                 let makeup = MakeUpGain(values.makeup);
                 let message = Message::Compressor(Compressor::MakeupGain(comp.mode, makeup));
-                state.send_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed to Send Message");
             }
         });
     }

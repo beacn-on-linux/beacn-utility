@@ -74,7 +74,7 @@ impl AudioPage for About {
                 let message = Message::Headphones(Headphones::StudioDriverless(
                     state.headphones.studio_driverless,
                 ));
-                state.send_message(message).expect("Failed!");
+                state.handle_message(message).expect("Failed!");
             }
         }
     }

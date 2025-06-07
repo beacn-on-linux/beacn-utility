@@ -181,23 +181,9 @@ pub struct Subwoofer {
 }
 
 impl BeacnAudioState {
-    pub fn get_message(&self, message: Message) -> Result<Message> {
+    pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Get(message, tx);
-
-        match &self.device_sender {
-            Some(sender) => {
-                // Send the message, return the response (or fail).
-                sender.send(message)?;
-                rx.recv()?
-            }
-            None => bail!("Device Sender not Ready"),
-        }
-    }
-
-    pub fn send_message(&mut self, message: Message) -> Result<Message> {
-        let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Set(message, tx);
+        let message = AudioMessage::Handle(message, tx);
 
         match &self.device_sender {
             Some(sender) => {
@@ -226,7 +212,7 @@ impl BeacnAudioState {
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
-            let value = state.get_message(message);
+            let value = state.handle_message(message);
             match value {
                 Ok(value) => state.set_local_value(value),
                 Err(value) => {

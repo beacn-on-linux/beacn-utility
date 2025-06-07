@@ -138,7 +138,7 @@ impl<'a> ParametricEq {
                 ];
 
                 for message in messages {
-                    let _ = state.send_message(message);
+                    let _ = state.handle_message(message);
                     state.set_local_value(message);
                 }
             }
@@ -223,7 +223,7 @@ impl<'a> ParametricEq {
                             EQMode::Simple
                         };
                         state.equaliser.mode = new_mode;
-                        let _ = state.send_message(Message::Equaliser(Equaliser::Mode(new_mode)));
+                        let _ = state.handle_message(Message::Equaliser(Equaliser::Mode(new_mode)));
                     }
                 },
             );
@@ -261,7 +261,7 @@ impl<'a> ParametricEq {
                                 };
                                 if eq_mode(ui, icon, is_active, position).clicked() {
                                     let msg = Equaliser::Type(mode, active, band);
-                                    let _ = state.send_message(Message::Equaliser(msg));
+                                    let _ = state.handle_message(Message::Equaliser(msg));
 
                                     active_band.band_type = band;
                                     self.invalidate_band(active);
@@ -277,7 +277,7 @@ impl<'a> ParametricEq {
                 if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQFrequency(active_band.frequency as f32);
                     let msg = Equaliser::Frequency(mode, active, value);
-                    let _ = state.send_message(Message::Equaliser(msg));
+                    let _ = state.handle_message(Message::Equaliser(msg));
 
                     self.invalidate_band(active);
                 }
@@ -300,7 +300,7 @@ impl<'a> ParametricEq {
             {
                 let value = EQGain(active_band.gain);
                 let msg = Equaliser::Gain(mode, active, value);
-                let _ = state.send_message(Message::Equaliser(msg));
+                let _ = state.handle_message(Message::Equaliser(msg));
 
                 self.invalidate_band(active);
             }
@@ -313,7 +313,7 @@ impl<'a> ParametricEq {
                 if ui.add_sized([75.0, 20.0], drag).changed() {
                     let value = EQQ(active_band.q);
                     let msg = Equaliser::Q(mode, active, value);
-                    let _ = state.send_message(Message::Equaliser(msg));
+                    let _ = state.handle_message(Message::Equaliser(msg));
 
                     self.invalidate_band(active);
                 }
@@ -327,12 +327,12 @@ impl<'a> ParametricEq {
                             warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
                             let msg = Equaliser::Type(mode, band, BellBand);
-                            let _ = state.send_message(Message::Equaliser(msg));
+                            let _ = state.handle_message(Message::Equaliser(msg));
                             eq.band_type = BellBand;
                         }
 
                         let msg = Equaliser::Enabled(mode, band, true);
-                        let _ = state.send_message(Message::Equaliser(msg));
+                        let _ = state.handle_message(Message::Equaliser(msg));
 
                         eq.enabled = true;
                         self.invalidate_band(band)
@@ -343,7 +343,7 @@ impl<'a> ParametricEq {
                 let button = Button::new("-");
                 if ui.add_enabled(enabled, button).clicked() {
                     let msg = Equaliser::Enabled(mode, active, false);
-                    let _ = state.send_message(Message::Equaliser(msg));
+                    let _ = state.handle_message(Message::Equaliser(msg));
 
                     bands[active].enabled = false;
                     self.invalidate_band(active);
@@ -786,7 +786,7 @@ impl<'a> ParametricEq {
 
             let value = EQFrequency(band.frequency as f32);
             let msg = Equaliser::Frequency(self.eq_mode, active, value);
-            let _ = state.send_message(Message::Equaliser(msg));
+            let _ = state.handle_message(Message::Equaliser(msg));
         }
 
         // If this band supports gain, update it.
@@ -796,7 +796,7 @@ impl<'a> ParametricEq {
 
             let value = EQGain(band.gain);
             let msg = Equaliser::Gain(self.eq_mode, active, value);
-            let _ = state.send_message(Message::Equaliser(msg));
+            let _ = state.handle_message(Message::Equaliser(msg));
         }
 
         // Clear out the caches for this band as it needs a redraw
@@ -830,7 +830,7 @@ impl<'a> ParametricEq {
             bands[self.active_band].q = rounded;
 
             let msg = Equaliser::Q(self.eq_mode, band, EQQ(rounded));
-            let _ = state.send_message(Message::Equaliser(msg));
+            let _ = state.handle_message(Message::Equaliser(msg));
 
             // Invalidate existing renders for this band
             self.invalidate_band(band);
