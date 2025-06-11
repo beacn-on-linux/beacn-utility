@@ -11,6 +11,7 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::ManagerMessages;
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
@@ -26,6 +27,7 @@ use beacn_lib::version::VersionNumber;
 use std::collections::HashMap;
 use std::panic;
 use std::panic::catch_unwind;
+use log::debug;
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
@@ -192,6 +194,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     if manage_tx.is_ready() {
         let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     }
+
+    debug!("Device Manager Stopped");
 }
 
 enum DeviceMap {
@@ -234,9 +238,4 @@ pub struct DeviceDefinition {
 pub struct DeviceInfo {
     pub serial: String,
     pub version: VersionNumber,
-}
-
-pub enum ManagerMessages {
-    SetContext(Option<egui::Context>),
-    Quit,
 }

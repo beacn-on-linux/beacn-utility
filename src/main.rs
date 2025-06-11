@@ -1,20 +1,27 @@
-use std::thread;
+use crate::device_manager::spawn_device_manager;
+use crate::tray::handle_tray;
 use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner};
 use anyhow::bail;
+use beacn_lib::crossbeam::{channel, select};
+use egui::Context;
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
 use egui_winit::winit::window::{Window, WindowAttributes};
-use log::LevelFilter;
+use log::{LevelFilter, debug, error, warn};
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use beacn_lib::crossbeam::channel;
-use crate::device_manager::{spawn_device_manager, ManagerMessages};
+use std::thread;
 
+mod device_manager;
 mod numbers;
+mod tray;
+mod ui;
 mod widgets;
 mod window_handle;
-mod device_manager;
-mod ui;
+
+const APP_NAME: &str = "beacn-mic-ui";
+const APP_TITLE: &str = "Beacn Utility";
+const ICON: &[u8] = include_bytes!("../resources/com.github.beacn-on-linux.svg");
 
 fn main() -> anyhow::Result<()> {
     CombinedLogger::init(vec![TermLogger::new(
@@ -24,25 +31,37 @@ fn main() -> anyhow::Result<()> {
         ColorChoice::Auto,
     )])?;
 
+    let spawn_tray = false;
+
+    // Firstly, create a message bus which allows threads to message back to here
+    let (main_tx, main_rx) = channel::unbounded();
+
+    // Ok, spawn up the Tray Handler
+    let (tray_tx, tray_rx) = channel::unbounded();
+    let tray_main_tx = main_tx.clone();
+    let tray = match spawn_tray {
+        true => Some(thread::spawn(|| handle_tray(tray_rx, tray_main_tx))),
+        false => None,
+    };
+
     // Ok, we need to spawn up the device manager, first lets create some channels
     // The first channel is for us to be able to tell the manager to shut down, or reconfigure
     let (manage_tx, manage_rx) = channel::unbounded();
 
     // This one sends and receives messages when devices are attached and removed
     let (device_tx, device_rx) = channel::unbounded();
-
-    thread::spawn(|| spawn_device_manager(manage_rx, device_tx));
+    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, device_tx));
 
     // Create the event loop, an egui context, and the initial app state
     let mut event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
-    let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx));
+    let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx.clone()));
 
     let mut window_attributes = Window::default_attributes()
-        .with_title("Beacn App")
+        .with_title(APP_TITLE)
         .with_inner_size(LogicalSize::new(1024, 500))
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
-    loop {
+    'mainloop: loop {
         // Spawn up a new egui context
         let context = egui::Context::default();
 
@@ -51,12 +70,17 @@ fn main() -> anyhow::Result<()> {
             // Attach the new context to the app
             app.with_context(&context);
         }
+
+        // Send the new context off to our threads, this needs to be done because this thread
+        // will be locked into the Window event loop, so if an update or behaviour change needs
+        // to be triggered, the threads will have to call it themselves.
         let _ = manage_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+        let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
 
         // Create a window runner
         let runner = WindowRunner::new(app, context, window_attributes.clone());
 
-        // Run the event loop, this will return when the window is closed.
+        // Run the event loop, this will block until the Window is closed
         match runner.run(&mut event_loop) {
             // The window runner will return the app (and window attributes) to us, so we can
             // store them, and use them the next time the window needs to be open.
@@ -66,11 +90,78 @@ fn main() -> anyhow::Result<()> {
             }
             Err(e) => bail!("Error: {}", e),
         }
-        //sleep(Duration::from_secs(5));
+
+        // Clear the Context from our threads
+        let _ = manage_tx.send(ManagerMessages::SetContext(None));
+        let _ = tray_tx.send(ManagerMessages::SetContext(None));
+
+        // Break for now, code is ready but not complete
         break;
+
+        #[allow(unreachable_code)]
+        // Wait for a message to do stuff
+        debug!("Window Closed, awaiting new Messages");
+        loop {
+            select! {
+                recv(main_rx) -> msg => {
+                    match msg {
+                        Ok(msg) => {
+                            match msg {
+                                ToMainMessages::SpawnWindow => {
+                                    // Window Re-Open requested
+                                    continue 'mainloop;
+                                }
+                                ToMainMessages::Quit => {
+                                    // Break out and Close
+                                    break 'mainloop;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("Main Loop Broken, bailing: {}", e);
+                            break 'mainloop;
+                        }
+                    }
+                }
+                recv(device_rx) -> msg => {
+                    match msg {
+                        Ok(msg) => {
+                            // A device message has come in, while we don't have an active window
+                            // we can still pass this into the App to update its state
+                            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
+                                app.handle_device_message(msg);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Device Handler Broken, bailing: {}", e);
+                            break 'mainloop;
+                        }
+                    }
+                }
+            };
+        }
     }
 
+    debug!("Waiting for Threads to Terminate..");
     let _ = manage_tx.send(ManagerMessages::Quit);
+    if let Some(handle) = tray {
+        let _ = tray_tx.send(ManagerMessages::Quit);
+        let _ = handle.join();
+    }
+    let _ = device_manager.join();
 
     Ok(())
+}
+
+// This enum is passed into various 'Helper' threads and settings (such as the
+// tray handler, device manager, socket listener) to allow them to keep track and
+// trigger events on the UI
+pub enum ManagerMessages {
+    SetContext(Option<Context>),
+    Quit,
+}
+
+pub enum ToMainMessages {
+    SpawnWindow,
+    Quit,
 }
