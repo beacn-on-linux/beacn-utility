@@ -14,7 +14,7 @@ use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
-use egui_winit::winit::window::WindowAttributes;
+use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
 use glutin::prelude::GlSurface;
 use winit::raw_window_handle::HasRawDisplayHandle;
 
@@ -22,10 +22,17 @@ use winit::raw_window_handle::HasRawDisplayHandle;
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     RequestRedraw,
+    CloseWindow,
+    FocusWindow,
 }
+
+// This is a reference to the Event Proxy, which we can store inside the context
+#[derive(Clone)]
+struct EventProxy(Arc<EventLoopProxy<UserEvent>>);
 
 pub trait App {
     fn update(&mut self, ctx: &egui::Context);
+    fn should_close(&mut self) -> bool;
     fn as_any(&mut self) -> &mut dyn Any;
 }
 
@@ -72,6 +79,15 @@ impl WindowRunner {
         // Create the event loop proxy
         self.event_loop_proxy = Some(event_loop.create_proxy());
 
+        if let Some(proxy) = &self.event_loop_proxy {
+            self.context.data_mut(|data| {
+                data.insert_temp(
+                    egui::Id::new("event_proxy"),
+                    EventProxy(Arc::new(proxy.clone())),
+                );
+            });
+        }
+
         // Set a wakeup for a redraw
         let proxy = self.event_loop_proxy.as_ref().unwrap().clone();
         self.context.set_request_repaint_callback(move |_info| {
@@ -108,6 +124,15 @@ impl WindowRunner {
     }
 }
 
+// This is a helper function which lets the app send a UserEvent into the context
+pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
+    ctx.data(|data| {
+        if let Some(proxy) = data.get_temp::<EventProxy>(egui::Id::new("event_proxy")) {
+            let _ = proxy.0.send_event(event);
+        }
+    });
+}
+
 impl ApplicationHandler<UserEvent> for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
@@ -120,11 +145,27 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
         }
     }
 
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {
                 if let Some(window) = &self.window {
                     window.request_redraw();
+                }
+            }
+            UserEvent::CloseWindow => {
+                self.window = None;
+                self.renderer = None;
+
+                event_loop.exit();
+            }
+            UserEvent::FocusWindow => {
+                if let Some(window) = &self.window {
+                    if let Some(true) = window.is_minimized() {
+                        window.set_minimized(false);
+                    }
+
+                    window.focus_window();
+                    window.request_user_attention(Some(UserAttentionType::Informational));
                 }
             }
         }
@@ -149,12 +190,14 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     self.render_frame();
                 }
                 WindowEvent::CloseRequested => {
-                    // Clear variables
-                    self.window = None;
-                    self.renderer = None;
+                    if self.app.should_close() {
+                        // Clear variables
+                        self.window = None;
+                        self.renderer = None;
 
-                    // Exit the event loop when window closes so run() can return
-                    event_loop.exit();
+                        // Exit the event loop when window closes so run() can return
+                        event_loop.exit();
+                    }
                 }
                 WindowEvent::Resized(physical_size) => {
                     self.window_attributes.inner_size = Some(physical_size.into());

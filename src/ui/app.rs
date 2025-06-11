@@ -94,6 +94,11 @@ impl App for BeacnMicApp {
         self.render_content(ctx);
     }
 
+    fn should_close(&mut self) -> bool {
+        // TODO: This should prompt the user, and / or check the settings
+        true
+    }
+
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }
