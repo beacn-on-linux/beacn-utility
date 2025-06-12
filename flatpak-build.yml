@@ -15,9 +15,11 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
 
-  # This is needed for a clean usage of KStatusNotifier
-  - --talk-name=org.kde.StatusNotifierWatcher
-  # - --socket=session-bus
+  # This is needed for a clean usage of StatusNotifier, It can probably be reduced slightly, but
+  # the ksni crate generally requires it, possible alternative, but would require more testing:
+  # --own-name=org.kde.*
+  # Ref: https://docs.flatpak.org/en/latest/desktop-integration.html
+  - --socket=session-bus
 
 modules:
   - name: beacn-mic-ui
