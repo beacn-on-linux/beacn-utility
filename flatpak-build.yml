@@ -12,15 +12,12 @@ finish-args:
   - --device=dri
   
   # Basic permissions most apps need
-  - --share=ipc
   - --socket=fallback-x11
   - --socket=wayland
-  - --socket=session-bus
 
-  # Allow access to /tmp for runtime data
-  # We specifically need access to this so that we can pass the icon to dbus, and have a central
-  # location for the single instance socket.
-  - --filesystem=/tmp/
+  # This is needed for a clean usage of KStatusNotifier
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # - --socket=session-bus
 
 modules:
   - name: beacn-mic-ui

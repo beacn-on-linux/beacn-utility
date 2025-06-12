@@ -77,7 +77,7 @@ flatpak-cargo-generator Cargo.lock -o generated-sources.json
 
 Perform the First Build
 ```shell
-flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir com.github.beacn-on-linux.yml
+flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir flatpak-build.yml
 ```
 
 Create a local flatpak remote, and install our built app to it
@@ -91,7 +91,7 @@ To update the installed package, update the repository from git then run the fol
 ```shell
 source ~/.python_beacn/bin/activate
 flatpak-cargo-generator Cargo.lock -o generated-sources.json
-flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir com.github.beacn-on-linux.yml
+flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir flatpak-build.yml
 flatpak update
 ```
 
