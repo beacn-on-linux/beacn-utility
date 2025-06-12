@@ -12,6 +12,7 @@ use log::{LevelFilter, debug, error, warn};
 use managers::tray::handle_tray;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::thread;
+use egui_winit::winit::platform::x11::WindowAttributesExtX11;
 
 mod device_manager;
 mod managers;
@@ -71,6 +72,7 @@ fn main() -> anyhow::Result<()> {
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(include_bytes!("../resources/com.github.beacn-on-linux.png"))))
         .with_inner_size(LogicalSize::new(1024, 500))
+        .with_name(APP_NAME, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
 
