@@ -7,8 +7,6 @@ mod audio_pages;
 mod controller_pages;
 mod states;
 
-// Main Window Icon
-static ICON: &[u8] = include_bytes!("../../resources/com.github.beacn-on-linux.png");
 
 // SVG Images
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {

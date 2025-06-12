@@ -71,7 +71,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
-        .with_window_icon(Some(load_icon(include_bytes!("../resources/com.github.beacn-on-linux.png"))))
+        .with_window_icon(Some(load_icon(ICON)))
         .with_inner_size(LogicalSize::new(1024, 500))
         .with_name(APP_TLD, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
