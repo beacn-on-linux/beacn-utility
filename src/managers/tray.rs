@@ -28,7 +28,7 @@ pub fn handle_tray(
     }
 
     // Write the icon out to the temporary path
-    let tmp_file_path = tmp_file_dir.join(format!("{}.svg", APP_NAME));
+    let tmp_file_path = tmp_file_dir.join(format!("{}.png", APP_NAME));
     if !tmp_file_path.exists() || fs::remove_file(&tmp_file_path).is_ok() {
         fs::write(&tmp_file_path, ICON)?;
     } else {

@@ -8,7 +8,7 @@ use beacn_lib::audio::messages::lighting::{
     Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingSpeed,
 };
 use beacn_lib::manager::DeviceType;
-use beacn_lib::types::RGB;
+use beacn_lib::types::RGBA;
 use egui::{Align, Label, Layout, Response, RichText, Ui};
 
 use crate::ui::states::audio_state::BeacnAudioState;
@@ -282,7 +282,7 @@ impl LightingPage {
     ) {
         ui.label("Primary Colour");
         if ui.color_edit_button_srgb(colour).changed() {
-            let message = RGB {
+            let message = RGBA {
                 red: colour[0],
                 green: colour[1],
                 blue: colour[2],
@@ -302,7 +302,7 @@ impl LightingPage {
     ) {
         ui.label("Secondary Colour");
         if ui.color_edit_button_srgb(colour).changed() {
-            let message = RGB {
+            let message = RGBA {
                 red: colour[0],
                 green: colour[1],
                 blue: colour[2],

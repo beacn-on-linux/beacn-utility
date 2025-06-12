@@ -7,7 +7,7 @@ use beacn_lib::crossbeam::{channel, select};
 use egui::Context;
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
-use egui_winit::winit::window::{Window, WindowAttributes};
+use egui_winit::winit::window::{Icon, Window, WindowAttributes};
 use log::{LevelFilter, debug, error, warn};
 use managers::tray::handle_tray;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
@@ -22,7 +22,7 @@ mod window_handle;
 
 const APP_NAME: &str = "beacn-mic-ui";
 const APP_TITLE: &str = "Beacn Utility";
-const ICON: &[u8] = include_bytes!("../resources/com.github.beacn-on-linux.svg");
+const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
 fn main() -> anyhow::Result<()> {
     CombinedLogger::init(vec![TermLogger::new(
@@ -69,8 +69,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
+        .with_window_icon(Some(load_icon(include_bytes!("../resources/com.github.beacn-on-linux.png"))))
         .with_inner_size(LogicalSize::new(1024, 500))
         .with_min_inner_size(LogicalSize::new(1024, 500));
+
 
     'mainloop: loop {
         // Spawn up a new egui context
@@ -173,6 +175,16 @@ fn main() -> anyhow::Result<()> {
     let _ = ipc.join();
 
     Ok(())
+}
+
+fn load_icon(bytes: &[u8]) -> Icon {
+    let (icon_rgba, icon_width, icon_height) = {
+        let image = image::load_from_memory(bytes).unwrap().into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+    Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the

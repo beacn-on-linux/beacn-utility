@@ -16,6 +16,7 @@ use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
 use glutin::prelude::GlSurface;
+use log::debug;
 use winit::raw_window_handle::HasRawDisplayHandle;
 
 // These are events we can send into winit to trigger an update
