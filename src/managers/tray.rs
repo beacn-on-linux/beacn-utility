@@ -5,10 +5,12 @@ use beacn_lib::crossbeam;
 use beacn_lib::crossbeam::channel::{Receiver, RecvError, Sender};
 use beacn_lib::crossbeam::{channel, select};
 use egui::Context;
+use image::GenericImageView;
 use ksni::blocking::{Handle, TrayMethods};
-use ksni::{Category, Error, Status, ToolTip, Tray};
+use ksni::{Category, Error, Icon, Status, ToolTip, Tray};
 use log::{debug, error, warn};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use std::{env, fs};
 
 enum TrayMessages {
@@ -128,18 +130,29 @@ impl Tray for TrayIcon {
     fn status(&self) -> Status {
         Status::Active
     }
-    fn icon_theme_path(&self) -> String {
-        if let Some(parent) = self.icon.parent() {
-            return parent.to_string_lossy().to_string();
-        }
-        String::from("")
+
+    fn icon_pixmap(&self) -> Vec<Icon> {
+        static TRAY_ICON: LazyLock<Icon> = LazyLock::new(|| {
+            let img = image::load_from_memory_with_format(ICON, image::ImageFormat::Png)
+                .expect("Unable to Load Image");
+
+            let (width, height) = img.dimensions();
+            let mut data = img.into_rgba8().into_vec();
+
+            for pixel in data.chunks_exact_mut(4) {
+                pixel.rotate_right(1) // RGBA to ARGB
+            }
+
+            Icon {
+                width: width as i32,
+                height: height as i32,
+                data,
+            }
+        });
+
+        vec![TRAY_ICON.clone()]
     }
-    fn icon_name(&self) -> String {
-        if let Some(file) = self.icon.file_stem() {
-            return file.to_string_lossy().to_string();
-        }
-        APP_NAME.to_string()
-    }
+
     fn tool_tip(&self) -> ToolTip {
         ToolTip {
             title: String::from(APP_TITLE),
