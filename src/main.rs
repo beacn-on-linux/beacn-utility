@@ -21,6 +21,7 @@ mod ui;
 mod widgets;
 mod window_handle;
 
+const APP_TLD: &str = "com.github.beacn-on-linux";
 const APP_NAME: &str = "beacn-mic-ui";
 const APP_TITLE: &str = "Beacn Utility";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
@@ -72,9 +73,8 @@ fn main() -> anyhow::Result<()> {
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(include_bytes!("../resources/com.github.beacn-on-linux.png"))))
         .with_inner_size(LogicalSize::new(1024, 500))
-        .with_name(APP_NAME, APP_NAME)
+        .with_name(APP_TLD, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
-
 
     'mainloop: loop {
         // Spawn up a new egui context
