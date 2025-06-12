@@ -53,30 +53,57 @@ If you instead want to build the app and have a useful binary you can link to:
 
 ## Getting Started (flatpak)
 
+It is *HIGHLY* recommended that you do this on a fresh clone of the repo, and not on the working tree, just
+to help prevent spill over from occurring.
+
 ### First time setup
+Firstly, install the `flatpak-builder` package for your distribution.
+
+Create a Python Environment to work with, then activate it: 
+```sh 
+python -m venv ~/.python_beacn/
+source ~/.python_beacn/bin/activate
+```
+
+Install the cargo generator package:
+```sh
 pip install flatpak-cargo-generator
+```
+
+Generate the Flatpak build dependencies:
+```sh
 flatpak-cargo-generator Cargo.lock -o generated-sources.json
-flatpak-builder --repo=repo --force-clean build-dir com.github.beacn-on-linux.yml
+```
 
-(local install from repo for the moment)
+Perform the First Build
+```shell
+flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir com.github.beacn-on-linux.yml
+```
 
-### Setup local flatpak repo (only need to do once)
+Create a local flatpak remote, and install our built app to it
+```shell
 flatpak --user remote-add --no-gpg-verify beacn-repo repo
 flatpak install --user beacn-repo com.github.beacn-on-linux
+```
 
-### For builds afterwards
-flatpak-builder --repo=repo build-dir com.github.beacn-on-linux.yml
+### Future Builds
+To update the installed package, update the repository from git then run the following:
+```shell
+source ~/.python_beacn/bin/activate
+flatpak-cargo-generator Cargo.lock -o generated-sources.json
+flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir com.github.beacn-on-linux.yml
 flatpak update
+```
 
-## Current Status
+## Current Project Status
 
 Not Yet Implemented:
 * Lighting
 * Probably a button or two, let me know if you spot one.
 
-Not Planned:
+Not (currently) Planned:
 * Profiles
-* Audio Visualisations ([egui_canvas](https://gitlab.com/urciteniefilipdubina/egui_canvas) might be a candiate)
+* Audio Visualisations
 
 ***
 
