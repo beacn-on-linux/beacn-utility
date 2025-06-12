@@ -90,6 +90,9 @@ pub fn handle_tray(
     if !handle.is_closed() {
         handle.shutdown();
     }
+
+    // Remove the temporary icon file
+    fs::remove_file(tmp_file_path)?;
     debug!("Tray Stopped");
     Ok(())
 }

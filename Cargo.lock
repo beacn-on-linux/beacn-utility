@@ -217,6 +217,7 @@ dependencies = [
  "simplelog",
  "strum",
  "strum_macros",
+ "uds_windows",
  "wide",
 ]
 

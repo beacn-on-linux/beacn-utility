@@ -1,5 +1,5 @@
 use crate::device_manager::spawn_device_manager;
-use crate::tray::handle_tray;
+use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner};
 use anyhow::bail;
@@ -9,12 +9,13 @@ use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
 use egui_winit::winit::window::{Window, WindowAttributes};
 use log::{LevelFilter, debug, error, warn};
+use managers::tray::handle_tray;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
 use std::thread;
 
 mod device_manager;
+mod managers;
 mod numbers;
-mod tray;
 mod ui;
 mod widgets;
 mod window_handle;
@@ -35,6 +36,16 @@ fn main() -> anyhow::Result<()> {
 
     // Firstly, create a message bus which allows threads to message back to here
     let (main_tx, main_rx) = channel::unbounded();
+
+    // Check whether an existing instance is running, and bail if so
+    if handle_active_instance() {
+        return Ok(());
+    }
+
+    // Spawn up the IPC handler
+    let (ipc_tx, ipc_rx) = channel::unbounded();
+    let ipc_main_tx = main_tx.clone();
+    let ipc = thread::spawn(|| handle_ipc(ipc_rx, ipc_main_tx));
 
     // Ok, spawn up the Tray Handler
     let (tray_tx, tray_rx) = channel::unbounded();
@@ -75,7 +86,10 @@ fn main() -> anyhow::Result<()> {
         // will be locked into the Window event loop, so if an update or behaviour change needs
         // to be triggered, the threads will have to call it themselves.
         let _ = manage_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-        let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+        let _ = ipc_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+        if tray.is_some() {
+            let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+        }
 
         // Create a window runner
         let runner = WindowRunner::new(app, context, window_attributes.clone());
@@ -93,7 +107,11 @@ fn main() -> anyhow::Result<()> {
 
         // Clear the Context from our threads
         let _ = manage_tx.send(ManagerMessages::SetContext(None));
-        let _ = tray_tx.send(ManagerMessages::SetContext(None));
+        let _ = ipc_tx.send(ManagerMessages::SetContext(None));
+
+        if tray.is_some() {
+            let _ = tray_tx.send(ManagerMessages::SetContext(None));
+        }
 
         // Break for now, code is ready but not complete
         break;
@@ -144,11 +162,15 @@ fn main() -> anyhow::Result<()> {
 
     debug!("Waiting for Threads to Terminate..");
     let _ = manage_tx.send(ManagerMessages::Quit);
+    let _ = ipc_tx.send(ManagerMessages::Quit);
+
     if let Some(handle) = tray {
         let _ = tray_tx.send(ManagerMessages::Quit);
         let _ = handle.join();
     }
+
     let _ = device_manager.join();
+    let _ = ipc.join();
 
     Ok(())
 }
