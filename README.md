@@ -27,6 +27,8 @@ on-board storage so values changed here should persist across device reboots.
 
 ### Setting Up Beacn Devices on Linux
 
+These steps need to be followed, regardless of which compilation method you choose.
+
 1) Install the [ALSA UCM profiles](https://github.com/beacn-on-linux/beacn-ucm-profiles) for the Beacn Hardware.
 2) Copy `50-beacn-mic.rules` from this repository to `/etc/udev/rules.d/`
 3) Run `sudo udevadm control --reload-rules && sudo udevadm trigger`
@@ -34,7 +36,9 @@ on-board storage so values changed here should persist across device reboots.
 
 Once that's done, your Beacn Mic should show up with a 'Headphones' and 'Microphone' channel.
 
-### Running this App
+***
+
+## Compiling From Source
 
 If you simply want to just run this app, you can do so with the following:
 
@@ -51,7 +55,7 @@ If you instead want to build the app and have a useful binary you can link to:
 
 ***
 
-## Getting Started (flatpak)
+## Compiling to Flatpak
 
 It is *HIGHLY* recommended that you do this on a fresh clone of the repo, and not on the working tree, just
 to help prevent spill over from occurring.
@@ -95,6 +99,7 @@ flatpak-builder --repo=repo --install-deps-from=flathub --force-clean build-dir 
 flatpak update
 ```
 
+***
 ## Current Project Status
 
 Not Yet Implemented:
