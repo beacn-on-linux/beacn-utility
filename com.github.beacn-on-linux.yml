@@ -33,11 +33,11 @@ modules:
       - cargo --offline fetch --locked --verbose
       - cargo --offline build --release --verbose
       - install -Dm755 ./target/release/beacn-mic-ui -t /app/bin/
-      - install -Dm644 com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
+      - install -Dm644 resources/flatpak/com.github.beacn-on-linux.metainfo.xml /app/share/metainfo/com.github.beacn-on-linux.metainfo.xml
+      - install -Dm644 resources/flatpak/com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
       - install -Dm644 resources/icons/beacn-utility.svg /app/share/icons/hicolor/scalable/apps/com.github.beacn-on-linux.svg
       - install -Dm644 resources/icons/beacn-utility-large.png /app/share/pixmaps/com.github.beacn-on-linux.png
       - install -Dm644 resources/icons/beacn-utility.png  /app/share/icons/hicolor/48x48/apps/com.github.beacn-on-linux.png
-      - install -Dm644 com.github.beacn-on-linux.metainfo.xml /app/share/metainfo/com.github.beacn-on-linux.metainfo.xml
 
     sources:
       - type: dir
