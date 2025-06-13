@@ -6,7 +6,8 @@ pub(crate) mod app;
 mod audio_pages;
 mod controller_pages;
 mod states;
-
+mod widgets;
+mod numbers;
 
 // SVG Images
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {

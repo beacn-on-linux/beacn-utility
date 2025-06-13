@@ -7,7 +7,7 @@ use crate::ui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::states::audio_state::BeacnAudioState;
-use crate::widgets::draw_range;
+use crate::ui::widgets::draw_range;
 use beacn_lib::audio::messages::headphones::HPMicOutputGain;
 use beacn_lib::types::HasRange;
 use egui::{vec2, Ui, Widget};

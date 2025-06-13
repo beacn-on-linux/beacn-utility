@@ -1,4 +1,4 @@
-use crate::numbers::NumericType;
+use crate::ui::numbers::NumericType;
 use egui::emath::Numeric;
 use egui::{vec2, Align, Color32, DragValue, ImageButton, Layout, Response, RichText, Slider, Ui, Visuals};
 use std::fmt::Debug;

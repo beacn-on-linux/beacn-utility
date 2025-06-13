@@ -1,6 +1,6 @@
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::states::audio_state::BeacnAudioState;
-use crate::widgets::draw_range;
+use crate::ui::widgets::draw_range;
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};

@@ -1,6 +1,6 @@
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::states::audio_state::BeacnAudioState;
-use crate::widgets::{get_slider, toggle_button};
+use crate::ui::widgets::{get_slider, toggle_button};
 use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};

@@ -33,12 +33,17 @@ glutin = "0.32.2"
 beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git" }
 #beacn-lib = { path = "../beacn-lib" }
 
+# Used for Lazy Initialisation
 once_cell = "1.20.3"
 
 # Tray Handler
 ksni = { version = "0.3.1", features = ["blocking"] }
 image = "0.25.5"
 
-# Useful primarily for testing and comparison
+# Apature Science Handheld Portal Device (autostart / background)
+tokio = { version = "1.43.0" , features = ["rt-multi-thread"] }
+ashpd = { version = "0.11.0" }
+
+# WINDOWS: Useful primarily for testing and comparison
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.1.0"

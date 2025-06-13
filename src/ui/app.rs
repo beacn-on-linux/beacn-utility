@@ -9,7 +9,7 @@ use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::states::controller_state::BeacnControllerState;
-use crate::widgets::round_nav_button;
+use crate::ui::widgets::round_nav_button;
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
@@ -29,6 +29,8 @@ pub struct BeacnMicApp {
 
     device_recv: channel::Receiver<DeviceMessage>,
     active_page: usize,
+
+    settings_active: bool,
 }
 
 impl BeacnMicApp {
@@ -51,6 +53,7 @@ impl BeacnMicApp {
 
             device_recv,
             active_page: 0,
+            settings_active: false,
         }
     }
 }
@@ -189,11 +192,14 @@ impl BeacnMicApp {
 
                 let audio_pages = self.audio_pages.iter().enumerate();
                 for (index, page) in audio_pages {
-                    let selected = *active_device == device && self.active_page == index;
+                    let selected = *active_device == device
+                        && self.active_page == index
+                        && !self.settings_active;
                     let error = &device_state.device_state.state == &LoadState::ERROR;
 
                     if page.show_on_error() == error {
                         if round_nav_button(ui, page.icon(), selected).clicked() {
+                            self.settings_active = false;
                             self.active_device = Some(device.clone());
                             self.active_page = index;
                         }
@@ -215,8 +221,11 @@ impl BeacnMicApp {
 
                 let control_pages = self.control_pages.iter().enumerate();
                 for (index, page) in control_pages {
-                    let selected = *active_device == device && self.active_page == index;
+                    let selected = *active_device == device
+                        && self.active_page == index
+                        && !self.settings_active;
                     if round_nav_button(ui, page.icon(), selected).clicked() {
+                        self.settings_active = false;
                         self.active_device = Some(device.clone());
                         self.active_page = index;
                     }
@@ -225,10 +234,15 @@ impl BeacnMicApp {
                 ui.separator();
             }
         }
+        ui.add_space(ui.available_height() - 55.0);
+        ui.separator();
+        if round_nav_button(ui, "gear", self.settings_active).clicked() {
+            self.settings_active = true;
+        }
     }
 
     fn render_content(&mut self, ctx: &Context) {
-        if self.active_device.is_none() {
+        if self.active_device.is_none() && !self.settings_active {
             return;
         }
 
