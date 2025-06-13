@@ -7,7 +7,8 @@ use beacn_lib::crossbeam::{channel, select};
 use egui::Context;
 use image::GenericImageView;
 use ksni::blocking::{Handle, TrayMethods};
-use ksni::{Category, Error, Icon, Status, ToolTip, Tray};
+use ksni::menu::StandardItem;
+use ksni::{Category, Error, Icon, MenuItem, Status, ToolTip, Tray};
 use log::{debug, error, warn};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -15,6 +16,7 @@ use std::{env, fs};
 
 enum TrayMessages {
     Activate,
+    Quit,
 }
 
 pub fn handle_tray(
@@ -57,6 +59,15 @@ pub fn handle_tray(
                                     let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
                                 }
                                 debug!("Activate Triggered");
+                            },
+                            TrayMessages::Quit => {
+                                // If we have an active window, we need to close it first.
+                                if let Some(context) = &egui_context {
+                                    send_user_event(context, UserEvent::CloseWindow);
+                                }
+
+                                // Tell the parent to immediately quit
+                                let _ = tray_main_tx.send(ToMainMessages::Quit);
                             }
                         }
                     }
@@ -159,5 +170,27 @@ impl Tray for TrayIcon {
             description: String::from("A Tool for Configuring Beacn Devices"),
             ..Default::default()
         }
+    }
+
+    fn menu(&self) -> Vec<MenuItem<Self>> {
+        vec![
+            StandardItem {
+                label: String::from("Show"),
+                activate: Box::new(|this: &mut TrayIcon| {
+                    let _ = this.tx.try_send(TrayMessages::Activate);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
+            StandardItem {
+                label: String::from("Quit"),
+                activate: Box::new(|this: &mut TrayIcon| {
+                    let _ = this.tx.try_send(TrayMessages::Quit);
+                }),
+                ..Default::default()
+            }
+            .into(),
+        ]
     }
 }
