@@ -39,7 +39,7 @@ pub fn handle_tray(
 
     let (icon_tx, icon_rx) = channel::bounded(20);
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
-    let handle = icon.spawn()?;
+    let handle = icon.spawn_without_dbus_name()?;
 
     let mut egui_context = None;
 
