@@ -1,22 +1,28 @@
-use anyhow::Result;
+use crate::{APP_NAME, get_autostart_file, run_async};
+use anyhow::{Result, anyhow, bail};
+use ashpd::desktop::background::Background;
+use ashpd::{Error, WindowIdentifier};
+use egui::Id;
+use egui_glow::glow;
+use egui_glow::glow::HasContext;
+use egui_winit::winit;
+use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
+use egui_winit::winit::raw_window_handle::{HandleError, HasRawWindowHandle, RawDisplayHandle};
+use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
 use egui_winit::winit::{
     application::ApplicationHandler,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
+use glutin::prelude::GlSurface;
+use ini::Ini;
+use log::{debug, warn};
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
-
-use egui_glow::glow;
-use egui_glow::glow::HasContext;
-use egui_winit::winit;
-use egui_winit::winit::event_loop::EventLoopProxy;
-use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
-use glutin::prelude::GlSurface;
-use log::debug;
+use std::{env, fs};
 use winit::raw_window_handle::HasRawDisplayHandle;
 
 // These are events we can send into winit to trigger an update
@@ -25,6 +31,7 @@ pub enum UserEvent {
     RequestRedraw,
     CloseWindow,
     FocusWindow,
+    SetAutoStart(bool),
 }
 
 // This is a reference to the Event Proxy, which we can store inside the context
@@ -167,6 +174,95 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
                     window.focus_window();
                     window.request_user_attention(Some(UserAttentionType::Informational));
+                }
+            }
+            UserEvent::SetAutoStart(create) => {
+                let key = Id::new("autostart_enabled");
+                if let Some(window) = &self.window {
+                    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+                        println!("Running inside Flatpak, using Background Portal");
+                        let window_handle = window.raw_window_handle().unwrap();
+                        let display_handle = window.raw_display_handle().ok();
+
+                        let reason = "Manage Beacn Devices on Startup";
+
+                        run_async(async {
+                            let identifier = WindowIdentifier::from_raw_handle(
+                                &window_handle,
+                                display_handle.as_ref(),
+                            )
+                            .await;
+
+                            let request = Background::request()
+                                .identifier(identifier)
+                                .reason(&*reason)
+                                .auto_start(create)
+                                .dbus_activatable(false)
+                                .command::<Vec<_>, String>(vec![
+                                    String::from(APP_NAME),
+                                    String::from("--startup"),
+                                ]);
+
+                            debug!("Requesting Background Access");
+
+                            let result = match request.send().await.and_then(|r| r.response()) {
+                                Ok(response) => {
+                                    debug!("{:?}", response);
+                                    Some(response.auto_start())
+                                }
+                                Err(e) => {
+                                    debug!("Failed to request autostart run: {}", e);
+                                    None
+                                }
+                            };
+                            self.context.memory_mut(|mem| {
+                                mem.data.insert_temp(key, result);
+                            })
+                        });
+                    } else {
+                        debug!("Running Outside Flatpak, manually handling");
+                        let attempt = match get_autostart_file() {
+                            Ok(path) => {
+                                if path.exists() && fs::remove_file(path.clone()).is_err() {
+                                    Err(anyhow!("Unable to remove existing AutoStart"))
+                                } else if create {
+                                    if let Ok(exe) = env::current_exe() {
+                                        let mut conf = Ini::new();
+                                        let exe = exe.to_string_lossy().to_string();
+
+                                        conf.with_section(Some("Desktop Entry"))
+                                            .set("Type", "Application")
+                                            .set("Name", "Beacn Utility")
+                                            .set("Comment", "A Tool for Configuring Beacn Devices")
+                                            .set("Exec", format!("{:?} --startup", exe))
+                                            .set("Terminal", "false");
+
+                                        match conf.write_to_file(path) {
+                                            Ok(()) => Ok(()),
+                                            Err(e) => Err(anyhow!("Failed to Write File, {}", e)),
+                                        }
+                                    } else {
+                                        Err(anyhow!("Unable to Determine Executable"))
+                                    }
+                                } else {
+                                    // Existing file was deleted, that's all that's needed
+                                    Ok(())
+                                }
+                            }
+                            Err(e) => Err(anyhow!(e)),
+                        };
+
+                        let result = match attempt {
+                            Ok(()) => Some(create),
+                            Err(e) => {
+                                debug!("Failed to Handle AutoStart: {}", e);
+                                None
+                            }
+                        };
+                        self.context.memory_mut(|mem| {
+                            mem.data.insert_temp(key, result);
+                        })
+                    }
                 }
             }
         }

@@ -16,6 +16,7 @@ use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
 use std::any::Any;
+use crate::ui::app_settings::settings_ui;
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -243,6 +244,13 @@ impl BeacnMicApp {
 
     fn render_content(&mut self, ctx: &Context) {
         if self.active_device.is_none() && !self.settings_active {
+            return;
+        }
+
+        if self.settings_active {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                settings_ui(ui, ctx);
+            });
             return;
         }
 

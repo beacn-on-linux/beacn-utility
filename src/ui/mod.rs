@@ -8,6 +8,7 @@ mod controller_pages;
 mod states;
 mod widgets;
 mod numbers;
+mod app_settings;
 
 // SVG Images
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {

@@ -2,23 +2,27 @@ use crate::device_manager::spawn_device_manager;
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner};
+use anyhow::Result;
 use anyhow::bail;
+use ashpd::desktop::background::Background;
 use beacn_lib::crossbeam::{channel, select};
-use egui::Context;
+use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
+use egui_winit::winit::platform::x11::WindowAttributesExtX11;
 use egui_winit::winit::window::{Icon, Window, WindowAttributes};
 use log::{LevelFilter, debug, error, warn};
 use managers::tray::handle_tray;
+use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::thread;
-use egui_winit::winit::platform::x11::WindowAttributesExtX11;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::{env, thread};
+use tokio::runtime::{Builder, Runtime};
 
 mod device_manager;
 mod managers;
-mod numbers;
 mod ui;
-mod widgets;
 mod window_handle;
 
 const APP_TLD: &str = "com.github.beacn-on-linux";
@@ -26,7 +30,19 @@ const APP_NAME: &str = "beacn-mic-ui";
 const APP_TITLE: &str = "Beacn Utility";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
-fn main() -> anyhow::Result<()> {
+// We need a minimum tokio runtime, so we can use libs that utilise async inside our sync code
+static TOKIO: Lazy<Runtime> = Lazy::new(|| {
+    debug!("Spawning tokio runtime..");
+    Builder::new_current_thread()
+        .enable_io()
+        .build()
+        .expect("Failed to Create tokio Runtime")
+});
+pub fn run_async<F: Future>(future: F) -> F::Output {
+    TOKIO.block_on(future)
+}
+
+fn main() -> Result<()> {
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Debug,
         Config::default(),
@@ -34,7 +50,9 @@ fn main() -> anyhow::Result<()> {
         ColorChoice::Auto,
     )])?;
 
-    let spawn_tray = false;
+    let args: Vec<String> = env::args().collect();
+    let hide_initial = args.contains(&"--startup".to_string());
+    let mut first_run = true;
 
     // Firstly, create a message bus which allows threads to message back to here
     let (main_tx, main_rx) = channel::unbounded();
@@ -52,10 +70,7 @@ fn main() -> anyhow::Result<()> {
     // Ok, spawn up the Tray Handler
     let (tray_tx, tray_rx) = channel::unbounded();
     let tray_main_tx = main_tx.clone();
-    let tray = match spawn_tray {
-        true => Some(thread::spawn(|| handle_tray(tray_rx, tray_main_tx))),
-        false => None,
-    };
+    let tray = thread::spawn(|| handle_tray(tray_rx, tray_main_tx));
 
     // Ok, we need to spawn up the device manager, first lets create some channels
     // The first channel is for us to be able to tell the manager to shut down, or reconfigure
@@ -77,48 +92,47 @@ fn main() -> anyhow::Result<()> {
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
     'mainloop: loop {
-        // Spawn up a new egui context
-        let context = egui::Context::default();
+        if !hide_initial || !first_run {
+            // Spawn up a new egui context
+            let mut context = Context::default();
+            prepare_context(&mut context);
 
-        // app is a Box<dyn App>, we need to downcast it back to a Box<BeacnMicApp>
-        if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
-            // Attach the new context to the app
-            app.with_context(&context);
-        }
-
-        // Send the new context off to our threads, this needs to be done because this thread
-        // will be locked into the Window event loop, so if an update or behaviour change needs
-        // to be triggered, the threads will have to call it themselves.
-        let _ = manage_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-        let _ = ipc_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-        if tray.is_some() {
-            let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-        }
-
-        // Create a window runner
-        let runner = WindowRunner::new(app, context, window_attributes.clone());
-
-        // Run the event loop, this will block until the Window is closed
-        match runner.run(&mut event_loop) {
-            // The window runner will return the app (and window attributes) to us, so we can
-            // store them, and use them the next time the window needs to be open.
-            Ok((a, w)) => {
-                app = a;
-                window_attributes = w
+            // app is a Box<dyn App>, we need to downcast it back to a Box<BeacnMicApp>
+            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
+                // Attach the new context to the app
+                app.with_context(&context);
             }
-            Err(e) => bail!("Error: {}", e),
+
+            // Send the new context off to our threads, this needs to be done because this thread
+            // will be locked into the Window event loop, so if an update or behaviour change needs
+            // to be triggered, the threads will have to call it themselves.
+            let _ = manage_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+            let _ = ipc_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+            let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
+
+            // Create a window runner
+            let runner = WindowRunner::new(app, context, window_attributes.clone());
+
+            // Run the event loop, this will block until the Window is closed
+            match runner.run(&mut event_loop) {
+                // The window runner will return the app (and window attributes) to us, so we can
+                // store them, and use them the next time the window needs to be open.
+                Ok((a, w)) => {
+                    app = a;
+                    window_attributes = w
+                }
+                Err(e) => bail!("Error: {}", e),
+            }
         }
+        first_run = false;
 
         // Clear the Context from our threads
         let _ = manage_tx.send(ManagerMessages::SetContext(None));
         let _ = ipc_tx.send(ManagerMessages::SetContext(None));
-
-        if tray.is_some() {
-            let _ = tray_tx.send(ManagerMessages::SetContext(None));
-        }
+        let _ = tray_tx.send(ManagerMessages::SetContext(None));
 
         // Break for now, code is ready but not complete
-        break;
+        //break;
 
         #[allow(unreachable_code)]
         // Wait for a message to do stuff
@@ -167,16 +181,33 @@ fn main() -> anyhow::Result<()> {
     debug!("Waiting for Threads to Terminate..");
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
+    let _ = tray_tx.send(ManagerMessages::Quit);
 
-    if let Some(handle) = tray {
-        let _ = tray_tx.send(ManagerMessages::Quit);
-        let _ = handle.join();
-    }
-
+    let _ = tray.join();
     let _ = device_manager.join();
     let _ = ipc.join();
 
     Ok(())
+}
+
+fn prepare_context(ctx: &mut Context) {
+    let auto_start_key = Id::new("autostart_enabled");
+
+    let auto_start = match has_autostart() {
+        Ok(present) => {
+            debug!("File State: {}", present);
+            Some(present)
+        }
+        Err(e) => {
+            debug!("Error Getting State: {}", e);
+            None
+        }
+    };
+    debug!("Setting Value: {:?}", auto_start);
+
+    ctx.memory_mut(|mem| {
+        mem.data.insert_temp(auto_start_key, auto_start);
+    })
 }
 
 fn load_icon(bytes: &[u8]) -> Icon {
@@ -187,6 +218,29 @@ fn load_icon(bytes: &[u8]) -> Icon {
         (rgba, width, height)
     };
     Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+}
+
+fn has_autostart() -> Result<bool> {
+    let autostart_file = get_autostart_file()?;
+
+    debug!("Checking: {:?}", autostart_file);
+    Ok(autostart_file.exists())
+}
+
+pub fn get_autostart_file() -> Result<PathBuf> {
+    let config_dir = if let Ok(config) = env::var("XDG_CONFIG_HOME") {
+        config
+    } else {
+        if let Ok(home) = env::var("HOME") {
+            format!("{}/.config", home)
+        } else {
+            bail!("Unable to obtain XDG Config Directory")
+        }
+    };
+    Ok(PathBuf::from(format!(
+        "{}/autostart/{}.desktop",
+        config_dir, APP_TLD
+    )))
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the

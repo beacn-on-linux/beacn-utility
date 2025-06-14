@@ -18,6 +18,10 @@ finish-args:
   # System tray icon
   - --talk-name=org.kde.StatusNotifierWatcher
 
+  # Ability to check whether an autostart entry is present
+  # This is needed because there's no way to check via a portal
+  - --filesystem=xdg-config/autostart:ro
+
 modules:
   - name: beacn-mic-ui
     buildsystem: simple

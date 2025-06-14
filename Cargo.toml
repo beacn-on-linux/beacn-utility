@@ -42,7 +42,10 @@ image = "0.25.5"
 
 # Apature Science Handheld Portal Device (autostart / background)
 tokio = { version = "1.43.0" , features = ["rt-multi-thread"] }
-ashpd = { version = "0.11.0" }
+ashpd = { version = "0.11.0", features = ["raw_handle"] }
+
+# For Creating .desktop files outside the flatpak runtime
+rust-ini = "0.21.0"
 
 # WINDOWS: Useful primarily for testing and comparison
 [target.'cfg(windows)'.dependencies]
