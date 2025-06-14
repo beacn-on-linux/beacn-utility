@@ -1,9 +1,10 @@
 use crate::window_handle::{UserEvent, send_user_event};
 use egui::{Context, Id, Ui};
+use crate::AUTO_START_KEY;
 
 pub(crate) fn settings_ui(ui: &mut Ui, context: &Context) {
     // Get the Auto-start state from the context
-    let id = Id::new("autostart_enabled");
+    let id = Id::new(AUTO_START_KEY);
     let value: Option<Option<bool>> = context.memory(|mem| mem.data.get_temp::<Option<bool>>(id));
     if let Some(lookup) = value {
         if let Some(value) = lookup {

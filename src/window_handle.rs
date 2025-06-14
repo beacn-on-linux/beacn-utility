@@ -1,4 +1,4 @@
-use crate::{APP_NAME, get_autostart_file, run_async};
+use crate::{APP_NAME, get_autostart_file, run_async, AUTO_START_KEY};
 use anyhow::{Result, anyhow, bail};
 use ashpd::desktop::background::Background;
 use ashpd::{Error, WindowIdentifier};
@@ -177,7 +177,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
             }
             UserEvent::SetAutoStart(create) => {
-                let key = Id::new("autostart_enabled");
+                let key = Id::new(AUTO_START_KEY);
                 if let Some(window) = &self.window {
                     if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
                         println!("Running inside Flatpak, using Background Portal");

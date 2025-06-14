@@ -28,6 +28,7 @@ mod window_handle;
 const APP_TLD: &str = "com.github.beacn-on-linux";
 const APP_NAME: &str = "beacn-mic-ui";
 const APP_TITLE: &str = "Beacn Utility";
+const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
 // We need a minimum tokio runtime, so we can use libs that utilise async inside our sync code
@@ -191,7 +192,7 @@ fn main() -> Result<()> {
 }
 
 fn prepare_context(ctx: &mut Context) {
-    let auto_start_key = Id::new("autostart_enabled");
+    let auto_start_key = Id::new(AUTO_START_KEY);
 
     let auto_start = match has_autostart() {
         Ok(present) => {
