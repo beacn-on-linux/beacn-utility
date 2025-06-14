@@ -1,7 +1,6 @@
 pub(crate) mod about;
 
 use crate::ui::states::controller_state::BeacnControllerState;
-use beacn_lib::controller::BeacnControlDevice;
 use egui::Ui;
 
 pub trait ControllerPage {

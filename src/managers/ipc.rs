@@ -7,13 +7,11 @@ use log::{debug, warn};
 use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::thread::JoinHandle;
 use std::time::Duration;
 use std::{
     env, fs,
     io::{Read, Write},
     path::PathBuf,
-    thread,
 };
 #[cfg(windows)]
 use uds_windows::{UnixListener, UnixStream};

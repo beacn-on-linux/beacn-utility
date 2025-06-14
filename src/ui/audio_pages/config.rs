@@ -10,7 +10,7 @@ use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::draw_range;
 use beacn_lib::audio::messages::headphones::HPMicOutputGain;
 use beacn_lib::types::HasRange;
-use egui::{vec2, Ui, Widget};
+use egui::{vec2, Ui};
 
 pub struct Configuration {
     equaliser_new: Box<ParametricEq>,

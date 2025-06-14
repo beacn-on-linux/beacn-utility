@@ -1,14 +1,15 @@
-use crate::{APP_NAME, get_autostart_file, run_async, AUTO_START_KEY};
-use anyhow::{Result, anyhow, bail};
+use crate::{get_autostart_file, run_async, APP_NAME, AUTO_START_KEY};
+use anyhow::{anyhow, Result};
 use ashpd::desktop::background::Background;
-use ashpd::{Error, WindowIdentifier};
+use ashpd::WindowIdentifier;
 use egui::Id;
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
-use egui_winit::winit::raw_window_handle::{HandleError, HasRawWindowHandle, RawDisplayHandle};
+#[allow(deprecated)]
+use egui_winit::winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
 use egui_winit::winit::{
     application::ApplicationHandler,
@@ -18,12 +19,11 @@ use egui_winit::winit::{
 };
 use glutin::prelude::GlSurface;
 use ini::Ini;
-use log::{debug, warn};
+use log::debug;
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
-use winit::raw_window_handle::HasRawDisplayHandle;
 
 // These are events we can send into winit to trigger an update
 #[derive(Debug, Clone)]
@@ -153,6 +153,9 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
         }
     }
 
+    // ASHPD expects the RawWindowHandle and RawWindowDisplay to present a permission
+    // check to the user when adding an autostart entry.
+    #[allow(deprecated)]
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {
@@ -310,13 +313,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 }
 
 impl GlowRenderer {
+    #[allow(deprecated)]
     fn new(window: Arc<Window>, egui_ctx: &egui::Context) -> Self {
         use glutin::config::ConfigTemplateBuilder;
         use glutin::context::{ContextApi, ContextAttributesBuilder};
-        use glutin::display::GetGlDisplay;
         use glutin::prelude::*;
         use glutin::surface::SurfaceAttributesBuilder;
-        use winit::raw_window_handle::HasRawWindowHandle;
 
         let raw_window_handle = window.raw_window_handle().unwrap();
         let raw_display_handle = window.raw_display_handle().unwrap();

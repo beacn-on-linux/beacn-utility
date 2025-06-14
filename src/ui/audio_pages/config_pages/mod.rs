@@ -6,7 +6,6 @@ pub(crate) mod mic_setup;
 pub(crate) mod suppressor;
 
 use crate::ui::states::audio_state::BeacnAudioState;
-use beacn_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 
 pub trait ConfigPage {

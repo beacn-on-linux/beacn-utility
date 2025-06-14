@@ -1,7 +1,6 @@
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::{draw_range, toggle_button};
-use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset::{
     Preset1, Preset2, Preset3, Preset4,

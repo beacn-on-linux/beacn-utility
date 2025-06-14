@@ -1,5 +1,4 @@
 use crate::ui::states::audio_state::BeacnAudioState;
-use beacn_lib::audio::BeacnAudioDevice;
 use egui::Ui;
 
 pub(crate) mod about;

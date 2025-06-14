@@ -4,18 +4,16 @@ use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner};
 use anyhow::Result;
 use anyhow::bail;
-use ashpd::desktop::background::Background;
 use beacn_lib::crossbeam::{channel, select};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
 use egui_winit::winit::platform::x11::WindowAttributesExtX11;
-use egui_winit::winit::window::{Icon, Window, WindowAttributes};
-use log::{LevelFilter, debug, error, warn};
+use egui_winit::winit::window::{Icon, Window};
+use log::{LevelFilter, debug, error};
 use managers::tray::handle_tray;
 use once_cell::sync::Lazy;
 use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
@@ -132,10 +130,6 @@ fn main() -> Result<()> {
         let _ = ipc_tx.send(ManagerMessages::SetContext(None));
         let _ = tray_tx.send(ManagerMessages::SetContext(None));
 
-        // Break for now, code is ready but not complete
-        //break;
-
-        #[allow(unreachable_code)]
         // Wait for a message to do stuff
         debug!("Window Closed, awaiting new Messages");
         loop {

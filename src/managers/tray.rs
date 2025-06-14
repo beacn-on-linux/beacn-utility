@@ -1,15 +1,13 @@
 use crate::window_handle::{UserEvent, send_user_event};
 use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
-use anyhow::{Result, bail};
-use beacn_lib::crossbeam;
-use beacn_lib::crossbeam::channel::{Receiver, RecvError, Sender};
+use anyhow::Result;
+use beacn_lib::crossbeam::channel::{Receiver, Sender};
 use beacn_lib::crossbeam::{channel, select};
-use egui::Context;
 use image::GenericImageView;
-use ksni::blocking::{Handle, TrayMethods};
+use ksni::blocking::TrayMethods;
 use ksni::menu::StandardItem;
-use ksni::{Category, Error, Icon, MenuItem, Status, ToolTip, Tray};
-use log::{debug, error, warn};
+use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray};
+use log::{debug, warn};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::{env, fs};
@@ -110,6 +108,8 @@ pub fn handle_tray(
     Ok(())
 }
 
+// TODO: The Icon may come back later.
+#[allow(unused)]
 struct TrayIcon {
     icon: PathBuf,
     tx: Sender<TrayMessages>,

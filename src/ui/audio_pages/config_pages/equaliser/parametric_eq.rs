@@ -1,7 +1,6 @@
 use crate::ui::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::ui::widgets::draw_draggable;
-use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::equaliser::EQBandType::{
     BellBand, HighPassFilter, HighShelf, LowPassFilter, LowShelf, NotSet, NotchFilter,
@@ -924,7 +923,7 @@ impl<'a> ParametricEq {
     }
 }
 
-enum ButtonPosition {
+pub enum ButtonPosition {
     First,
     Middle,
     Last,

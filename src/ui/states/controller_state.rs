@@ -1,4 +1,4 @@
-use crate::device_manager::{AudioMessage, ControlMessage, DeviceDefinition};
+use crate::device_manager::{ControlMessage, DeviceDefinition};
 use beacn_lib::crossbeam::channel::Sender;
 use crate::ui::states::{DeviceState, LoadState};
 

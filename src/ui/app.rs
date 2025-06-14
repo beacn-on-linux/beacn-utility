@@ -210,7 +210,8 @@ impl BeacnMicApp {
                 ui.separator();
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                // We need to check for errors later.
+                // This is identical to the above, except with a BeacnControllerState and ControllerPages
+                // There's probably a way we can simplify this :p
                 let device_state = self.control_device_list.get(&device).unwrap();
                 ui.add_space(5.0);
 
@@ -225,10 +226,14 @@ impl BeacnMicApp {
                     let selected = *active_device == device
                         && self.active_page == index
                         && !self.settings_active;
-                    if round_nav_button(ui, page.icon(), selected).clicked() {
-                        self.settings_active = false;
-                        self.active_device = Some(device.clone());
-                        self.active_page = index;
+
+                    let error = &device_state.device_state.state == &LoadState::ERROR;
+                    if page.show_on_error() == error {
+                        if round_nav_button(ui, page.icon(), selected).clicked() {
+                            self.settings_active = false;
+                            self.active_device = Some(device.clone());
+                            self.active_page = index;
+                        }
                     }
                 }
                 ui.add_space(5.0);

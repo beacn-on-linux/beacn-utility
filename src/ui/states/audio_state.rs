@@ -11,10 +11,8 @@ use beacn_lib::audio::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
-use beacn_lib::manager::DeviceType;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
-use std::panic;
 
 use crate::device_manager::{AudioMessage, DeviceDefinition};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;

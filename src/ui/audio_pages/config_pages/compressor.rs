@@ -6,7 +6,6 @@ use beacn_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
 };
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::BeacnAudioDevice;
 use beacn_lib::types::{MakeUpGain, TimeFrame};
 use egui::Ui;
 use strum::IntoEnumIterator;
