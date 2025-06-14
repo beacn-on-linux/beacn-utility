@@ -161,9 +161,9 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                 Err(_) => break,
             },
             i if i == keepalive_index => match controller_keepalive.recv() {
-                Ok(()) => {
+                Ok(_) => {
                     debug!("Sending KeepAlive");
-                    for device in receiver_map {
+                    for device in &receiver_map {
                         if let DeviceMap::Control(device, _, _) = device {
                             let _ = device.send_keepalive();
                         }
