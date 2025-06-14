@@ -16,18 +16,20 @@ use crate::device_manager::DeviceMessage::DeviceRemoved;
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
-use beacn_lib::controller::{BeacnControlDevice, open_control_device};
+use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
+use beacn_lib::crossbeam::channel::{Receiver, RecvError, Select, Sender, tick};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
+use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
+use log::{debug, error};
 use std::collections::HashMap;
 use std::panic;
 use std::panic::catch_unwind;
-use log::debug;
+use std::time::{Duration, Instant};
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
@@ -36,6 +38,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     // We need a hashmap that'll map a receiver to an object
     let mut receiver_map: Vec<DeviceMap> = vec![];
     let mut context = None;
+
+    let controller_keepalive = tick(Duration::from_secs(10));
 
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
     loop {
@@ -48,6 +52,9 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
         // Next, the hotplug receiver
         let hotplug_index = selector.recv(&plug_rx);
+
+        // Now the Keepalive ticker
+        let keepalive_index = selector.recv(&controller_keepalive);
 
         // Finally, we'll follow up with the 'known' devices, we'll map the crossbeam index with
         // their index in the receiver_map.
@@ -151,7 +158,21 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                     }
                     HotPlugMessage::ThreadStopped => break,
                 },
-                Err(e) => break,
+                Err(_) => break,
+            },
+            i if i == keepalive_index => match controller_keepalive.recv() {
+                Ok(()) => {
+                    debug!("Sending KeepAlive");
+                    for device in receiver_map {
+                        if let DeviceMap::Control(device, _, _) = device {
+                            let _ = device.send_keepalive();
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("KeepAlive Poller Failed, {}", e);
+                    break;
+                }
             },
             i => {
                 // Find the specific device for this index
@@ -178,11 +199,26 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     }
                                 }
                             }
-                            DeviceMap::Control(dev, def, rx) => {
-                                // Mix / Mix Create messages are going to be more interesting, rather than being able to
-                                // directly send messages, we need to pass the message into the management thread.
-
-                                let msg = operation.recv(rx);
+                            DeviceMap::Control(dev, _, rx) => {
+                                if let Ok(msg) = operation.recv(rx) {
+                                    match msg {
+                                        ControlMessage::SendImage(img, x, y, tx) => {
+                                            let _ = tx.send(dev.set_image(x, y, &img));
+                                        }
+                                        ControlMessage::DisplayBrightness(brightness, tx) => {
+                                            let _ = tx.send(dev.set_display_brightness(brightness));
+                                        }
+                                        ControlMessage::ButtonBrightness(brightness, tx) => {
+                                            let _ = tx.send(dev.set_button_brightness(brightness));
+                                        }
+                                        ControlMessage::DimTimeout(timeout, tx) => {
+                                            let _ = tx.send(dev.set_dim_timeout(timeout));
+                                        }
+                                        ControlMessage::ButtonColour(button, colour, tx) => {
+                                            let _ = tx.send(dev.set_button_colour(button, colour));
+                                        }
+                                    };
+                                }
                             }
                         }
                     }
@@ -225,7 +261,13 @@ pub enum AudioMessage {
     Handle(Message, oneshot::Sender<Result<Message>>),
 }
 
-pub enum ControlMessage {}
+pub enum ControlMessage {
+    SendImage(Vec<u8>, u32, u32, Sender<Result<()>>),
+    DisplayBrightness(u8, Sender<Result<()>>),
+    ButtonBrightness(u8, Sender<Result<()>>),
+    DimTimeout(Duration, Sender<Result<()>>),
+    ButtonColour(ButtonLighting, RGBA, Sender<Result<()>>),
+}
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DeviceDefinition {
