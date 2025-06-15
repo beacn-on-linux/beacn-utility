@@ -39,7 +39,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     let mut receiver_map: Vec<DeviceMap> = vec![];
     let mut context = None;
 
-    let controller_keepalive = tick(Duration::from_secs(10));
+    let keepalive = tick(Duration::from_secs(10));
 
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
     loop {
@@ -54,7 +54,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
         let hotplug_index = selector.recv(&plug_rx);
 
         // Now the Keepalive ticker
-        let keepalive_index = selector.recv(&controller_keepalive);
+        let keepalive_index = selector.recv(&keepalive);
 
         // Finally, we'll follow up with the 'known' devices, we'll map the crossbeam index with
         // their index in the receiver_map.
@@ -69,6 +69,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
         // Run the Selector
         let operation = selector.select();
+
+        debug!("{:?}", operation.index());
 
         // Ok, something's triggered us in some way, find out what.
         match operation.index() {
@@ -160,9 +162,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                 },
                 Err(_) => break,
             },
-            i if i == keepalive_index => match controller_keepalive.recv() {
-                Ok(_) => {
-                    debug!("Sending KeepAlive");
+            i if i == keepalive_index => match operation.recv(&keepalive) {
+                Ok(_instant) => {
                     for device in &receiver_map {
                         if let DeviceMap::Control(device, _, _) = device {
                             let _ = device.send_keepalive();
