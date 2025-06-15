@@ -70,8 +70,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
         // Run the Selector
         let operation = selector.select();
 
-        debug!("{:?}", operation.index());
-
         // Ok, something's triggered us in some way, find out what.
         match operation.index() {
             i if i == self_index => {
