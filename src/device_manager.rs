@@ -85,22 +85,24 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                     HotPlugMessage::DeviceAttached(location, device_type) => {
                         match device_type {
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                                let device = match open_audio_device(location) {
-                                    Ok(d) => d,
+                                let (device, state) = match open_audio_device(location) {
+                                    Ok(d) => (Some(d), DefinitionState::Running),
+                                    Err(e) => (None, DefinitionState::Error(String::from(e))),
+                                };
 
-                                    // TODO: We should have some kinda 'Failed' state
-                                    // It's important to let the App know that we are aware that a
-                                    // device exists, but isn't functional.
-                                    Err(e) => panic!("Failed to Open Device: {}", e),
+                                let (serial, version) = match &device {
+                                    Some(d) => (d.get_serial(), d.get_version()),
+                                    None => ("Unknown".to_string(), "Unknown".to_string()),
                                 };
 
                                 // Firstly, build the device definition
                                 let data = DeviceDefinition {
+                                    state,
                                     location,
                                     device_type,
                                     device_info: DeviceInfo {
-                                        serial: device.get_serial(),
-                                        version: VersionNumber::from(device.get_version()),
+                                        serial,
+                                        version: VersionNumber::from(version),
                                     },
                                 };
 
@@ -108,33 +110,42 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 let (tx, rx) = channel::unbounded();
 
                                 // Add this into our receiver array
-                                receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
+                                if let Some(device) = device {
+                                    receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
+                                }
+
                                 let arrived = DeviceArriveMessage::Audio(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
                                 let _ = event_tx.send(message);
                             }
                             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                                //continue;
                                 // This is relatively similar, but the code paths are different. In
                                 // the future, we'd be setting up button handlers, a pipeweaver
                                 // connection and management.
+                                let (device, state) = match open_control_device(location, None) {
+                                    Ok(d) => (Some(d), DefinitionState::Running),
+                                    Err(e) => (None, DefinitionState::Error(String::from(e))),
+                                };
 
-                                let device = match open_control_device(location, None) {
-                                    Ok(d) => d,
-                                    Err(e) => panic!("Failed to Open Device: {}", e),
+                                let (serial, version) = match &device {
+                                    Some(d) => (d.get_serial(), d.get_version()),
+                                    None => ("Unknown".to_string(), "Unknown".to_string()),
                                 };
 
                                 let data = DeviceDefinition {
+                                    state,
                                     location,
                                     device_type,
                                     device_info: DeviceInfo {
-                                        serial: device.get_serial(),
-                                        version: VersionNumber::from(device.get_version()),
+                                        serial,
+                                        version: VersionNumber::from(version),
                                     },
                                 };
 
                                 let (tx, rx) = channel::unbounded();
-                                receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
+                                if let Some(device) = device {
+                                    receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
+                                }
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
@@ -216,6 +227,9 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                         ControlMessage::ButtonColour(button, colour, tx) => {
                                             let _ = tx.send(dev.set_button_colour(button, colour));
                                         }
+                                        ControlMessage::Enabled(enabled, tx) => {
+                                            let _ = tx.send(dev.set_enabled(enabled));
+                                        }
                                     };
                                 }
                             }
@@ -261,6 +275,7 @@ pub enum AudioMessage {
 }
 
 pub enum ControlMessage {
+    Enabled(bool, Sender<Result<()>>),
     SendImage(Vec<u8>, u32, u32, Sender<Result<()>>),
     DisplayBrightness(u8, Sender<Result<()>>),
     ButtonBrightness(u8, Sender<Result<()>>),
@@ -270,6 +285,7 @@ pub enum ControlMessage {
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
 pub struct DeviceDefinition {
+    pub state: DefinitionState,
     pub location: DeviceLocation,
     pub device_type: DeviceType,
     pub device_info: DeviceInfo,
@@ -279,4 +295,11 @@ pub struct DeviceDefinition {
 pub struct DeviceInfo {
     pub serial: String,
     pub version: VersionNumber,
+}
+
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub enum DefinitionState {
+    #[default]
+    Running,
+    Error(String),
 }

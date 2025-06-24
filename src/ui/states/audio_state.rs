@@ -14,7 +14,7 @@ use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
-use crate::device_manager::{AudioMessage, DeviceDefinition};
+use crate::device_manager::{AudioMessage, DefinitionState, DeviceDefinition};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -207,6 +207,17 @@ impl BeacnAudioState {
         state.device_sender = Some(sender);
         state.device_state.state = LoadState::LOADING;
 
+        // Before we do anything else, is this definition in an error state?
+        if let DefinitionState::Error(error) = &state.device_definition.state {
+            state.device_state.state = LoadState::ERROR;
+            state.device_state.errors.push(ErrorMessage {
+                error_text: Some(format!("Failed to Open Device: {}", error)),
+                failed_message: None,
+            });
+
+            return state;
+        }
+
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
@@ -224,7 +235,6 @@ impl BeacnAudioState {
             }
         }
         state.device_state.state = LoadState::RUNNING;
-
         state
     }
 
