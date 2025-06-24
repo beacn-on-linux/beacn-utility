@@ -274,12 +274,12 @@ pub enum AudioMessage {
 }
 
 pub enum ControlMessage {
-    Enabled(bool, Sender<Result<()>>),
-    SendImage(Vec<u8>, u32, u32, Sender<Result<()>>),
-    DisplayBrightness(u8, Sender<Result<()>>),
-    ButtonBrightness(u8, Sender<Result<()>>),
-    DimTimeout(Duration, Sender<Result<()>>),
-    ButtonColour(ButtonLighting, RGBA, Sender<Result<()>>),
+    Enabled(bool, oneshot::Sender<Result<()>>),
+    SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<()>>),
+    DisplayBrightness(u8, oneshot::Sender<Result<()>>),
+    ButtonBrightness(u8, oneshot::Sender<Result<()>>),
+    DimTimeout(Duration, oneshot::Sender<Result<()>>),
+    ButtonColour(ButtonLighting, RGBA, oneshot::Sender<Result<()>>),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
