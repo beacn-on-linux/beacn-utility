@@ -19,7 +19,7 @@ use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, RecvError, Select, Sender, tick};
+use beacn_lib::crossbeam::channel::{Receiver, Select, Sender, tick};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
@@ -27,9 +27,8 @@ use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use log::{debug, error};
 use std::collections::HashMap;
-use std::panic;
 use std::panic::catch_unwind;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
@@ -87,7 +86,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                 let (device, state) = match open_audio_device(location) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(String::from(e))),
+                                    Err(e) => (None, DefinitionState::Error(e.to_string())),
                                 };
 
                                 let (serial, version) = match &device {
@@ -124,7 +123,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 // connection and management.
                                 let (device, state) = match open_control_device(location, None) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(String::from(e))),
+                                    Err(e) => (None, DefinitionState::Error(e.to_string())),
                                 };
 
                                 let (serial, version) = match &device {

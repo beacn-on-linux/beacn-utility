@@ -1,10 +1,6 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
-use crate::ui::audio_pages::AudioPage;
-use crate::ui::audio_pages::about::About;
-use crate::ui::audio_pages::config::Configuration;
-use crate::ui::audio_pages::error::ErrorPage;
-use crate::ui::audio_pages::lighting::LightingPage;
-use crate::ui::controller_pages;
+use crate::ui::app_settings::settings_ui;
+use crate::ui::{audio_pages, controller_pages};
 use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
@@ -16,7 +12,8 @@ use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
 use std::any::Any;
-use crate::ui::app_settings::settings_ui;
+use log::debug;
+use crate::ui::audio_pages::AudioPage;
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -44,13 +41,16 @@ impl BeacnMicApp {
             control_device_list: HashMap::default(),
 
             audio_pages: vec![
-                Box::new(Configuration::new()),
-                Box::new(LightingPage::new()),
-                Box::new(About::new()),
-                Box::new(ErrorPage::new()),
+                Box::new(audio_pages::config::Configuration::new()),
+                Box::new(audio_pages::lighting::LightingPage::new()),
+                Box::new(audio_pages::about::About::new()),
+                Box::new(audio_pages::error::ErrorPage::new()),
             ],
 
-            control_pages: vec![Box::new(controller_pages::about::About::new())],
+            control_pages: vec![
+                Box::new(controller_pages::about::About::new()),
+                Box::new(controller_pages::error::ErrorPage::new()),
+            ],
 
             device_recv,
             active_page: 0,
@@ -88,10 +88,18 @@ impl App for BeacnMicApp {
             .default_width(80.0)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
-                    for device in self.device_list.clone() {
+                    // Grab the device list, and reorder it based on type
+                    let mut devices = self.device_list.clone();
+                    devices.sort_by_key(|d| d.device_type);
+                    for device in devices {
                         self.draw_device_buttons(ui, device);
                     }
-                })
+                    ui.add_space(ui.available_height() - 55.0);
+                    ui.separator();
+                    if round_nav_button(ui, "gear", self.settings_active).clicked() {
+                        self.settings_active = true;
+                    }
+                });
             });
 
         // Render the main page
@@ -174,6 +182,7 @@ impl BeacnMicApp {
 
     fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
         if self.device_list.is_empty() || self.active_device.is_none() {
+            debug!("NOT DRAWING");
             return;
         }
 
@@ -197,6 +206,7 @@ impl BeacnMicApp {
                         && self.active_page == index
                         && !self.settings_active;
                     let error = &device_state.device_state.state == &LoadState::ERROR;
+
 
                     if page.show_on_error() == error {
                         if round_nav_button(ui, page.icon(), selected).clicked() {
@@ -239,11 +249,6 @@ impl BeacnMicApp {
                 ui.add_space(5.0);
                 ui.separator();
             }
-        }
-        ui.add_space(ui.available_height() - 55.0);
-        ui.separator();
-        if round_nav_button(ui, "gear", self.settings_active).clicked() {
-            self.settings_active = true;
         }
     }
 

@@ -1,6 +1,8 @@
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use egui::Ui;
+use crate::ui::controller_pages::ControllerPage;
+use crate::ui::states::controller_state::BeacnControllerState;
 
 pub struct ErrorPage {}
 
@@ -10,7 +12,7 @@ impl ErrorPage {
     }
 }
 
-impl AudioPage for ErrorPage {
+impl ControllerPage for ErrorPage {
     fn icon(&self) -> &'static str {
         "error"
     }
@@ -19,7 +21,7 @@ impl AudioPage for ErrorPage {
         true
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnControllerState) {
         ui.add_sized(
             [ui.available_width(), ui.available_height()],
             |ui: &mut Ui| {

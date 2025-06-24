@@ -1,4 +1,5 @@
 pub(crate) mod about;
+pub(crate) mod error;
 
 use crate::ui::states::controller_state::BeacnControllerState;
 use egui::Ui;
