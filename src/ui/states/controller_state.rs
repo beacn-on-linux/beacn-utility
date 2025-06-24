@@ -6,7 +6,6 @@ use beacn_lib::crossbeam::channel::Sender;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::Read;
 use std::time::Duration;
 use xdg::BaseDirectories;
 

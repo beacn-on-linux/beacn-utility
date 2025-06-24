@@ -90,6 +90,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             }
             i if i == lock_index => {
                 if let Ok(msg) = operation.recv(&login_rx) {
+                    debug!("Received Login State Message: {:?}", msg);
                     match msg {
                         LoginEventTriggers::Sleep(tx) => {
                             enable_devices(&receiver_map, false);
@@ -106,8 +107,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             enable_devices(&receiver_map, true);
                         }
                     }
-
-                    debug!("Received Login State Message: {:?}", msg);
                 }
             }
             i if i == hotplug_index => match operation.recv(&plug_rx) {
@@ -280,7 +279,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     debug!("Device Manager Stopped");
 }
 
-pub fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
+fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
         match device {
             DeviceMap::Control(dev, _, _) => {
