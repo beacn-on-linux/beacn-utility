@@ -28,11 +28,15 @@ use beacn_lib::version::VersionNumber;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
+use std::thread;
 use std::time::Duration;
+use crate::managers::login::{spawn_login_handler, LoginEventTriggers};
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
     let (manage_tx, manage_rx) = channel::unbounded();
+    let (login_tx, login_rx) = channel::bounded(5);
+    let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
     // We need a hashmap that'll map a receiver to an object
     let mut receiver_map: Vec<DeviceMap> = vec![];
@@ -41,6 +45,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     let keepalive = tick(Duration::from_secs(10));
 
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
+    thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
+
     loop {
         let mut selector = Select::new();
         // Ok, so when you add a receiver to a selector, it gets an index. This index lets us
@@ -48,6 +54,9 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
         // First, we'll add our own handler
         let self_index = selector.recv(&self_rx);
+
+        // Add the Lock Detector
+        let lock_index = selector.recv(&login_rx);
 
         // Next, the hotplug receiver
         let hotplug_index = selector.recv(&plug_rx);
@@ -77,6 +86,28 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                         ManagerMessages::SetContext(ctx) => context = ctx,
                         ManagerMessages::Quit => break,
                     }
+                }
+            }
+            i if i == lock_index => {
+                if let Ok(msg) = operation.recv(&login_rx) {
+                    match msg {
+                        LoginEventTriggers::Sleep(tx) => {
+                            enable_devices(&receiver_map, false);
+                            let _ = tx.send(());
+                        }
+                        LoginEventTriggers::Wake(tx) => {
+                            enable_devices(&receiver_map, true);
+                            let _ = tx.send(());
+                        }
+                        LoginEventTriggers::Lock => {
+                            enable_devices(&receiver_map, false);
+                        }
+                        LoginEventTriggers::Unlock => {
+                            enable_devices(&receiver_map, true);
+                        }
+                    }
+
+                    debug!("Received Login State Message: {:?}", msg);
                 }
             }
             i if i == hotplug_index => match operation.recv(&plug_rx) {
@@ -243,7 +274,21 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
         let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     }
 
+    // Stop the dbus login handler
+    let _ = login_stop_tx.blocking_send(());
+
     debug!("Device Manager Stopped");
+}
+
+pub fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
+    for device in receiver_map {
+        match device {
+            DeviceMap::Control(dev, _, _) => {
+                let _ = dev.set_enabled(enabled);
+            }
+            _ => {}
+        }
+    }
 }
 
 enum DeviceMap {

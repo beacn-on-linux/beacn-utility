@@ -119,7 +119,6 @@ impl BeacnControllerState {
         let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
         let config_file = xdg_dirs.place_config_file(file_name);
 
-        debug!("Attempting to save Config to {:?}", config_file);
         if let Ok(file) = config_file {
             if let Ok(file) = File::create(file) {
                 if let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings) {
@@ -131,7 +130,7 @@ impl BeacnControllerState {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct SavedSettings {
+pub struct SavedSettings {
     #[serde(deserialize_with = "validate_screen_percent")]
     pub display_brightness: u8,
 
