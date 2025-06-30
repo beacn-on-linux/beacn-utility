@@ -13,7 +13,7 @@ use egui::{
     Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
 use enum_map::EnumMap;
-use log::warn;
+use log::{debug, warn};
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
@@ -64,6 +64,10 @@ static EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
 
 /// Widget for parametric equalizer visualization
 pub struct ParametricEq {
+    // The current serial that this EQ represents
+    serial: Option<String>,
+
+
     // The current Equaliser Mode
     eq_mode: EQMode,
 
@@ -83,6 +87,8 @@ pub struct ParametricEq {
 impl<'a> ParametricEq {
     pub(crate) fn new() -> Self {
         Self {
+            serial: None,
+
             eq_mode: EQMode::Simple,
 
             band_freq_response: Default::default(),
@@ -98,6 +104,26 @@ impl<'a> ParametricEq {
 
     /// Shows the parametric equalizer in the UI
     pub fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) -> Response {
+        // Are we rendering this for the current serial?
+        if let Some(serial) = &self.serial {
+            let serial = serial.clone();
+            if serial != state.device_definition.device_info.serial {
+                debug!("Resetting EQ for New Device: {}", serial);
+                // If the serial doesn't match, we need to reset the widget
+                self.serial = Some(state.device_definition.device_info.serial.clone());
+                self.eq_mode = state.equaliser.mode;
+                self.band_freq_response = Default::default();
+                self.band_mesh = Default::default();
+                self.curve_points.clear();
+                self.rect = Rect::NOTHING;
+                self.active_band = EQBand::Band1;
+                self.active_band_drag = None;
+            }
+        } else {
+            self.serial = Some(state.device_definition.device_info.serial.clone());
+        }
+
+
         let mode = state.equaliser.mode;
         let mut bands = state.equaliser.bands[state.equaliser.mode];
 
