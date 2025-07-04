@@ -1,11 +1,11 @@
-use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::audio_pages::config_pages::{ConfigPage, map_to_range};
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::{draw_range, get_slider, toggle_button};
+use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
 use beacn_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
 };
-use beacn_lib::audio::messages::Message;
 use beacn_lib::types::{MakeUpGain, TimeFrame};
 use egui::Ui;
 use strum::IntoEnumIterator;
@@ -43,12 +43,12 @@ impl ConfigPage for CompressorPage {
 
                         if ui.add_sized([105., 20.], s).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Simple));
-                            state.handle_message(msg).expect("Failed to Send Message");
+                            state.handle_message(msg).expect("Failed");
                             comp.mode = Simple;
                         }
                         if ui.add_sized([105., 20.], a).clicked() {
                             let msg = Message::Compressor(Compressor::Mode(Advanced));
-                            state.handle_message(msg).expect("Failed to Send Message");
+                            state.handle_message(msg).expect("Failed");
                             comp.mode = Advanced;
                         }
                     });
@@ -60,20 +60,27 @@ impl ConfigPage for CompressorPage {
                     if s.changed() {
                         let value = CompressorThreshold(values.threshold as f32);
                         let msg = Message::Compressor(Compressor::Threshold(comp.mode, value));
-                        state.handle_message(msg).expect("Failed to Send Message");
+                        state.handle_message(msg).expect("Failed");
                     }
 
                     ui.add_space(5.);
                     if comp.mode == Simple {
                         ui.horizontal_centered(|ui| {
-                            // TODO: This should technically be 'Amount'
-                            // We're using ratio here because that's the value that's changed, but I
-                            // don't know the calculation to get from a percent to a ratio
-                            let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 0.0..=10.0);
+                            // Map the ratio to an amount
+                            let amount = map_to_range(values.ratio, 1.0, 10.0, 0.0, 10.0);
+                            let mut amount = amount.round() as u8;
+
+                            let s = get_slider(ui, "Amount", "", &mut amount, 0..=10);
                             if s.changed() {
+                                let ratio = map_to_range(amount as f32, 0.0, 10.0, 1.0, 10.0);
+
+                                // Round the ratio to 2 decimal places, and store it
+                                values.ratio = (ratio * 100.0).round() / 100.0;
+
+                                // Send it
                                 let ratio = CompressorRatio(values.ratio);
                                 let message = Message::Compressor(Compressor::Ratio(Simple, ratio));
-                                state.handle_message(message).expect("Failed to Send Message");
+                                state.handle_message(message).expect("Failed");
                             }
                         });
                     } else if comp.mode == Advanced {
@@ -81,7 +88,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let ratio = CompressorRatio(values.ratio);
                             let message = Message::Compressor(Compressor::Ratio(Advanced, ratio));
-                            state.handle_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed");
                         }
 
                         ui.add_space(5.);
@@ -90,7 +97,7 @@ impl ConfigPage for CompressorPage {
                         if s.changed() {
                             let attack = TimeFrame(values.attack as f32);
                             let message = Message::Compressor(Compressor::Attack(Advanced, attack));
-                            state.handle_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed");
                         }
 
                         ui.add_space(5.);
@@ -100,7 +107,7 @@ impl ConfigPage for CompressorPage {
                             let release = TimeFrame(values.release as f32);
                             let message =
                                 Message::Compressor(Compressor::Release(Advanced, release));
-                            state.handle_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed");
                         }
                     }
                 });
@@ -110,7 +117,7 @@ impl ConfigPage for CompressorPage {
             if draw_range(ui, &mut values.makeup, 0.0..=12.0, "Make-up Gain", "dB") {
                 let makeup = MakeUpGain(values.makeup);
                 let message = Message::Compressor(Compressor::MakeupGain(comp.mode, makeup));
-                state.handle_message(message).expect("Failed to Send Message");
+                state.handle_message(message).expect("Failed");
             }
         });
     }

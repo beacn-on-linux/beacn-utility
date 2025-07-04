@@ -1,4 +1,4 @@
-use crate::ui::audio_pages::config_pages::ConfigPage;
+use crate::ui::audio_pages::config_pages::{ConfigPage, map_to_range};
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::{get_slider, toggle_button};
 use beacn_lib::audio::messages::Message;
@@ -28,7 +28,7 @@ impl ConfigPage for ExpanderPage {
                 if ui.checkbox(&mut values.enabled, "Enabled").changed() {
                     for mode in ExpanderMode::iter() {
                         let message = Message::Expander(Expander::Enabled(mode, values.enabled));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                     }
                 }
 
@@ -40,12 +40,12 @@ impl ConfigPage for ExpanderPage {
 
                     if ui.add_sized([105., 20.], s).clicked() {
                         let message = Message::Expander(Expander::Mode(Simple));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                         expander.mode = Simple;
                     }
                     if ui.add_sized([105., 20.], a).clicked() {
                         let message = Message::Expander(Expander::Mode(Advanced));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                         expander.mode = Advanced;
                     }
                 });
@@ -56,21 +56,39 @@ impl ConfigPage for ExpanderPage {
                 if s.changed() {
                     let value = ExpanderThreshold(values.threshold as f32);
                     let message = Message::Expander(Expander::Threshold(expander.mode, value));
-                    state.handle_message(message).expect("Failed to Send Message");
+                    state.handle_message(message).expect("Failed");
                 }
 
                 ui.add_space(5.);
 
                 if expander.mode == Simple {
                     ui.horizontal_centered(|ui| {
-                        // TODO: This should technically be 'Amount'
-                        // We're using ratio here because that's the value that's changed, but I
-                        // don't know the calculation to get from a percent to a ratio
-                        let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 0.0..=10.0);
+                        // Shoutout to Beacn for helping out with how this maps, between 0 and 50%
+                        // the ratio is mapped between 1 and 3, and between 51 and 100% it is mapped
+                        // between 3.1 and 10.0, so we can grab the amount here.
+                        let mut amount = if values.ratio <= 3.0 {
+                            map_to_range(values.ratio, 1.0, 3.0, 0.0, 50.0)
+                        } else {
+                            map_to_range(values.ratio, 3.1, 10.0, 50.1, 100.0)
+                        }
+                        .round() as u8;
+
+                        let s = get_slider(ui, "Amount", "%", &mut amount, 0..=100);
                         if s.changed() {
+                            // Now do the reverse, update the ratio based on the amount
+                            let ratio = if amount <= 50 {
+                                map_to_range(amount as f32, 0.0, 50.0, 1.0, 3.0)
+                            } else {
+                                map_to_range(amount as f32, 51.0, 100.0, 3.1, 10.0)
+                            };
+
+                            // Round to 2 decimal places, and store in the state
+                            values.ratio = (ratio * 100.0).round() / 100.0;
+
+                            // Send it
                             let value = ExpanderRatio(values.ratio);
                             let message = Message::Expander(Expander::Ratio(Simple, value));
-                            state.handle_message(message).expect("Failed to Send Message");
+                            state.handle_message(message).expect("Failed");
                         }
                     });
                 } else if expander.mode == Advanced {
@@ -78,7 +96,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = ExpanderRatio(values.ratio);
                         let message = Message::Expander(Expander::Ratio(Simple, value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                     }
 
                     ui.add_space(5.);
@@ -87,7 +105,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.attack as f32);
                         let message = Message::Expander(Expander::Attack(Advanced, value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                     }
 
                     ui.add_space(5.);
@@ -96,7 +114,7 @@ impl ConfigPage for ExpanderPage {
                     if s.changed() {
                         let value = TimeFrame(values.release as f32);
                         let message = Message::Expander(Expander::Release(Advanced, value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state.handle_message(message).expect("Failed");
                     }
                 }
             });
