@@ -4,7 +4,7 @@ runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-command: beacn-mic-ui
+command: beacn-utility
 
 finish-args:
   # Device Access (USB for the Beacn Hardware, dri for OpenGL Rendering)
