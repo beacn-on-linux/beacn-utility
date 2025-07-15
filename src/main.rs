@@ -22,6 +22,7 @@ mod device_manager;
 mod managers;
 mod ui;
 mod window_handle;
+mod integrations;
 
 const APP_TLD: &str = "com.github.beacn-on-linux";
 const APP_NAME: &str = "beacn-mic-ui";

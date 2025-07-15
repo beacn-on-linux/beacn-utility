@@ -224,6 +224,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         });
                     } else {
                         debug!("Running Outside Flatpak, manually handling");
+                        // TODO: I have the XDG crate, I can locate this automatically
+
                         let attempt = match get_autostart_file() {
                             Ok(path) => {
                                 if path.exists() && fs::remove_file(path.clone()).is_err() {

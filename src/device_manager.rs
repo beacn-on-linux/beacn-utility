@@ -30,6 +30,7 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
+use crate::integrations::pipeweaver::perform_test_render;
 use crate::managers::login::{spawn_login_handler, LoginEventTriggers};
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
@@ -175,6 +176,11 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 if let Some(device) = device {
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
+
+                                let img_tx = tx.clone();
+                                thread::spawn(move || {
+                                    perform_test_render(img_tx);
+                                });
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
