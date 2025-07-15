@@ -3,7 +3,7 @@
   <id>com.github.beacn-on-linux</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license> <!-- or whatever your license is -->
-  <name>Beacn Linux UI</name>
+  <name>Beacn Utility</name>
   <summary>Unofficial control interface for Beacn devices</summary>
   <description>
     <p>
@@ -11,8 +11,8 @@
     </p>
   </description>
   <launchable type="desktop-id">com.github.beacn-on-linux.desktop</launchable>
-  <url type="homepage">https://github.com/beacn-on-linux/beacn-mic-ui</url>
-  <url type="bugtracker">https://github.com/beacn-on-linux/beacn-mic-ui/issues</url>
+  <url type="homepage">https://github.com/beacn-on-linux/beacn-utility</url>
+  <url type="bugtracker">https://github.com/beacn-on-linux/beacn-utility/issues</url>
   <categories>
     <category>Audio</category>
     <category>AudioVideo</category>
