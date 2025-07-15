@@ -377,7 +377,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "beacn-utility"
+name = "beacn-mic-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
