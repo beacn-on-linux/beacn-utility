@@ -24,8 +24,8 @@ mod ui;
 mod window_handle;
 mod integrations;
 
-const APP_TLD: &str = "com.github.beacn-on-linux";
-const APP_NAME: &str = "beacn-mic-ui";
+const APP_TLD: &str = "io.github.beacn-on-linux";
+const APP_NAME: &str = "beacn-utility";
 const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");

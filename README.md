@@ -1,13 +1,13 @@
-# Beacn Mic / Beacn Studio UI for Linux
+# Beacn Utility for Linux
 
-A UI for configuring the Beacn Mic or Beacn Studio on Linux. Join us on [Discord](https://discord.gg/PdsscuEhMh).
+A UI for configuring and using the Beacn hardware on Linux. Join us on [Discord](https://discord.gg/PdsscuEhMh).
 
 ***
 
 ### USE AT YOUR OWN RISK
 
-This code directly modifies the on-board storage of the Beacn Device. While it's been tested and made to be as safe as
-is possible, it was derived from reverse engineering and thus may not be accurate.
+This code directly modifies the on-board storage of the Beacn Mic and Studio. While it's been tested and made to
+be as safe as is possible, it was derived from reverse engineering and thus may not be accurate.
 
 This project is not supported by, or affiliated in any way with Beacn. For official Beacn software, please refer
 to their website.
@@ -18,24 +18,26 @@ which may occur from its use. Please read the LICENSE for more information.
 ***
 ![img.png](.github/resources/img.png)
 
-Currently, this tool is quite barebones and basic and is likely going to stay that way, it's just for adjusting
-values on the Mic or Studio. This app may also might be slightly buggy, so expect issues. The Beacn Mic and Studio have
-on-board storage so values changed here should persist across device reboots.
+Currently, this tool is quite barebones and basic and is likely going to stay that way, it's primary goal is to provide
+a way to adjust the DSP values of the Mic or Studio. Outside of rendering a test image, Mix and Mix Create support is
+mostly absent. This app is still quite new, so may also might be slightly buggy, expect issues.
 ***
 
 ## Getting Started
 
 ### Setting Up Beacn Devices on Linux
 
-These steps need to be followed, regardless of which compilation method you choose.
+The steps taken to set up Beacn Devices depend on the current package version of your distribution.
 
-1) Install the [ALSA UCM profiles](https://github.com/beacn-on-linux/beacn-ucm-profiles) for the Beacn Hardware.
-2) Copy `50-beacn-mic.rules` from this repository to `/etc/udev/rules.d/`
-3) Run `sudo udevadm control --reload-rules && sudo udevadm trigger`
-4) Unplug, then re-plug your Beacn Mic
+If you are running a `systemd` version older than 257.7, perform the following steps:
+1) Copy `50-beacn-mic.rules` from this repository to `/etc/udev/rules.d/`
+2) Run `sudo udevadm control --reload-rules && sudo udevadm trigger` 
 
-Once that's done, your Beacn Mic should show up with a 'Headphones' and 'Microphone' channel.
+If you are running an `alsa-ucm-conf` version older than 1.2.15, and are using a Beacn Mic or Beacn Studio:
+1) Manually install the [ALSA UCM profiles](https://github.com/beacn-on-linux/beacn-ucm-profiles) for the Beacn Hardware.
 
+If you've needed to perform any of the above, unplug and replug your beacn device. For the Mic and Studio, you should
+now see properly allocated Microphone / Headphone channels in your audio settings.
 ***
 
 ## Compiling From Source
@@ -51,7 +53,7 @@ If you instead want to build the app and have a useful binary you can link to:
 
 1) Check out this repository
 2) Run `cargo build --release`
-3) Grab `target/release/beacn-mic-ui`
+3) Grab `target/release/beacn-utility`
 
 ***
 

@@ -23,16 +23,16 @@ finish-args:
   - --filesystem=xdg-config/autostart:ro
 
 modules:
-  - name: beacn-mic-ui
+  - name: beacn-utility
     buildsystem: simple
     build-options:
       append-path: /usr/lib/sdk/rust-stable/bin
       env:
-        CARGO_HOME: /run/build/beacn-mic-ui/cargo
+        CARGO_HOME: /run/build/beacn-utility/cargo
     build-commands:
       - cargo --offline fetch --locked --verbose
       - cargo --offline build --release --verbose
-      - install -Dm755 ./target/release/beacn-mic-ui -t /app/bin/
+      - install -Dm755 ./target/release/beacn-utility -t /app/bin/
       - install -Dm644 resources/flatpak/com.github.beacn-on-linux.metainfo.xml /app/share/metainfo/com.github.beacn-on-linux.metainfo.xml
       - install -Dm644 resources/flatpak/com.github.beacn-on-linux.desktop /app/share/applications/com.github.beacn-on-linux.desktop
       - install -Dm644 resources/icons/beacn-utility.svg /app/share/icons/hicolor/scalable/apps/com.github.beacn-on-linux.svg
