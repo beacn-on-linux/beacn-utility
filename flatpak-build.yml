@@ -18,6 +18,9 @@ finish-args:
   # System tray icon
   - --talk-name=org.kde.StatusNotifierWatcher
 
+  # Watch for Lock / Unlock events
+  - --system-talk-name=org.freedesktop.login1
+
   # Ability to check whether an autostart entry is present
   # This is needed because there's no way to check via a portal
   - --filesystem=xdg-config/autostart:ro
