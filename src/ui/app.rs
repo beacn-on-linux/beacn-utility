@@ -167,12 +167,12 @@ impl BeacnMicApp {
                         if active_device == definition {
                             if self.device_list.is_empty() {
                                 self.active_device = None;
+                            } else {
+                                // Reset the State, set the active device as the first device
+                                let first = self.device_list.first().unwrap();
+                                self.active_device = Some(first.clone());
+                                self.active_page = 0;
                             }
-
-                            // Reset the State, set the active device as the first device
-                            let first = self.device_list.first().unwrap();
-                            self.active_device = Some(first.clone());
-                            self.active_page = 0;
                         }
                     }
                 }
