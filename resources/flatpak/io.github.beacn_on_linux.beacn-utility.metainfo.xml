@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.github.beacn-on-linux</id>
+  <id>io.github.beacn_on_linux.beacn-utility</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license> <!-- or whatever your license is -->
   <name>Beacn Utility</name>
@@ -10,7 +10,7 @@
       A graphical user interface for controlling Beacn devices on Linux.
     </p>
   </description>
-  <launchable type="desktop-id">com.github.beacn-on-linux.desktop</launchable>
+  <launchable type="desktop-id">io.github.beacn_on_linux.beacn-utility.desktop</launchable>
   <url type="homepage">https://github.com/beacn-on-linux/beacn-utility</url>
   <url type="bugtracker">https://github.com/beacn-on-linux/beacn-utility/issues</url>
   <categories>

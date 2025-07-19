@@ -24,7 +24,7 @@ mod ui;
 mod window_handle;
 mod integrations;
 
-const APP_TLD: &str = "io.github.beacn-on-linux";
+const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
 const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
@@ -84,11 +84,15 @@ fn main() -> Result<()> {
     let mut event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx.clone()));
 
+    // Under KDE at least, it expects the window class to be both the TLD and the name in order
+    // to look for the icon in the right place.
+    let resource_class = format!("{}.{}", APP_TLD, APP_NAME);
+
     let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(ICON)))
         .with_inner_size(LogicalSize::new(1024, 500))
-        .with_name(APP_TLD, APP_NAME)
+        .with_name(resource_class, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
     'mainloop: loop {
@@ -170,7 +174,7 @@ fn main() -> Result<()> {
                         }
                     }
                 }
-            };
+            }
         }
     }
 
