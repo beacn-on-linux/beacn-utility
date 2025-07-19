@@ -30,7 +30,7 @@ mostly absent. This app is still quite new, so may also might be slightly buggy,
 The steps taken to set up Beacn Devices depend on the current package version of your distribution.
 
 If you are running a `systemd` version older than 257.7, perform the following steps:
-1) Copy `50-beacn-mic.rules` from this repository to `/etc/udev/rules.d/`
+1) Copy `50-beacn.rules` from this repository to `/etc/udev/rules.d/`
 2) Run `sudo udevadm control --reload-rules && sudo udevadm trigger` 
 
 If you are running an `alsa-ucm-conf` version older than 1.2.15, and are using a Beacn Mic or Beacn Studio:
