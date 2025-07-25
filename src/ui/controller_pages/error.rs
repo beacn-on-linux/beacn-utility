@@ -1,6 +1,6 @@
-use egui::Ui;
 use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::controller_state::BeacnControllerState;
+use egui::Ui;
 
 pub struct ErrorPage {}
 

@@ -13,6 +13,8 @@
 */
 use crate::ManagerMessages;
 use crate::device_manager::DeviceMessage::DeviceRemoved;
+use crate::integrations::pipeweaver::perform_test_render;
+use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
@@ -30,8 +32,6 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
-use crate::integrations::pipeweaver::perform_test_render;
-use crate::managers::login::{spawn_login_handler, LoginEventTriggers};
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();

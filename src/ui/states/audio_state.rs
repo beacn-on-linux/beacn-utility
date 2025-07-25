@@ -15,6 +15,7 @@ use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
 use crate::device_manager::{AudioMessage, DefinitionState, DeviceDefinition};
+use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -28,7 +29,6 @@ use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::crossbeam::channel::Sender;
-use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 
 type Rgb = [u8; 3];
 
@@ -206,10 +206,10 @@ impl BeacnAudioState {
             device_definition: definition,
             device_state: DeviceState {
                 state: LoadState::Loading,
-                .. Default::default()
+                ..Default::default()
             },
             device_sender: Some(sender),
-            .. Default::default()
+            ..Default::default()
         };
 
         // let mut state = Self::default();

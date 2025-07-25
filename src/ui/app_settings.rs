@@ -1,6 +1,6 @@
+use crate::AUTO_START_KEY;
 use crate::window_handle::{UserEvent, send_user_event};
 use egui::{Context, Id, Ui};
-use crate::AUTO_START_KEY;
 
 pub(crate) fn settings_ui(ui: &mut Ui, context: &Context) {
     // Get the Auto-start state from the context

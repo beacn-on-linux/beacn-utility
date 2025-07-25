@@ -80,7 +80,7 @@ impl ConfigPage for NoiseSuppressionPage {
                     // This doesn't work, but we're going to need to handle it differently anyway
                     ui.add_sized(
                         [220.0, 0.],
-                        Button::selectable(true, "Snapshot Not Supported")
+                        Button::selectable(true, "Snapshot Not Supported"),
                     );
                 }
             });

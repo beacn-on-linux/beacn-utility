@@ -1,16 +1,16 @@
+use crate::ui::audio_pages::AudioPage;
+use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::audio_pages::config_pages::compressor::CompressorPage;
 use crate::ui::audio_pages::config_pages::equaliser::parametric_eq::ParametricEq;
 use crate::ui::audio_pages::config_pages::expander::ExpanderPage;
 use crate::ui::audio_pages::config_pages::headphones::HeadphonesPage;
 use crate::ui::audio_pages::config_pages::mic_setup::MicSetupPage;
 use crate::ui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
-use crate::ui::audio_pages::config_pages::ConfigPage;
-use crate::ui::audio_pages::AudioPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::draw_range;
 use beacn_lib::audio::messages::headphones::HPMicOutputGain;
 use beacn_lib::types::HasRange;
-use egui::{vec2, Ui};
+use egui::{Ui, vec2};
 
 pub struct Configuration {
     equaliser_new: Box<ParametricEq>,

@@ -1,3 +1,4 @@
+use crate::ui::SVG;
 use crate::ui::audio_pages::config_pages::equaliser::equaliser_util::{BiquadCoefficient, EQUtil};
 use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand};
 use crate::ui::widgets::draw_draggable;
@@ -17,7 +18,6 @@ use log::{debug, warn};
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
-use crate::ui::SVG;
 
 type Bands = EnumMap<EQBand, EqualiserBand>;
 
@@ -66,7 +66,6 @@ static EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
 pub struct ParametricEq {
     // The current serial that this EQ represents
     serial: Option<String>,
-
 
     // The current Equaliser Mode
     eq_mode: EQMode,
@@ -122,7 +121,6 @@ impl ParametricEq {
         } else {
             self.serial = Some(state.device_definition.device_info.serial.clone());
         }
-
 
         let mode = state.equaliser.mode;
         let mut bands = state.equaliser.bands[state.equaliser.mode];

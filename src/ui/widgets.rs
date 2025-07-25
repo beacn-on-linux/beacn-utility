@@ -1,9 +1,11 @@
+use crate::ui::SVG;
 use crate::ui::numbers::NumericType;
 use egui::emath::Numeric;
-use egui::{vec2, Align, Color32, DragValue, ImageButton, Layout, Response, RichText, Slider, Ui, Visuals};
+use egui::{
+    Align, Color32, DragValue, ImageButton, Layout, Response, RichText, Slider, Ui, Visuals, vec2,
+};
 use std::fmt::Debug;
 use std::ops::RangeInclusive;
-use crate::ui::SVG;
 
 pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     let tint_colour = if active {
@@ -25,7 +27,7 @@ pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
                 .selected(active),
         )
     })
-        .inner
+    .inner
 }
 
 pub fn draw_range<T>(

@@ -3,12 +3,12 @@ use egui::{ImageSource, include_image};
 use once_cell::sync::Lazy;
 
 pub(crate) mod app;
+mod app_settings;
 mod audio_pages;
 mod controller_pages;
+mod numbers;
 mod states;
 mod widgets;
-mod numbers;
-mod app_settings;
 
 // SVG Images
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {

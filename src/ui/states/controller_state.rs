@@ -24,7 +24,7 @@ impl BeacnControllerState {
         let mut state = BeacnControllerState {
             device_definition: definition,
             device_sender: Some(sender),
-            .. Default::default()
+            ..Default::default()
         };
 
         // Before we do anything else, is this definition in an error state?

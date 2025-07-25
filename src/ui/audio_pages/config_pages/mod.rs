@@ -14,7 +14,9 @@ pub trait ConfigPage {
 }
 
 /// Maps a value from one range to another.
-fn map_to_range<T>(value: T, value_min: T, value_max: T, target_min: T, target_max: T) -> f32 where T: Into<f32>
+fn map_to_range<T>(value: T, value_min: T, value_max: T, target_min: T, target_max: T) -> f32
+where
+    T: Into<f32>,
 {
     let value = value.into();
     let value_min = value_min.into();

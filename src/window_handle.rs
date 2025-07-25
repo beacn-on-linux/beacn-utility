@@ -1,7 +1,7 @@
-use crate::{get_autostart_file, run_async, APP_NAME, AUTO_START_KEY};
-use anyhow::{anyhow, Result};
-use ashpd::desktop::background::Background;
+use crate::{APP_NAME, AUTO_START_KEY, get_autostart_file, run_async};
+use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
+use ashpd::desktop::background::Background;
 use egui::Id;
 use egui_glow::glow;
 use egui_glow::glow::HasContext;

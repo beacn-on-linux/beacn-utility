@@ -62,12 +62,13 @@ impl ControllerPage for About {
         ui.separator();
         ui.add_space(5.0);
 
-
         ui.horizontal(|ui| {
             ui.label("Display Brightness: ");
 
             let mut display_brightness = state.saved_settings.display_brightness;
-            let slider = Slider::new(&mut display_brightness, 1..=100).suffix("%").trailing_fill(true);
+            let slider = Slider::new(&mut display_brightness, 1..=100)
+                .suffix("%")
+                .trailing_fill(true);
             if ui.add(slider).changed() {
                 let _ = state.set_display_brightness(display_brightness, true);
             }

@@ -48,7 +48,9 @@ impl ConfigPage for MicSetupPage {
                     }
                     _ => panic!("This shouldn't happen"),
                 };
-                state.handle_message(message).expect("Failed to Send Message");
+                state
+                    .handle_message(message)
+                    .expect("Failed to Send Message");
             }
 
             ui.add_space(spacing);
@@ -59,7 +61,9 @@ impl ConfigPage for MicSetupPage {
             if draw_range(ui, &mut de_esser.amount, 0..=100, "De-Esser", "%") {
                 let value = Percent(de_esser.amount as f32);
                 let message = Message::DeEsser(DeEsser::Amount(value));
-                state.handle_message(message).expect("Failed to Send Message");
+                state
+                    .handle_message(message)
+                    .expect("Failed to Send Message");
                 debug!("DeEsser Change: {}", de_esser.amount);
             }
 
@@ -144,7 +148,9 @@ impl ConfigPage for MicSetupPage {
                     if draw_range(ui, &mut bass.amount, 0..=10, "Amount", "") {
                         let value = BassAmount(bass.amount as f32);
                         let message = Message::BassEnhancement(BassEnhancement::Amount(value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state
+                            .handle_message(message)
+                            .expect("Failed to Send Message");
                     }
                 });
             });
@@ -170,13 +176,17 @@ impl ConfigPage for MicSetupPage {
                     if draw_range(ui, &mut excite.amount, 0..=100, "Amount", "%") {
                         let value = Percent(excite.amount as f32);
                         let message = Message::Exciter(Exciter::Amount(value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state
+                            .handle_message(message)
+                            .expect("Failed to Send Message");
                     }
 
                     if draw_range(ui, &mut excite.freq, 600..=5000, "Freq", "Hz") {
                         let value = ExciterFreq(excite.freq as f32);
                         let message = Message::Exciter(Exciter::Frequency(value));
-                        state.handle_message(message).expect("Failed to Send Message");
+                        state
+                            .handle_message(message)
+                            .expect("Failed to Send Message");
                     }
                 })
             });
