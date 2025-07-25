@@ -38,7 +38,7 @@ modules:
       - install -Dm755 ./target/release/beacn-utility -t /app/bin/
       - install -Dm644 resources/flatpak/io.github.beacn_on_linux.beacn-utility.metainfo.xml /app/share/metainfo/io.github.beacn_on_linux.beacn-utility.metainfo.xml
       - install -Dm644 resources/flatpak/io.github.beacn_on_linux.beacn-utility.desktop /app/share/applications/io.github.beacn_on_linux.beacn-utility.desktop
-      - install -Dm644 resources/icons/beacn-utility-icon.svg /app/share/icons/hicolor/scalable/apps/io.github.beacn_on_linux.beacn-utility.svg
+      - install -Dm644 resources/icons/beacn-utility.svg /app/share/icons/hicolor/scalable/apps/io.github.beacn_on_linux.beacn-utility.svg
       - install -Dm644 resources/icons/beacn-utility-large.png /app/share/pixmaps/io.github.beacn_on_linux.beacn-utility.png
       - install -Dm644 resources/icons/beacn-utility.png  /app/share/icons/hicolor/48x48/apps/io.github.beacn_on_linux.beacn-utility.png
 
