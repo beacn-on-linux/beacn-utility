@@ -33,7 +33,7 @@ jobs:
         run: cargo install --force cargo-deb cargo-generate-rpm
 
       - name: "Build Packages"
-        run: ./ci/build-packages
+        run: ./.github/ci/build-packages
         shell: bash
 
       - name: "Upload DEB Artifact"
