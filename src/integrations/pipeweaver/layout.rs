@@ -21,11 +21,11 @@ use strum::IntoEnumIterator;
 use xdg::BaseDirectories;
 
 // First thing we need, is to device the font used for rendering on the screen
+#[allow(unused)]
 static FONT: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
 static FONT_BOLD: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
 
 pub(crate) static JPEG_QUALITY: u8 = 70;
-
 
 // Now, for sanity's sake, we're going to define some basic types
 pub(crate) type Dimension = (u32, u32);
@@ -60,7 +60,6 @@ pub(crate) static DIAL_TEXT_IMAGES: DialTextImage = Lazy::new(DialHandler::preco
 pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::composite_dials);
 
 // Next up, we define some colours, which will be used when generating components
-pub(crate) static BLACK: Rgba<u8> = Rgba([0, 0, 0, 255]);
 pub(crate) static TEXT_COLOUR: Rgba<u8> = Rgba([180, 180, 180, 255]);
 pub(crate) static BACKGROUND_COLOUR: Rgba<u8> = Rgba([42, 48, 45, 255]);
 
@@ -150,6 +149,7 @@ pub(crate) enum GradientDirection {
     BottomToTop,
 }
 
+#[allow(unused)]
 pub(crate) enum TextAlign {
     Left,
     Center,
@@ -436,7 +436,11 @@ impl DrawingUtils {
         Self::composite_from(base, overlay, x, y);
     }
 
-    pub(crate) fn image_as_jpeg(image: RgbaImage, background: Rgba<u8>, quality: u8) -> Result<Vec<u8>> {
+    pub(crate) fn image_as_jpeg(
+        image: RgbaImage,
+        background: Rgba<u8>,
+        quality: u8,
+    ) -> Result<Vec<u8>> {
         let flattened = Self::flatten_rgba_image(&image, background);
 
         let mut jpeg_data = Vec::new();
@@ -502,7 +506,7 @@ impl DrawingUtils {
 
         // Drop the bottom 6 pixels from the image
         let (width, mut height) = VOLUME_DIMENSIONS;
-        height = height - VOLUME_CROP;
+        height -= VOLUME_CROP;
         let cropped = image::imageops::crop_imm(&base, 0, 0, width, height);
         Self::image_as_jpeg(cropped.to_image(), CHANNEL_INNER_COLOUR, JPEG_QUALITY)
     }
@@ -516,7 +520,7 @@ impl DialHandler {
         let file_name = "image_cache.bin".to_string();
         let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
         let cache_file = xdg_dirs.find_cache_file(file_name.clone());
-        debug!("Attempting to load Cache from {:?}", cache_file);
+        debug!("Attempting to load Cache from {cache_file:?}");
         if let Some(file) = cache_file {
             if let Ok(map) = Self::load_cache(file) {
                 info!("Loaded Cache in {:?}", start.elapsed());
@@ -546,7 +550,7 @@ impl DialHandler {
         let cache_file = xdg_dirs.place_cache_file(file_name);
         if let Ok(file) = cache_file {
             if let Err(e) = Self::save_cache(file, &map) {
-                warn!("Cache Saving Failed: {}", e);
+                warn!("Cache Saving Failed: {e}");
             } else {
                 info!("Cache Saved in {:?}", time.elapsed());
             }
@@ -581,7 +585,7 @@ impl DialHandler {
         let (width, height) = VOLUME_DIMENSIONS;
         let mut map = HashMap::new();
         for i in 0..=100 {
-            let text = format!("{:.0}%", i);
+            let text = format!("{i:.0}%");
             let img = DrawingUtils::draw_text(
                 text,
                 width,
@@ -719,10 +723,7 @@ impl DialHandler {
 
             let mut data = vec![0u8; len];
             reader.read_exact(&mut data).with_context(|| {
-                format!(
-                    "Failed to read image data for mix {:?}, volume {}",
-                    mix, volume
-                )
+                format!("Failed to read image data for mix {mix:?}, volume {volume}")
             })?;
 
             map[mix].insert(volume, data);

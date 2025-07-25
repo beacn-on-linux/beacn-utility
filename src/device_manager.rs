@@ -91,7 +91,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             }
             i if i == lock_index => {
                 if let Ok(msg) = operation.recv(&login_rx) {
-                    debug!("Received Login State Message: {:?}", msg);
+                    debug!("Received Login State Message: {msg:?}");
                     match msg {
                         LoginEventTriggers::Sleep(tx) => {
                             enable_devices(&receiver_map, false);
@@ -215,7 +215,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                     }
                 }
                 Err(e) => {
-                    error!("KeepAlive Poller Failed, {}", e);
+                    error!("KeepAlive Poller Failed, {e}");
                     break;
                 }
             },
@@ -287,6 +287,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
 fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
+        #[allow(clippy::single_match)]
         match device {
             DeviceMap::Control(dev, _, _) => {
                 let _ = dev.set_enabled(enabled);
@@ -323,6 +324,7 @@ pub enum AudioMessage {
     Handle(Message, oneshot::Sender<Result<Message>>),
 }
 
+#[allow(unused)]
 pub enum ControlMessage {
     Enabled(bool, oneshot::Sender<Result<()>>),
     SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<()>>),

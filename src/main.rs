@@ -19,10 +19,10 @@ use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
 
 mod device_manager;
+mod integrations;
 mod managers;
 mod ui;
 mod window_handle;
-mod integrations;
 
 const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
-    let resource_class = format!("{}.{}", APP_TLD, APP_NAME);
+    let resource_class = format!("{APP_TLD}.{APP_NAME}");
 
     let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
@@ -154,7 +154,7 @@ fn main() -> Result<()> {
                             }
                         }
                         Err(e) => {
-                            error!("Main Loop Broken, bailing: {}", e);
+                            error!("Main Loop Broken, bailing: {e}");
                             break 'mainloop;
                         }
                     }
@@ -169,7 +169,7 @@ fn main() -> Result<()> {
                             }
                         }
                         Err(e) => {
-                            error!("Device Handler Broken, bailing: {}", e);
+                            error!("Device Handler Broken, bailing: {e}");
                             break 'mainloop;
                         }
                     }
@@ -195,15 +195,15 @@ fn prepare_context(ctx: &mut Context) {
 
     let auto_start = match has_autostart() {
         Ok(present) => {
-            debug!("File State: {}", present);
+            debug!("File State: {present}");
             Some(present)
         }
         Err(e) => {
-            debug!("Error Getting State: {}", e);
+            debug!("Error Getting State: {e}");
             None
         }
     };
-    debug!("Setting Value: {:?}", auto_start);
+    debug!("Setting Value: {auto_start:?}");
 
     ctx.memory_mut(|mem| {
         mem.data.insert_temp(auto_start_key, auto_start);
@@ -223,23 +223,20 @@ fn load_icon(bytes: &[u8]) -> Icon {
 fn has_autostart() -> Result<bool> {
     let autostart_file = get_autostart_file()?;
 
-    debug!("Checking: {:?}", autostart_file);
+    debug!("Checking: {autostart_file:?}");
     Ok(autostart_file.exists())
 }
 
 pub fn get_autostart_file() -> Result<PathBuf> {
     let config_dir = if let Ok(config) = env::var("XDG_CONFIG_HOME") {
         config
+    } else if let Ok(home) = env::var("HOME") {
+        format!("{home}/.config")
     } else {
-        if let Ok(home) = env::var("HOME") {
-            format!("{}/.config", home)
-        } else {
-            bail!("Unable to obtain XDG Config Directory")
-        }
+        bail!("Unable to obtain XDG Config Directory")
     };
     Ok(PathBuf::from(format!(
-        "{}/autostart/{}.desktop",
-        config_dir, APP_TLD
+        "{config_dir}/autostart/{APP_TLD}.desktop"
     )))
 }
 

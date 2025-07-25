@@ -160,7 +160,7 @@ where
     ui.horizontal_centered(|ui| {
         ui.add_sized([60.0, 0.], |ui: &mut Ui| {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui: &mut Ui| {
-                ui.label(format!("{}: ", title));
+                ui.label(format!("{title}: "));
             })
             .response
         });

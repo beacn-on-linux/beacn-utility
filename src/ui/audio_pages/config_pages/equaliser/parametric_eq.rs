@@ -84,7 +84,7 @@ pub struct ParametricEq {
     active_band_drag: Option<EQBand>,
 }
 
-impl<'a> ParametricEq {
+impl ParametricEq {
     pub(crate) fn new() -> Self {
         Self {
             serial: None,
@@ -108,7 +108,7 @@ impl<'a> ParametricEq {
         if let Some(serial) = &self.serial {
             let serial = serial.clone();
             if serial != state.device_definition.device_info.serial {
-                debug!("Resetting EQ for New Device: {}", serial);
+                debug!("Resetting EQ for New Device: {serial}");
                 // If the serial doesn't match, we need to reset the widget
                 self.serial = Some(state.device_definition.device_info.serial.clone());
                 self.eq_mode = state.equaliser.mode;
@@ -173,7 +173,7 @@ impl<'a> ParametricEq {
         let mut bands = state.equaliser.bands[state.equaliser.mode];
 
         // We'll do a quick check here to make sure our 'Active' band is actually enabled.
-        if bands[self.active_band].enabled == false {
+        if !bands[self.active_band].enabled {
             for band in EQBand::iter() {
                 if bands[band].enabled {
                     self.active_band = band;
@@ -211,13 +211,13 @@ impl<'a> ParametricEq {
 
             if response.clicked() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_click(rect, pointer_pos, &mut bands);
+                    self.handle_click(rect, pointer_pos, &bands);
                 }
             }
 
             if response.drag_started() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
-                    self.handle_drag_start(rect, pointer_pos, &mut bands);
+                    self.handle_drag_start(rect, pointer_pos, &bands);
                 }
             }
             if response.dragged() {
@@ -344,7 +344,7 @@ impl<'a> ParametricEq {
                 }
 
                 ui.separator();
-                let enabled = bands.values_mut().any(|b| b.enabled == false);
+                let enabled = bands.values_mut().any(|b| !b.enabled);
                 let button = Button::new("Add Band");
                 if ui.add_enabled(enabled, button).clicked() {
                     if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
@@ -444,7 +444,7 @@ impl<'a> ParametricEq {
             painter.text(
                 Pos2::new(plot_rect.min.x - 10.0, y),
                 egui::Align2::RIGHT_CENTER,
-                format!("{}", db),
+                format!("{db}"),
                 FontId::proportional(12.0),
                 text_color,
             );
@@ -645,8 +645,7 @@ impl<'a> ParametricEq {
             point.y = Self::db_to_y(gains[i], rect);
         }
 
-        let points = self.adaptive_smooth_points(points, rect, 8);
-        points
+        self.adaptive_smooth_points(points, rect, 8)
     }
 
     fn get_eq_frequency_response(&mut self, rect: Rect, band: EQBand, bands: &Bands) -> Vec<f32> {
@@ -955,7 +954,7 @@ pub enum ButtonPosition {
     Last,
 }
 
-pub fn eq_mode<'a>(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Response {
+pub fn eq_mode(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Response {
     let image = SVG.get(img).unwrap().clone();
 
     let tint_colour = if active {

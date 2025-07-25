@@ -29,10 +29,10 @@ impl AudioPage for ErrorPage {
                         for message in &state.device_state.errors {
                             ui.add_space(15.0);
                             if let Some(error) = &message.error_text {
-                                ui.label(format!("Error: {:?}", error));
+                                ui.label(format!("Error: {error:?}"));
                             }
                             if let Some(message) = &message.failed_message {
-                                ui.label(format!("Message: {:?}", message));
+                                ui.label(format!("Message: {message:?}"));
                             }
                         }
                     })

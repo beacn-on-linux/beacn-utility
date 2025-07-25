@@ -1,19 +1,19 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::app_settings::settings_ui;
-use crate::ui::{audio_pages, controller_pages};
+use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::states::controller_state::BeacnControllerState;
 use crate::ui::widgets::round_nav_button;
+use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
-use std::any::Any;
 use log::debug;
-use crate::ui::audio_pages::AudioPage;
+use std::any::Any;
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -205,15 +205,14 @@ impl BeacnMicApp {
                     let selected = *active_device == device
                         && self.active_page == index
                         && !self.settings_active;
-                    let error = &device_state.device_state.state == &LoadState::ERROR;
+                    let error = device_state.device_state.state == LoadState::Error;
 
-
-                    if page.show_on_error() == error {
-                        if round_nav_button(ui, page.icon(), selected).clicked() {
-                            self.settings_active = false;
-                            self.active_device = Some(device.clone());
-                            self.active_page = index;
-                        }
+                    if page.show_on_error() == error
+                        && round_nav_button(ui, page.icon(), selected).clicked()
+                    {
+                        self.settings_active = false;
+                        self.active_device = Some(device.clone());
+                        self.active_page = index;
                     }
                 }
                 ui.add_space(5.0);
@@ -237,13 +236,13 @@ impl BeacnMicApp {
                         && self.active_page == index
                         && !self.settings_active;
 
-                    let error = &device_state.device_state.state == &LoadState::ERROR;
-                    if page.show_on_error() == error {
-                        if round_nav_button(ui, page.icon(), selected).clicked() {
-                            self.settings_active = false;
-                            self.active_device = Some(device.clone());
-                            self.active_page = index;
-                        }
+                    let error = device_state.device_state.state == LoadState::Error;
+                    if page.show_on_error() == error
+                        && round_nav_button(ui, page.icon(), selected).clicked()
+                    {
+                        self.settings_active = false;
+                        self.active_device = Some(device.clone());
+                        self.active_page = index;
                     }
                 }
                 ui.add_space(5.0);
@@ -275,7 +274,7 @@ impl BeacnMicApp {
                 let settings = settings.unwrap();
 
                 // Are we in an error state, if so, show the error
-                if settings.device_state.state == LoadState::ERROR {
+                if settings.device_state.state == LoadState::Error {
                     let position = self.audio_pages.iter().position(|p| p.show_on_error());
                     if let Some(page) = position {
                         self.active_page = page;
@@ -287,7 +286,7 @@ impl BeacnMicApp {
                 });
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                let settings = self.control_device_list.get_mut(&definition);
+                let settings = self.control_device_list.get_mut(definition);
                 if settings.is_none() {
                     return;
                 }

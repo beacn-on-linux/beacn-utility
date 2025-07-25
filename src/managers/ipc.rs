@@ -25,7 +25,7 @@ pub fn handle_ipc(
     let socket_path = get_socket_file_path();
     if let Some(parent) = socket_path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            warn!("Failed to create socket directory {:?}: {e}", parent);
+            warn!("Failed to create socket directory {parent:?}: {e}");
             bail!("Failed to Open IPC Socket");
         }
     }
@@ -50,7 +50,7 @@ pub fn handle_ipc(
     let poll_duration = Duration::from_millis(50);
     let mut context = None;
 
-    debug!("IPC listener started at {:?}", socket_path);
+    debug!("IPC listener started at {socket_path:?}");
     loop {
         select! {
             recv(manager_rx) -> msg => {
@@ -62,7 +62,7 @@ pub fn handle_ipc(
                         }
                     }
                     Err(e) => {
-                        warn!("Message Handler channel Broken, bailing: {}", e);
+                        warn!("Message Handler channel Broken, bailing: {e}");
                         break;
                     }
                 }
@@ -85,7 +85,7 @@ pub fn handle_ipc(
                                     }
                                 },
                                 _ => {
-                                    debug!("Unknown Message, aborting: {}", msg);
+                                    debug!("Unknown Message, aborting: {msg}");
                                     break;
                                 },
                             }
@@ -136,13 +136,9 @@ pub fn handle_active_instance() -> bool {
 }
 
 fn get_socket_file_path() -> PathBuf {
-    PathBuf::from(
-        env::temp_dir()
-            .join(format!("{APP_NAME}"))
-            .join(get_socket_file_name()),
-    )
+    env::temp_dir().join(APP_NAME).join(get_socket_file_name())
 }
 
 fn get_socket_file_name() -> String {
-    format!("{}.socket", APP_NAME)
+    format!("{APP_NAME}.socket")
 }

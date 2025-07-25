@@ -116,7 +116,7 @@ async fn run_internal(
             inhibitor.replace(descriptor);
         }
         Err(error) => {
-            debug!("Unable to Create Inhibitor: {:?}", error);
+            debug!("Unable to Create Inhibitor: {error:?}");
         }
     }
 

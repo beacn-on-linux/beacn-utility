@@ -21,22 +21,24 @@ pub struct BeacnControllerState {
 
 impl BeacnControllerState {
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<ControlMessage>) -> Self {
-        let mut state = Self::default();
-        state.device_sender = Some(sender);
-        state.device_definition = definition;
+        let mut state = BeacnControllerState {
+            device_definition: definition,
+            device_sender: Some(sender),
+            .. Default::default()
+        };
 
         // Before we do anything else, is this definition in an error state?
         if let DefinitionState::Error(error) = &state.device_definition.state {
-            state.device_state.state = LoadState::ERROR;
+            state.device_state.state = LoadState::Error;
             state.device_state.errors.push(ErrorMessage {
-                error_text: Some(format!("Failed to Open Device: {}", error)),
+                error_text: Some(format!("Failed to Open Device: {error}")),
                 failed_message: None,
             });
 
             return state;
         }
 
-        state.device_state.state = LoadState::RUNNING;
+        state.device_state.state = LoadState::Running;
 
         // Grab the settings from a possible saved config file
         state.load_from_file();
@@ -96,7 +98,7 @@ impl BeacnControllerState {
         let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
         let config_file = xdg_dirs.find_config_file(file_name);
 
-        debug!("Attempting to load Config from {:?}", config_file);
+        debug!("Attempting to load Config from {config_file:?}");
         if let Some(file) = config_file {
             if let Ok(file) = File::open(file) {
                 if let Ok(config) = serde_json::from_reader(file) {
@@ -121,7 +123,7 @@ impl BeacnControllerState {
         if let Ok(file) = config_file {
             if let Ok(file) = File::create(file) {
                 if let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings) {
-                    warn!("Config Saving Failed: {}", e);
+                    warn!("Config Saving Failed: {e}");
                 }
             }
         }

@@ -202,16 +202,26 @@ impl BeacnAudioState {
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
 
-        let mut state = Self::default();
-        state.device_definition = definition;
-        state.device_sender = Some(sender);
-        state.device_state.state = LoadState::LOADING;
+        let mut state = BeacnAudioState {
+            device_definition: definition,
+            device_state: DeviceState {
+                state: LoadState::Loading,
+                .. Default::default()
+            },
+            device_sender: Some(sender),
+            .. Default::default()
+        };
+
+        // let mut state = Self::default();
+        // state.device_definition = definition;
+        // state.device_sender = Some(sender);
+        // state.device_state.state = LoadState::LOADING;
 
         // Before we do anything else, is this definition in an error state?
         if let DefinitionState::Error(error) = &state.device_definition.state {
-            state.device_state.state = LoadState::ERROR;
+            state.device_state.state = LoadState::Error;
             state.device_state.errors.push(ErrorMessage {
-                error_text: Some(format!("Failed to Open Device: {}", error)),
+                error_text: Some(format!("Failed to Open Device: {error}")),
                 failed_message: None,
             });
 
@@ -226,15 +236,15 @@ impl BeacnAudioState {
                 Ok(value) => state.set_local_value(value),
                 Err(value) => {
                     // fetch_value didn't panic, but it did error
-                    state.device_state.state = LoadState::ERROR;
+                    state.device_state.state = LoadState::Error;
                     state.device_state.errors.push(ErrorMessage {
-                        error_text: Some(format!("{:?}", value)),
+                        error_text: Some(format!("{value:?}")),
                         failed_message: Some(message),
                     })
                 }
             }
         }
-        state.device_state.state = LoadState::RUNNING;
+        state.device_state.state = LoadState::Running;
         state
     }
 

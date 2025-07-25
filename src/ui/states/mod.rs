@@ -18,7 +18,7 @@ pub struct ErrorMessage {
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum LoadState {
     #[default]
-    LOADING,
-    RUNNING,
-    ERROR,
+    Loading,
+    Running,
+    Error,
 }

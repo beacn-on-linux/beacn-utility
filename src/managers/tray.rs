@@ -24,13 +24,13 @@ pub fn handle_tray(
     debug!("Spawning Tray");
 
     // Create a temporary directory to store the icon
-    let tmp_file_dir = PathBuf::from(env::temp_dir().join(format!("{}", APP_NAME)));
+    let tmp_file_dir = env::temp_dir().join(APP_NAME);
     if !tmp_file_dir.exists() {
         fs::create_dir_all(&tmp_file_dir)?;
     }
 
     // Write the icon out to the temporary path
-    let tmp_file_path = tmp_file_dir.join(format!("{}.png", APP_NAME));
+    let tmp_file_path = tmp_file_dir.join(format!("{APP_NAME}.png"));
     if !tmp_file_path.exists() || fs::remove_file(&tmp_file_path).is_ok() {
         fs::write(&tmp_file_path, ICON)?;
     } else {
@@ -70,7 +70,7 @@ pub fn handle_tray(
                         }
                     }
                     Err(e) => {
-                        warn!("Icon receiver channel broken, bailing: {}", e);
+                        warn!("Icon receiver channel broken, bailing: {e}");
                         break;
                     }
                 }
@@ -89,7 +89,7 @@ pub fn handle_tray(
                     }
 
                     Err(e) => {
-                        warn!("Message Handler channel Broken, bailing: {}", e);
+                        warn!("Message Handler channel Broken, bailing: {e}");
                         break;
                     }
                 }

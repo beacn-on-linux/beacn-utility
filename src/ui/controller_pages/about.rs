@@ -2,7 +2,6 @@ use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::controller_state::BeacnControllerState;
 use beacn_lib::manager::DeviceType;
 use egui::{RichText, Slider, Ui};
-use log::debug;
 use std::time::Duration;
 
 #[allow(unused)]

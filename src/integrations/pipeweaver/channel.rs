@@ -6,9 +6,10 @@ use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, To
 use crate::integrations::pipeweaver::layout::*;
 use beacn_lib::crossbeam::channel::Sender;
 use enum_map::EnumMap;
-use image::{load_from_memory, ImageBuffer, Rgba, RgbaImage};
+use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use pipeweaver_shared::{Mix, MuteTarget};
 
+#[allow(unused)]
 pub(crate) struct ChannelConfig {
     pub(crate) title: String,
     pub(crate) colour: Rgba<u8>,
@@ -18,6 +19,7 @@ pub(crate) struct ChannelConfig {
     pub(crate) mute_states: EnumMap<MuteTarget, MuteState>,
 }
 
+#[allow(unused)]
 pub(crate) struct MuteState {
     pub(crate) is_active: bool,
     pub(crate) is_mute_to_all: bool,
@@ -25,6 +27,7 @@ pub(crate) struct MuteState {
 
 pub(crate) struct PipeweaverChannel {
     index: u8,
+    #[allow(unused)]
     sender: Sender<ControlMessage>,
     config: ChannelConfig,
     // Add cached images below
@@ -74,17 +77,20 @@ impl PipeweaverChannel {
                 return img.into_rgba8();
             }
         }
-        panic!("Unable to Load Volume Image for Mix: {:?}", active);
+        panic!("Unable to Load Volume Image for Mix: {active:?}");
     }
 
+    #[allow(unused)]
     pub(crate) fn render_volume(&self) {
         let active = self.config.active_mix;
         let volume = self.config.volumes[active];
         if let Some(jpeg_data) = DIAL_VOLUME_JPEG[active].get(&volume) {
             let (mut x, y) = VOLUME_POSITION;
-            x = self.index as u32 * CHANNEL_DIMENSIONS.0 + x;
+            x += self.index as u32 * CHANNEL_DIMENSIONS.0;
             let (tx, rx) = oneshot::channel();
-            let _ = self.sender.send(ControlMessage::SendImage(jpeg_data.clone(), x, y, tx));
+            let _ = self
+                .sender
+                .send(ControlMessage::SendImage(jpeg_data.clone(), x, y, tx));
             let _ = rx.recv();
         }
     }
@@ -102,7 +108,7 @@ impl PipeweaverChannel {
     }
 
     fn draw_header(&self) -> RgbaImage {
-        let mut colour = self.config.colour.clone();
+        let mut colour = self.config.colour;
         colour[3] = 100;
 
         let (width, height) = HEADER_DIMENSIONS;
@@ -128,6 +134,7 @@ impl PipeweaverChannel {
         ImageBuffer::from_pixel(dimensions.0, dimensions.1, self.config.colour)
     }
 
+    #[allow(unused)]
     fn send_volume(&self) -> RgbaImage {
         let (width, height) = VOLUME_DIMENSIONS;
         // For this, we'll just render a square
@@ -136,12 +143,13 @@ impl PipeweaverChannel {
 
     fn draw_mute_background(&self) -> RgbaImage {
         let (w, h) = MUTE_AREA_DIMENSIONS;
-        let mut colour = self.config.colour.clone();
+        let mut colour = self.config.colour;
         colour[3] = 128;
 
         DrawingUtils::draw_gradient(w, h, colour, BottomToTop)
     }
 
+    #[allow(unused)]
     fn draw_mute_box(&self) -> RgbaImage {
         todo!()
     }
@@ -150,5 +158,5 @@ impl PipeweaverChannel {
 pub(crate) struct ImageData {
     pub(crate) x: u32,
     pub(crate) y: u32,
-    pub(crate) image: RgbaImage
+    pub(crate) image: RgbaImage,
 }

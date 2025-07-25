@@ -3,11 +3,9 @@ use crate::integrations::pipeweaver::channel::{ChannelConfig, PipeweaverChannel}
 use crate::integrations::pipeweaver::layout::{
     BACKGROUND_COLOUR, DISPLAY_DIMENSIONS, DrawingUtils, JPEG_QUALITY,
 };
-use beacn_lib::crossbeam;
 use beacn_lib::crossbeam::channel::Sender;
 use enum_map::enum_map;
 use image::{Rgba, RgbaImage, imageops};
-use log::debug;
 use pipeweaver_shared::{Mix, MuteTarget};
 
 mod channel;

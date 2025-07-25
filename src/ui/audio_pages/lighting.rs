@@ -134,9 +134,9 @@ impl LightingPage {
 
     fn draw_types_studio(
         &self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        state: &mut LightingState,
+        _ui: &mut Ui,
+        _config: &mut BeacnAudioState,
+        _state: &mut LightingState,
     ) {
     }
 

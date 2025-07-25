@@ -198,7 +198,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
                             let request = Background::request()
                                 .identifier(identifier)
-                                .reason(&*reason)
+                                .reason(reason)
                                 .auto_start(create)
                                 .dbus_activatable(false)
                                 .command::<Vec<_>, String>(vec![
@@ -210,11 +210,11 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
                             let result = match request.send().await.and_then(|r| r.response()) {
                                 Ok(response) => {
-                                    debug!("{:?}", response);
+                                    debug!("{response:?}");
                                     Some(response.auto_start())
                                 }
                                 Err(e) => {
-                                    debug!("Failed to request autostart run: {}", e);
+                                    debug!("Failed to request autostart run: {e}");
                                     None
                                 }
                             };
@@ -239,7 +239,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                             .set("Type", "Application")
                                             .set("Name", "Beacn Utility")
                                             .set("Comment", "A Tool for Configuring Beacn Devices")
-                                            .set("Exec", format!("{:?} --startup", exe))
+                                            .set("Exec", format!("{exe:?} --startup"))
                                             .set("Terminal", "false");
 
                                         match conf.write_to_file(path) {
@@ -260,7 +260,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         let result = match attempt {
                             Ok(()) => Some(create),
                             Err(e) => {
-                                debug!("Failed to Handle AutoStart: {}", e);
+                                debug!("Failed to Handle AutoStart: {e}");
                                 None
                             }
                         };

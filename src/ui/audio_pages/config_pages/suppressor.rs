@@ -5,9 +5,8 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::suppressor::SuppressorStyle::{Adaptive, Snapshot};
 use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity};
 use beacn_lib::types::Percent;
-use egui::SelectableLabel;
+use egui::Button;
 use egui::Ui;
-use log::debug;
 
 pub struct NoiseSuppressionPage;
 
@@ -81,7 +80,7 @@ impl ConfigPage for NoiseSuppressionPage {
                     // This doesn't work, but we're going to need to handle it differently anyway
                     ui.add_sized(
                         [220.0, 0.],
-                        SelectableLabel::new(true, "Snapshot Not Supported"),
+                        Button::selectable(true, "Snapshot Not Supported")
                     );
                 }
             });
