@@ -8,5 +8,5 @@
 #inkscape beacn-utility-old.svg --export-filename=beacn-utility-large.png -w 128 -h 128 --export-area=-100:-100:1124:1124
 #inkscape beacn-utility-old.svg --export-filename=beacn-utility.png -w 48 -h 48 --export-area=-100:-100:1124:1124
 
-inkscape beacn-utility-icon.svg --export-filename=beacn-utility-large.png -w 128 -h 128 --export-area=-100:-100:1124:1124
-inkscape beacn-utility-icon.svg --export-filename=beacn-utility.png -w 48 -h 48 --export-area=-100:-100:1124:1124
+inkscape beacn-utility.svg --export-filename=beacn-utility-large.png -w 128 -h 128 --export-area=-100:-100:1124:1124
+inkscape beacn-utility.svg --export-filename=beacn-utility.png -w 48 -h 48 --export-area=-100:-100:1124:1124
