@@ -82,7 +82,7 @@ assets = [
     ["resources/icons/beacn-utility.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
     ["resources/icons/beacn-utility-large.png", "usr/share/pixmaps/beacn-utility.png", "644"],
     ["resources/icons/beacn-utility.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
-    ["resources/desktop/beacn-utility.desktop", "usr/share/applications/", "644"],
+    ["resources/desktop/io.github.beacn_on_linux.beacn-utility.desktop", "usr/share/applications/", "644"],
 ]
 maintainer-scripts = ".github/ci/DEBIAN/"
 section = "sound"
@@ -96,13 +96,14 @@ revision = "1"
 ## cargo generate-rpm support..
 [package.metadata.generate-rpm]
 name = "beacn-utility"
+
 assets = [
     { source = "target/release/beacn-utility", dest = "/usr/bin/beacn-utility", mode = "0755" },
     { source = "50-beacn.rules", dest = "/etc/udev/rules.d/50-beacn.rules", mode = "0644" },
     { source = "resources/icons/beacn-utility.png", dest = "/usr/share/icons/hicolor/48x48/apps/beacn-utility.png", mode = "0644" },
     { source = "resources/icons/beacn-utility-large.png", dest = "/usr/share/pixmaps/beacn-utility.png", mode = "0644" },
     { source = "resources/icons/beacn-utility.svg", dest = "/usr/share/icons/hicolor/scalable/apps/beacn-utility.svg", mode = "0644" },
-    { source = "resources/desktop/beacn-utility.desktop", dest = "/usr/share/applications/beacn-utility.desktop", mode = "0644" },
+    { source = "resources/desktop/io.github.beacn_on_linux.beacn-utility.desktop", dest = "/usr/share/applications/io.github.beacn_on_linux.beacn-utility.desktop", mode = "0644" },
 ]
 
 # Tiny scriptlet, should reload udev if possible.
