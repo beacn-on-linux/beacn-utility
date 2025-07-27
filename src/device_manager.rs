@@ -13,7 +13,8 @@
 */
 use crate::ManagerMessages;
 use crate::device_manager::DeviceMessage::DeviceRemoved;
-use crate::integrations::pipeweaver::perform_test_render;
+//use crate::integrations::pipeweaver::perform_test_render;
+use crate::device_manager::ControlMessage::SendImage;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
@@ -27,11 +28,13 @@ use beacn_lib::manager::{
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
+
+const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
@@ -92,22 +95,23 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             i if i == lock_index => {
                 if let Ok(msg) = operation.recv(&login_rx) {
                     debug!("Received Login State Message: {msg:?}");
-                    match msg {
-                        LoginEventTriggers::Sleep(tx) => {
-                            enable_devices(&receiver_map, false);
-                            let _ = tx.send(());
-                        }
-                        LoginEventTriggers::Wake(tx) => {
-                            enable_devices(&receiver_map, true);
-                            let _ = tx.send(());
-                        }
-                        LoginEventTriggers::Lock => {
-                            enable_devices(&receiver_map, false);
-                        }
-                        LoginEventTriggers::Unlock => {
-                            enable_devices(&receiver_map, true);
-                        }
-                    }
+                    // Do nothing until we have a full impl
+                    // match msg {
+                    //     LoginEventTriggers::Sleep(tx) => {
+                    //         enable_devices(&receiver_map, false);
+                    //         let _ = tx.send(());
+                    //     }
+                    //     LoginEventTriggers::Wake(tx) => {
+                    //         enable_devices(&receiver_map, true);
+                    //         let _ = tx.send(());
+                    //     }
+                    //     LoginEventTriggers::Lock => {
+                    //         enable_devices(&receiver_map, false);
+                    //     }
+                    //     LoginEventTriggers::Unlock => {
+                    //         enable_devices(&receiver_map, true);
+                    //     }
+                    // }
                 }
             }
             i if i == hotplug_index => match operation.recv(&plug_rx) {
@@ -177,9 +181,13 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
+                                // Send a splash to the device.
                                 let img_tx = tx.clone();
                                 thread::spawn(move || {
-                                    perform_test_render(img_tx);
+                                    let (tx, rx) = oneshot::channel();
+                                    let img = Vec::from(TEMP_SPLASH);
+                                    let _ = img_tx.send(SendImage(img, 0, 0, tx));
+                                    let _ = rx.recv();
                                 });
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
@@ -208,11 +216,12 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             },
             i if i == keepalive_index => match operation.recv(&keepalive) {
                 Ok(_instant) => {
-                    for device in &receiver_map {
-                        if let DeviceMap::Control(device, _, _) = device {
-                            let _ = device.send_keepalive();
-                        }
-                    }
+                    // Disable the keepalive for now, show the message then let the device turn off
+                    // for device in &receiver_map {
+                    //     if let DeviceMap::Control(device, _, _) = device {
+                    //         let _ = device.send_keepalive();
+                    //     }
+                    // }
                 }
                 Err(e) => {
                     error!("KeepAlive Poller Failed, {e}");
