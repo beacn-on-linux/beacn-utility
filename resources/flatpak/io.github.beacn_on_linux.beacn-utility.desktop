@@ -9,5 +9,5 @@ Type=Application
 Categories=Audio;AudioVideo;Settings;HardwareSettings;
 Keywords=microphone;audio;beacn;mic;recording;
 StartupNotify=true
-StartupWMClass=beacn-utility
+StartupWMClass=io.github.beacn_on_linux.beacn-utility
 X-Flatpak=io.github.beacn_on_linux.beacn-utility

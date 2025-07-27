@@ -7,4 +7,4 @@ Exec=/usr/bin/beacn-utility
 Icon=beacn-utility
 Terminal=false
 Categories=Utility
-StartupWMClass=beacn-utility
+StartupWMClass=io.github.beacn_on_linux.beacn-utility
