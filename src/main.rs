@@ -50,6 +50,8 @@ fn main() -> Result<()> {
         ColorChoice::Auto,
     )])?;
 
+    debug!("Hello World!");
+
     let args: Vec<String> = env::args().collect();
     let hide_initial = args.contains(&"--startup".to_string());
     let mut first_run = true;
