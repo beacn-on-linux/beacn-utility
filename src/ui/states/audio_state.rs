@@ -1,4 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
+use beacn_lib::audio::LinkedApp;
+use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
 use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
@@ -9,8 +11,6 @@ use beacn_lib::audio::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
-use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::LinkedApp;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
@@ -64,7 +64,7 @@ pub struct Headphones {
     pub output_gain: f32, // f32[0.0..=12.0]
     pub headphone_type: HeadphoneTypes,
     pub fx_enabled: bool,
-    pub studio_driverless: bool,    // This is backwards at the moment, need to fix that
+    pub studio_driverless: bool, // This is backwards at the moment, need to fix that
 }
 
 #[derive(Debug, Default, Copy, Clone)]
