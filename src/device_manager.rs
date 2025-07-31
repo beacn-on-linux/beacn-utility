@@ -15,7 +15,7 @@ use crate::ManagerMessages;
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
-use crate::managers::login::{spawn_login_handler};
+use crate::managers::login::spawn_login_handler;
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
@@ -348,7 +348,7 @@ pub enum AudioMessage {
 
 pub enum LinkedCommands {
     GetLinked(oneshot::Sender<Result<Option<Vec<LinkedApp>>>>),
-    SetLinked(LinkedApp, oneshot::Sender<Result<()>>)
+    SetLinked(LinkedApp, oneshot::Sender<Result<()>>),
 }
 
 #[allow(unused)]

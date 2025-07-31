@@ -1,6 +1,4 @@
-use anyhow::{Result, bail};
-use beacn_lib::audio::LinkedApp;
-use beacn_lib::audio::messages::Message;
+use anyhow::{bail, Result};
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
 use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
@@ -11,6 +9,8 @@ use beacn_lib::audio::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::LinkedApp;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
