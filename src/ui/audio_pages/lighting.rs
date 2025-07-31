@@ -27,10 +27,6 @@ impl AudioPage for LightingPage {
         "bulb"
     }
 
-    fn show_on_error(&self) -> bool {
-        false
-    }
-
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         let device_type = state.device_definition.device_type;
         let mut lighting = state.lighting;

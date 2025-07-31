@@ -18,10 +18,6 @@ impl AudioPage for About {
         "gear"
     }
 
-    fn show_on_error(&self) -> bool {
-        false
-    }
-
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         let device_type = state.device_definition.device_type;
         let serial_text = state.device_definition.device_info.serial.clone();

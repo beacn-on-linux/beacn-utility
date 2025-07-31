@@ -15,10 +15,10 @@ use crate::ManagerMessages;
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
-use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
+use crate::managers::login::{spawn_login_handler};
 use anyhow::{Result, anyhow};
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::{BeacnAudioDevice, open_audio_device};
+use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
@@ -28,7 +28,7 @@ use beacn_lib::manager::{
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
-use log::{debug, error, warn};
+use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
@@ -250,6 +250,17 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                                 let _ = resp.send(response.unwrap());
                                             }
                                         }
+                                        AudioMessage::Linked(command) => {
+                                            // This code doesn't panic, just fails.
+                                            match command {
+                                                LinkedCommands::GetLinked(tx) => {
+                                                    let _ = tx.send(dev.get_linked_app_list());
+                                                }
+                                                LinkedCommands::SetLinked(app, tx) => {
+                                                    let _ = tx.send(dev.set_linked_app(app));
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -294,6 +305,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     debug!("Device Manager Stopped");
 }
 
+#[allow(unused)]
 fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
         #[allow(clippy::single_match)]
@@ -331,6 +343,12 @@ pub enum DeviceArriveMessage {
 
 pub enum AudioMessage {
     Handle(Message, oneshot::Sender<Result<Message>>),
+    Linked(LinkedCommands),
+}
+
+pub enum LinkedCommands {
+    GetLinked(oneshot::Sender<Result<Option<Vec<LinkedApp>>>>),
+    SetLinked(LinkedApp, oneshot::Sender<Result<()>>)
 }
 
 #[allow(unused)]

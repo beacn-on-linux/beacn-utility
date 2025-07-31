@@ -23,6 +23,10 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
     );
     map.insert("gear", include_image!("../../resources/ui/icons/gear.svg"));
     map.insert(
+        "left_right",
+        include_image!("../../resources/ui/icons/left-right.svg"),
+    );
+    map.insert(
         "error",
         include_image!("../../resources/ui/icons/error.svg"),
     );

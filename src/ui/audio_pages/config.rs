@@ -41,10 +41,6 @@ impl AudioPage for Configuration {
         "mic"
     }
 
-    fn show_on_error(&self) -> bool {
-        false
-    }
-
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {

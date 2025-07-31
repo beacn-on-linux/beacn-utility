@@ -43,6 +43,7 @@ impl BeacnMicApp {
             audio_pages: vec![
                 Box::new(audio_pages::config::Configuration::new()),
                 Box::new(audio_pages::lighting::LightingPage::new()),
+                Box::new(audio_pages::link::Linked::new()),
                 Box::new(audio_pages::about::About::new()),
                 Box::new(audio_pages::error::ErrorPage::new()),
             ],
@@ -208,6 +209,7 @@ impl BeacnMicApp {
                     let error = device_state.device_state.state == LoadState::Error;
 
                     if page.show_on_error() == error
+                        && (!page.is_link_page() || page.is_studio_with_link(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
                         self.settings_active = false;

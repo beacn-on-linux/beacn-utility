@@ -52,6 +52,7 @@ trait Session {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub enum LoginEventTriggers {
     Sleep(oneshot::Sender<()>),
     Wake(oneshot::Sender<()>),

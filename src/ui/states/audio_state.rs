@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-
+use beacn_lib::audio::LinkedApp;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
@@ -14,7 +14,7 @@ use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
-use crate::device_manager::{AudioMessage, DefinitionState, DeviceDefinition};
+use crate::device_manager::{AudioMessage, DefinitionState, DeviceDefinition, LinkedCommands};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
@@ -29,6 +29,8 @@ use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::crossbeam::channel::Sender;
+use beacn_lib::manager::DeviceType;
+use log::debug;
 
 type Rgb = [u8; 3];
 
@@ -50,6 +52,8 @@ pub struct BeacnAudioState {
     pub suppressor: Suppressor,
     pub mic_setup: MicSetup,
     pub subwoofer: Subwoofer,
+
+    pub linked: Option<Vec<LinkedApp>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -60,7 +64,7 @@ pub struct Headphones {
     pub output_gain: f32, // f32[0.0..=12.0]
     pub headphone_type: HeadphoneTypes,
     pub fx_enabled: bool,
-    pub studio_driverless: bool,
+    pub studio_driverless: bool,    // This is backwards at the moment, need to fix that
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -199,6 +203,47 @@ impl BeacnAudioState {
         }
     }
 
+    pub fn get_linked(&mut self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Linked(LinkedCommands::GetLinked(tx));
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                debug!("Result: {message:?}");
+
+                // TODO: Should probably better error handle here.. :D
+                if let Ok(apps) = message {
+                    self.linked = apps;
+                } else {
+                    self.linked = None;
+                }
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+        Ok(())
+    }
+
+    pub fn set_link(&mut self, app: LinkedApp) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Linked(LinkedCommands::SetLinked(app, tx));
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                debug!("Result: {message:?}");
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+
+        Ok(())
+    }
+
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
 
@@ -243,6 +288,10 @@ impl BeacnAudioState {
                     })
                 }
             }
+        }
+
+        if state.device_definition.device_type == DeviceType::BeacnStudio {
+            let _ = state.get_linked();
         }
         state.device_state.state = LoadState::Running;
         state
