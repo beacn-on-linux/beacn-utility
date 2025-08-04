@@ -6,6 +6,7 @@ use beacn_lib::audio::messages::lighting::LightingMode::{
 };
 use beacn_lib::audio::messages::lighting::{
     Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingSpeed,
+    StudioLightingMode,
 };
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
@@ -130,10 +131,36 @@ impl LightingPage {
 
     fn draw_types_studio(
         &self,
-        _ui: &mut Ui,
-        _config: &mut BeacnAudioState,
-        _state: &mut LightingState,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        state: &mut LightingState,
     ) {
+        let mode = state.studio_mode;
+
+        let solid = mode == StudioLightingMode::Solid;
+        let peak_meter = mode == StudioLightingMode::PeakMeter;
+        let spectrum = mode == StudioLightingMode::SolidSpectrum;
+
+        if ui.selectable_label(solid, "Solid Colour").clicked() {
+            state.studio_mode = StudioLightingMode::Solid;
+            let message = Message::Lighting(Lighting::StudioMode(StudioLightingMode::Solid));
+            let _ = config.handle_message(message);
+        };
+
+        ui.add_space(10.0);
+        if ui.selectable_label(peak_meter, "Peak Meter").clicked() {
+            state.studio_mode = StudioLightingMode::PeakMeter;
+            let message = Message::Lighting(Lighting::StudioMode(StudioLightingMode::PeakMeter));
+            let _ = config.handle_message(message);
+        };
+
+        ui.add_space(10.0);
+        if ui.selectable_label(spectrum, "Solid Spectrum").clicked() {
+            state.studio_mode = StudioLightingMode::SolidSpectrum;
+            let message =
+                Message::Lighting(Lighting::StudioMode(StudioLightingMode::SolidSpectrum));
+            let _ = config.handle_message(message);
+        };
     }
 
     fn draw_area(
@@ -142,14 +169,22 @@ impl LightingPage {
         config: &mut BeacnAudioState,
         state: &mut LightingState,
     ) -> Response {
-        match state.mic_mode {
-            Solid => self.draw_solid(ui, config, state),
-            Spectrum => self.draw_spectrum(ui, config, state),
-            Gradient => self.draw_gradient(ui, config, state),
-            ReactiveRing | ReactiveMeterUp | ReactiveMeterDown => {
-                self.draw_reactive(ui, config, state)
+        if config.device_definition.device_type == DeviceType::BeacnStudio {
+            match state.studio_mode {
+                StudioLightingMode::Solid => self.draw_solid(ui, config, state),
+                StudioLightingMode::PeakMeter => self.draw_reactive(ui, config, state),
+                StudioLightingMode::SolidSpectrum => self.draw_spectrum(ui, config, state),
             }
-            SparkleRandom | SparkleMeter => self.draw_sparkle(ui, config, state),
+        } else {
+            match state.mic_mode {
+                Solid => self.draw_solid(ui, config, state),
+                Spectrum => self.draw_spectrum(ui, config, state),
+                Gradient => self.draw_gradient(ui, config, state),
+                ReactiveRing | ReactiveMeterUp | ReactiveMeterDown => {
+                    self.draw_reactive(ui, config, state)
+                }
+                SparkleRandom | SparkleMeter => self.draw_sparkle(ui, config, state),
+            }
         }
     }
 
@@ -188,31 +223,32 @@ impl LightingPage {
         ui.vertical(|ui| {
             ui.label("Behaviour");
 
-            ui.vertical(|ui| {
-                if ui
-                    .radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.handle_message(message);
-                }
-                if ui
-                    .radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.handle_message(message);
-                }
-                if ui
-                    .radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.handle_message(message);
-                }
-            });
-            ui.add_space(4.);
-
+            if config.device_definition.device_type == DeviceType::BeacnMic {
+                ui.vertical(|ui| {
+                    if ui
+                        .radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter")
+                        .changed()
+                    {
+                        let message = Message::Lighting(Lighting::Mode(state.mic_mode));
+                        let _ = config.handle_message(message);
+                    }
+                    if ui
+                        .radio_value(&mut state.mic_mode, ReactiveMeterUp, "Bar Meter Up")
+                        .changed()
+                    {
+                        let message = Message::Lighting(Lighting::Mode(state.mic_mode));
+                        let _ = config.handle_message(message);
+                    }
+                    if ui
+                        .radio_value(&mut state.mic_mode, ReactiveMeterDown, "Bar Meter Down")
+                        .changed()
+                    {
+                        let message = Message::Lighting(Lighting::Mode(state.mic_mode));
+                        let _ = config.handle_message(message);
+                    }
+                });
+                ui.add_space(4.);
+            }
             self.draw_primary_colour(ui, config, &mut state.colour1);
             self.draw_secondary_colour(ui, config, &mut state.colour2);
             self.draw_meter_sensitivity(ui, config, &mut state.sensitivity);
