@@ -7,6 +7,7 @@ mod app_settings;
 mod audio_pages;
 mod controller_pages;
 mod numbers;
+mod shared_pages;
 mod states;
 mod widgets;
 

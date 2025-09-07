@@ -20,5 +20,7 @@ pub enum LoadState {
     #[default]
     Loading,
     Running,
+    PermissionDenied,
+    ResourceBusy,
     Error,
 }

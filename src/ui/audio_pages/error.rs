@@ -1,4 +1,5 @@
 use crate::ui::audio_pages::AudioPage;
+use crate::ui::shared_pages::errors::display_errors;
 use crate::ui::states::audio_state::BeacnAudioState;
 use egui::Ui;
 
@@ -20,25 +21,6 @@ impl AudioPage for ErrorPage {
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
-        ui.add_sized(
-            [ui.available_width(), ui.available_height()],
-            |ui: &mut Ui| {
-                ui.add_sized(ui.available_size(), |ui: &mut Ui| {
-                    ui.vertical(|ui| {
-                        ui.label("Device in Error State");
-                        for message in &state.device_state.errors {
-                            ui.add_space(15.0);
-                            if let Some(error) = &message.error_text {
-                                ui.label(format!("Error: {error:?}"));
-                            }
-                            if let Some(message) = &message.failed_message {
-                                ui.label(format!("Message: {message:?}"));
-                            }
-                        }
-                    })
-                    .response
-                })
-            },
-        );
+        display_errors(ui, &state.device_state.state, &state.device_state.errors);
     }
 }

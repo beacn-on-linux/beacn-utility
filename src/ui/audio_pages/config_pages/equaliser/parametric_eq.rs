@@ -197,6 +197,7 @@ impl ParametricEq {
 
         if ui.is_rect_visible(rect) {
             self.draw_widget(ui, rect, &mut bands);
+            #[allow(clippy::collapsible_if)]
             if response.hovered() {
                 if let Some(pointer_pos) = response.hover_pos() {
                     let scroll = ui.ctx().input(|i| i.raw_scroll_delta).y;
@@ -207,17 +208,21 @@ impl ParametricEq {
                 }
             }
 
+            #[allow(clippy::collapsible_if)]
             if response.clicked() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
                     self.handle_click(rect, pointer_pos, &bands);
                 }
             }
 
+            #[allow(clippy::collapsible_if)]
             if response.drag_started() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
                     self.handle_drag_start(rect, pointer_pos, &bands);
                 }
             }
+
+            #[allow(clippy::collapsible_if)]
             if response.dragged() {
                 if let Some(pointer_pos) = response.interact_pointer_pos() {
                     self.handle_drag(rect, pointer_pos, &mut bands, state);
@@ -344,6 +349,7 @@ impl ParametricEq {
                 ui.separator();
                 let enabled = bands.values_mut().any(|b| !b.enabled);
                 let button = Button::new("Add Band");
+                #[allow(clippy::collapsible_if)]
                 if ui.add_enabled(enabled, button).clicked() {
                     if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
                         if eq.band_type == NotSet {
@@ -620,6 +626,7 @@ impl ParametricEq {
         }
 
         // Push the last point if it's not there already
+        #[allow(clippy::collapsible_if)]
         if result.last() != points.last() {
             if let Some(&last) = points.last() {
                 result.push(last)

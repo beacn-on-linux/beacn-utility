@@ -164,16 +164,16 @@ impl BeacnMicApp {
                     self.device_list.retain(|d| d != definition);
 
                     // Make sure we're not referencing this device as active
-                    if let Some(active_device) = &self.active_device {
-                        if active_device == definition {
-                            if self.device_list.is_empty() {
-                                self.active_device = None;
-                            } else {
-                                // Reset the State, set the active device as the first device
-                                let first = self.device_list.first().unwrap();
-                                self.active_device = Some(first.clone());
-                                self.active_page = 0;
-                            }
+                    if let Some(active_device) = &self.active_device
+                        && active_device == definition
+                    {
+                        if self.device_list.is_empty() {
+                            self.active_device = None;
+                        } else {
+                            // Reset the State, set the active device as the first device
+                            let first = self.device_list.first().unwrap();
+                            self.active_device = Some(first.clone());
+                            self.active_page = 0;
                         }
                     }
                 }
@@ -206,7 +206,10 @@ impl BeacnMicApp {
                     let selected = *active_device == device
                         && self.active_page == index
                         && !self.settings_active;
-                    let error = device_state.device_state.state == LoadState::Error;
+                    let error = matches!(
+                        device_state.device_state.state,
+                        LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
+                    );
 
                     if page.show_on_error() == error
                         && (!page.is_link_page() || page.is_studio_with_link(device_state))
@@ -238,7 +241,10 @@ impl BeacnMicApp {
                         && self.active_page == index
                         && !self.settings_active;
 
-                    let error = device_state.device_state.state == LoadState::Error;
+                    let error = matches!(
+                        device_state.device_state.state,
+                        LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
+                    );
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
@@ -252,7 +258,6 @@ impl BeacnMicApp {
             }
         }
     }
-
     fn render_content(&mut self, ctx: &Context) {
         if self.active_device.is_none() && !self.settings_active {
             return;

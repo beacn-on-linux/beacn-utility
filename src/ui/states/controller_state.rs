@@ -1,5 +1,5 @@
 use crate::APP_NAME;
-use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition};
+use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
 use beacn_lib::crossbeam::channel::Sender;
@@ -29,16 +29,28 @@ impl BeacnControllerState {
 
         // Before we do anything else, is this definition in an error state?
         if let DefinitionState::Error(error) = &state.device_definition.state {
-            state.device_state.state = LoadState::Error;
-            state.device_state.errors.push(ErrorMessage {
-                error_text: Some(format!("Failed to Open Device: {error}")),
-                failed_message: None,
-            });
-
+            match error {
+                ErrorType::PermissionDenied => {
+                    state.device_state.state = LoadState::PermissionDenied
+                }
+                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::Other(s) => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some(format!("Device Definition Error: {s}")),
+                        failed_message: None,
+                    });
+                }
+                ErrorType::Unknown => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some("Unknown Error".to_string()),
+                        failed_message: None,
+                    });
+                }
+            }
             return state;
         }
-
-        state.device_state.state = LoadState::Running;
 
         // Grab the settings from a possible saved config file
         state.load_from_file();
@@ -99,6 +111,7 @@ impl BeacnControllerState {
         let config_file = xdg_dirs.find_config_file(file_name);
 
         debug!("Attempting to load Config from {config_file:?}");
+        #[allow(clippy::collapsible_if)]
         if let Some(file) = config_file {
             if let Ok(file) = File::open(file) {
                 if let Ok(config) = serde_json::from_reader(file) {
@@ -120,6 +133,7 @@ impl BeacnControllerState {
         let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
         let config_file = xdg_dirs.place_config_file(file_name);
 
+        #[allow(clippy::collapsible_if)]
         if let Ok(file) = config_file {
             if let Ok(file) = File::create(file) {
                 if let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings) {

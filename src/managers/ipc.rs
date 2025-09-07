@@ -23,11 +23,11 @@ pub fn handle_ipc(
     debug!("Spawning IPC Socket");
 
     let socket_path = get_socket_file_path();
-    if let Some(parent) = socket_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            warn!("Failed to create socket directory {parent:?}: {e}");
-            bail!("Failed to Open IPC Socket");
-        }
+    if let Some(parent) = socket_path.parent()
+        && let Err(e) = fs::create_dir_all(parent)
+    {
+        warn!("Failed to create socket directory {parent:?}: {e}");
+        bail!("Failed to Open IPC Socket");
     }
 
     if socket_path.exists() {

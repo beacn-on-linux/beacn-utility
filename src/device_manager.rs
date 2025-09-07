@@ -16,7 +16,7 @@ use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
 use crate::managers::login::spawn_login_handler;
-use anyhow::{anyhow};
+use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
@@ -28,12 +28,12 @@ use beacn_lib::manager::{
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
+use beacn_lib::{BeacnError, UsbError};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
-use beacn_lib::{BeacnError, UsbError};
 use strum_macros::Display;
 
 const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
@@ -123,22 +123,19 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                 let (device, state) = match open_audio_device(location) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(
-                                        match e {
+                                    Err(e) => (
+                                        None,
+                                        DefinitionState::Error(match e {
                                             BeacnError::Usb(UsbError::Access) => {
                                                 ErrorType::PermissionDenied
                                             }
                                             BeacnError::Usb(UsbError::Busy) => {
                                                 ErrorType::ResourceBusy
                                             }
-                                            BeacnError::Usb(e) => {
-                                                ErrorType::Other(e.to_string())
-                                            }
-                                            BeacnError::Other(e) => {
-                                                ErrorType::Other(e.to_string())
-                                            }
-                                        },
-                                    )),
+                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                                        }),
+                                    ),
                                 };
 
                                 let (serial, version) = match &device {
@@ -175,22 +172,19 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 // connection and management.
                                 let (device, state) = match open_control_device(location, None) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(
-                                        match e {
+                                    Err(e) => (
+                                        None,
+                                        DefinitionState::Error(match e {
                                             BeacnError::Usb(UsbError::Access) => {
                                                 ErrorType::PermissionDenied
                                             }
                                             BeacnError::Usb(UsbError::Busy) => {
                                                 ErrorType::ResourceBusy
                                             }
-                                            BeacnError::Usb(e) => {
-                                                ErrorType::Other(e.to_string())
-                                            }
-                                            BeacnError::Other(e) => {
-                                                ErrorType::Other(e.to_string())
-                                            }
-                                        },
-                                    )),
+                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                                        }),
+                                    ),
                                 };
 
                                 let (serial, version) = match &device {
@@ -262,6 +256,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             },
             i => {
                 // Find the specific device for this index
+                #[allow(clippy::collapsible_if)]
                 if let Some(device) = device_indices.get(&i) {
                     if let Some(device) = receiver_map.get(*device) {
                         match device {
@@ -390,7 +385,11 @@ pub enum ControlMessage {
     DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     DimTimeout(Duration, oneshot::Sender<Result<(), BeacnError>>),
-    ButtonColour(ButtonLighting, RGBA, oneshot::Sender<Result<(), BeacnError>>),
+    ButtonColour(
+        ButtonLighting,
+        RGBA,
+        oneshot::Sender<Result<(), BeacnError>>,
+    ),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]

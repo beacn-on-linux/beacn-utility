@@ -1,4 +1,6 @@
 use crate::ui::audio_pages::AudioPage;
+use crate::ui::states::audio_state::BeacnAudioState;
+use crate::ui::states::audio_state::Lighting as LightingState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,
@@ -10,10 +12,8 @@ use beacn_lib::audio::messages::lighting::{
 };
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
-use egui::{Align, Label, Layout, Response, RichText, Ui};
-
-use crate::ui::states::audio_state::BeacnAudioState;
-use crate::ui::states::audio_state::Lighting as LightingState;
+use egui::{Align, Layout, Response, RichText, Ui};
+use log::debug;
 
 pub struct LightingPage {}
 
@@ -76,9 +76,30 @@ impl AudioPage for LightingPage {
 
         ui.separator();
 
-        ui.add_sized(ui.available_size(), Label::new("Bottom Section"));
+        ui.add_sized(ui.available_size(), |ui: &mut Ui| {
+            ui.horizontal(|ui: &mut Ui| {
+                let separator_width = ui.spacing().item_spacing.x;
+                let available_width = ui.available_width() - separator_width;
+                let panel_width = available_width / 2.0;
+                debug!("Height: {}", ui.available_height());
 
-        ui.heading("Lighting Section");
+                ui.add_sized([panel_width, ui.available_height()], |ui: &mut Ui| {
+                    ui.label("Bottom Left")
+                });
+                ui.separator();
+                ui.add_sized([panel_width, ui.available_height()], |ui: &mut Ui| {
+                    ui.label("Bottom Right")
+                });
+            })
+            .response
+        });
+
+        // let width = ui.available_width() / 2.;
+        // ui.separator();
+
+        //ui.add_sized(ui.available_size(), Label::new("Bottom Section"));
+
+        //ui.heading("Lighting Section");
     }
 }
 
