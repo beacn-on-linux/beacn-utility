@@ -197,7 +197,7 @@ impl BeacnAudioState {
                 if let Ok(message) = message {
                     self.set_local_value(message);
                 }
-                message
+                Ok(message?)
             }
             None => bail!("Device Sender not Ready"),
         }

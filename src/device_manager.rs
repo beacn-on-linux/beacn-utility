@@ -16,7 +16,7 @@ use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
 use crate::managers::login::spawn_login_handler;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
@@ -33,6 +33,8 @@ use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
+use beacn_lib::{BeacnError, UsbError};
+use strum_macros::Display;
 
 const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
@@ -121,7 +123,22 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                 let (device, state) = match open_audio_device(location) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(e.to_string())),
+                                    Err(e) => (None, DefinitionState::Error(
+                                        match e {
+                                            BeacnError::Usb(UsbError::Access) => {
+                                                ErrorType::PermissionDenied
+                                            }
+                                            BeacnError::Usb(UsbError::Busy) => {
+                                                ErrorType::ResourceBusy
+                                            }
+                                            BeacnError::Usb(e) => {
+                                                ErrorType::Other(e.to_string())
+                                            }
+                                            BeacnError::Other(e) => {
+                                                ErrorType::Other(e.to_string())
+                                            }
+                                        },
+                                    )),
                                 };
 
                                 let (serial, version) = match &device {
@@ -158,7 +175,22 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 // connection and management.
                                 let (device, state) = match open_control_device(location, None) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (None, DefinitionState::Error(e.to_string())),
+                                    Err(e) => (None, DefinitionState::Error(
+                                        match e {
+                                            BeacnError::Usb(UsbError::Access) => {
+                                                ErrorType::PermissionDenied
+                                            }
+                                            BeacnError::Usb(UsbError::Busy) => {
+                                                ErrorType::ResourceBusy
+                                            }
+                                            BeacnError::Usb(e) => {
+                                                ErrorType::Other(e.to_string())
+                                            }
+                                            BeacnError::Other(e) => {
+                                                ErrorType::Other(e.to_string())
+                                            }
+                                        },
+                                    )),
                                 };
 
                                 let (serial, version) = match &device {
@@ -244,7 +276,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                                     .downcast_ref::<String>()
                                                     .cloned()
                                                     .unwrap_or(String::from("Unknown Error"));
-                                                let _ = resp.send(Err(anyhow!(error)));
+                                                let _ = resp.send(Err(anyhow!(error).into()));
                                             } else {
                                                 // Send back the original response
                                                 let _ = resp.send(response.unwrap());
@@ -342,23 +374,23 @@ pub enum DeviceArriveMessage {
 }
 
 pub enum AudioMessage {
-    Handle(Message, oneshot::Sender<Result<Message>>),
+    Handle(Message, oneshot::Sender<Result<Message, BeacnError>>),
     Linked(LinkedCommands),
 }
 
 pub enum LinkedCommands {
-    GetLinked(oneshot::Sender<Result<Option<Vec<LinkedApp>>>>),
-    SetLinked(LinkedApp, oneshot::Sender<Result<()>>),
+    GetLinked(oneshot::Sender<Result<Option<Vec<LinkedApp>>, BeacnError>>),
+    SetLinked(LinkedApp, oneshot::Sender<Result<(), BeacnError>>),
 }
 
 #[allow(unused)]
 pub enum ControlMessage {
-    Enabled(bool, oneshot::Sender<Result<()>>),
-    SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<()>>),
-    DisplayBrightness(u8, oneshot::Sender<Result<()>>),
-    ButtonBrightness(u8, oneshot::Sender<Result<()>>),
-    DimTimeout(Duration, oneshot::Sender<Result<()>>),
-    ButtonColour(ButtonLighting, RGBA, oneshot::Sender<Result<()>>),
+    Enabled(bool, oneshot::Sender<Result<(), BeacnError>>),
+    SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<(), BeacnError>>),
+    DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
+    ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
+    DimTimeout(Duration, oneshot::Sender<Result<(), BeacnError>>),
+    ButtonColour(ButtonLighting, RGBA, oneshot::Sender<Result<(), BeacnError>>),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]
@@ -379,5 +411,14 @@ pub struct DeviceInfo {
 pub enum DefinitionState {
     #[default]
     Running,
-    Error(String),
+    Error(ErrorType),
+}
+
+#[derive(Display, Debug, Default, Clone, Hash, PartialEq, Eq)]
+pub enum ErrorType {
+    PermissionDenied,
+    ResourceBusy,
+    Other(String),
+    #[default]
+    Unknown,
 }
