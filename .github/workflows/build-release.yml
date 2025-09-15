@@ -13,27 +13,32 @@ jobs:
       - name: "Check out Repository"
         uses: actions/checkout@v4
 
+      - name: "Check out Flatpak Repo"
+        uses: actions/checkout@v4
+        with:
+          repository: beacn-on-linux/beacn-utility-flatpak
+          path: beacn-utility-flatpak
+
+      - name: "Install Dependencies"
+        run: |
+          sudo apt update
+          sudo apt install -y flatpak flatpak-builder
+
       - name: "Install Rust"
         uses: dtolnay/rust-toolchain@stable
-
-#      - name: "Loading Cache"
-#        uses: actions/cache@v4
-#        continue-on-error: false
-#        with:
-#          path: |
-#            ~/.cargo/bin/
-#            ~/.cargo/registry/index/
-#            ~/.cargo/registry/cache/
-#            ~/.cargo/git/db/
-#            target/
-#          key: ${{ runner.os }}-cargo-release-${{ hashFiles('Cargo.lock') }}
-#          restore-keys: ${{ runner.os }}-cargo-release-
 
       - name: Install cargo-deb and cargo-generate-rpm
         run: cargo install --force cargo-deb cargo-generate-rpm
 
       - name: "Build Packages"
         run: ./.github/ci/build-packages
+        shell: bash
+
+      - name: "Build Flatpak"
+        run: |
+          cd beacn-utility-flatpak
+          flatpak-builder --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
+          flatpak build-bundle ./beacn-repo ../beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
         shell: bash
 
       - name: "Upload DEB Artifact"
@@ -47,3 +52,9 @@ jobs:
         with:
           name: rpm-artifact
           path: ./target/generate-rpm/*.rpm
+
+      - name: "Upload Flatpak Artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-artifact
+          path: ./beacn-utility.flatpak
