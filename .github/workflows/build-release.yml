@@ -56,11 +56,11 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
           flatpak-builder --user --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
-          flatpak build-bundle ./beacn-repo beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
+          flatpak build-bundle ./beacn-repo beacn-utility-${{ needs.get_version.outputs.version }}-x86_64.flatpak io.github.beacn_on_linux.beacn-utility
         shell: bash
 
       - name: "Upload Flatpak Artifact"
         uses: actions/upload-artifact@v4
         with:
           name: flatpak-artifact
-          path: ./beacn-utility.flatpak
+          path: ./*.flatpak
