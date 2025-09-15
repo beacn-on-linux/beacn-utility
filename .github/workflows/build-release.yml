@@ -19,10 +19,12 @@ jobs:
           repository: beacn-on-linux/beacn-utility-flatpak
           path: beacn-utility-flatpak
 
-      - name: "Install Dependencies"
+      - name: "Setup Flatpak"
         run: |
           sudo apt update
           sudo apt install -y flatpak flatpak-builder
+          
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: "Install Rust"
         uses: dtolnay/rust-toolchain@stable
@@ -37,6 +39,7 @@ jobs:
       - name: "Build Flatpak"
         run: |
           cd beacn-utility-flatpak
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak-builder --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
           flatpak build-bundle ./beacn-repo ../beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
         shell: bash
