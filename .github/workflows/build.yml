@@ -37,28 +37,3 @@ jobs:
 
       - name: Performing Clippy Test
         run: cargo clippy --all-targets --all-features -- -D warnings
-
-      - name: Setting up Git for Code Generation
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Setting up Python
-        run: |
-          pip install flatpak-cargo-generator
-
-      - name: Generating file
-        run: |
-          flatpak-cargo-generator Cargo.lock -o generated-sources.json
-
-      - name: Check for Changes and Update
-        run: |
-          if git diff --quiet; then
-            echo "No changes to commit"
-            exit 0
-          else
-            git add generated-sources.json
-            git commit -m "chore: update flatpak sources"
-            git push
-          fi        
-        
