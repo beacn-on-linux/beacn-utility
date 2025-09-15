@@ -37,3 +37,10 @@ jobs:
 
       - name: Performing Clippy Test
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Dispatch Flatpak Updater
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}  # Stored in the org secrets
+          repository: beacn-on-linux/beacn-utility-flatpak
+          event-type: update-generated-sources
