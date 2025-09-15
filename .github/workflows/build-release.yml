@@ -50,14 +50,12 @@ jobs:
           sudo apt update
           sudo apt install -y flatpak flatpak-builder appstream-compose
 
-          sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
       - name: "Build Flatpak"
         run: |
-          sudo flatpak-builder --disable-sandbox --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
-          sudo flatpak build-bundle ./beacn-repo beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
-          
-          sudo chown $(id -u):$(id -g) beacn-utility.flatpak
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+          flatpak-builder --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
+          flatpak build-bundle ./beacn-repo beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
         shell: bash
 
       - name: "Upload Flatpak Artifact"
