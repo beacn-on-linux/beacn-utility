@@ -24,4 +24,13 @@ jobs:
 
       - name: "Store Version"
         id: store_version
-        run: echo "version=$(cargo pkgid | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+        run: |
+          pkgid=$(cargo pkgid)
+          if [[ "$pkgid" == *"@"* ]]; then
+            # version is after the last '@'
+            version="${pkgid##*@}"
+          else
+            # version is after the last '#'
+            version="${pkgid##*#}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
