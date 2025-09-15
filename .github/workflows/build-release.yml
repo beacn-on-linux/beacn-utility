@@ -54,7 +54,7 @@ jobs:
 
       - name: "Build Flatpak"
         run: |
-          sudo flatpak-builder --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
+          sudo flatpak-builder --disable-sandbox --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
           sudo flatpak build-bundle ./beacn-repo beacn-utility.flatpak io.github.beacn_on_linux.beacn-utility
           
           sudo chown $(id -u):$(id -g) beacn-utility.flatpak
