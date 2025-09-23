@@ -25,7 +25,7 @@ jobs:
 
 #      - name: "Grab Flatpak Ref"
 #        run: |
-#          curl -L https://raw.githubusercontent.com/beacn-on-linux/repo/main/repo/flatpak/beacn-utility.flatpakref -o beacn-utility.flatpakref
+#          curl -L https://raw.githubusercontent.com/beacn-on-linux/beacn-utility-repo/main/repo/flatpak/beacn-utility.flatpakref -o beacn-utility.flatpakref
 
       - name: "Upload DEB Artifact"
         uses: actions/upload-artifact@v4
