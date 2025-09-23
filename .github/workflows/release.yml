@@ -39,4 +39,4 @@ jobs:
           files: |
             ./debian-artifact/beacn-utility_${{ needs.get_version.outputs.version }}-1_amd64.deb
             ./rpm-artifact/beacn-utility-${{ needs.get_version.outputs.version }}-1.x86_64.rpm
-            ./flatpak-artifact/beacn-utility-${{ needs.get_version.outputs.version }}-x86_64.flatpak
+#            ./flatpak-artifact/beacn-utility.flatpakref

@@ -23,6 +23,10 @@ jobs:
         run: ./.github/ci/build-packages
         shell: bash
 
+#      - name: "Grab Flatpak Ref"
+#        run: |
+#          curl -L https://raw.githubusercontent.com/beacn-on-linux/repo/main/repo/flatpak/beacn-utility.flatpakref -o beacn-utility.flatpakref
+
       - name: "Upload DEB Artifact"
         uses: actions/upload-artifact@v4
         with:
@@ -35,32 +39,8 @@ jobs:
           name: rpm-artifact
           path: ./target/generate-rpm/*.rpm
 
-  build_flatpak:
-    name: "Create Flatpak Build"
-    runs-on: ubuntu-22.04
-    needs: [ get_version ]
-    steps:
-      - name: "Check out Flatpak Repo"
-        uses: actions/checkout@v4
-        with:
-          repository: beacn-on-linux/beacn-utility-flatpak
-
-      - name: "Setup Flatpak"
-        run: |
-          sudo add-apt-repository -y ppa:flatpak/stable
-          sudo apt update
-          sudo apt install -y flatpak flatpak-builder
-
-      - name: "Build Flatpak"
-        run: |
-          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-
-          flatpak-builder --user --repo=beacn-repo --install-deps-from=flathub --force-clean build-dir io.github.beacn_on_linux.beacn-utility.yml
-          flatpak build-bundle ./beacn-repo beacn-utility-${{ needs.get_version.outputs.version }}-x86_64.flatpak io.github.beacn_on_linux.beacn-utility
-        shell: bash
-
-      - name: "Upload Flatpak Artifact"
-        uses: actions/upload-artifact@v4
-        with:
-          name: flatpak-artifact
-          path: ./*.flatpak
+#      - name: "Upload Flatpak Ref"
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: flatpak-artifact
+#          path: ./beacn-utility.flatpakref
