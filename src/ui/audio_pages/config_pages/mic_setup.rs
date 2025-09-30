@@ -193,6 +193,18 @@ impl ConfigPage for MicSetupPage {
 
             ui.add_space(spacing);
             ui.separator();
+
+            // We should probably move this elsewhere later, but for now it's fine
+            if device_type == DeviceType::BeacnStudio {
+                ui.vertical(|ui| {
+                    if ui.checkbox(&mut mic_setup.phantom, "Phantom Power").changed() {
+                        let message = Message::MicSetup(MicSetup::StudioPhantomPower(mic_setup.phantom));
+                        state
+                            .handle_message(message)
+                            .expect("Failed to Send Message");
+                    }
+                });
+            };
         });
     }
 }
