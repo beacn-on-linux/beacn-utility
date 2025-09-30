@@ -101,6 +101,17 @@ impl ParametricEq {
         }
     }
 
+    pub(crate) fn clear(&mut self) {
+        self.serial = None;
+        self.eq_mode = EQMode::Simple;
+        self.band_freq_response = Default::default();
+        self.band_mesh = Default::default();
+        self.curve_points.clear();
+        self.rect = Rect::NOTHING;
+        self.active_band = EQBand::Band1;
+        self.active_band_drag = None;
+    }
+
     /// Shows the parametric equalizer in the UI
     pub fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) -> Response {
         // Are we rendering this for the current serial?
@@ -109,16 +120,11 @@ impl ParametricEq {
             if serial != state.device_definition.device_info.serial {
                 debug!("Resetting EQ for New Device: {serial}");
                 // If the serial doesn't match, we need to reset the widget
+                self.clear();
                 self.serial = Some(state.device_definition.device_info.serial.clone());
-                self.eq_mode = state.equaliser.mode;
-                self.band_freq_response = Default::default();
-                self.band_mesh = Default::default();
-                self.curve_points.clear();
-                self.rect = Rect::NOTHING;
-                self.active_band = EQBand::Band1;
-                self.active_band_drag = None;
             }
         } else {
+            debug!("Loading EQ For: {}", state.device_definition.device_info.serial);
             self.serial = Some(state.device_definition.device_info.serial.clone());
         }
 

@@ -127,6 +127,12 @@ fn main() -> Result<()> {
                 }
                 Err(e) => bail!("Error: {}", e),
             }
+
+            // app is a Box<dyn App>, we need to downcast it back to a Box<BeacnMicApp>
+            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
+                // Trigger the 'On Close' event to allow some cleanup
+                app.on_close();
+            }
         }
         first_run = false;
 

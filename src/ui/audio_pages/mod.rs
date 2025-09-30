@@ -20,6 +20,8 @@ pub trait AudioPage {
     }
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
 
+    fn on_close(&mut self) {}
+
     fn is_studio_with_link(&self, state: &BeacnAudioState) -> bool {
         state.device_definition.device_type == DeviceType::BeacnStudio
             && state.headphones.studio_driverless

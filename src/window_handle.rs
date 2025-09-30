@@ -25,6 +25,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
 
+const EVENT_PROXY: &str = "event_proxy";
+
 // These are events we can send into winit to trigger an update
 #[derive(Debug, Clone)]
 pub enum UserEvent {
@@ -41,6 +43,7 @@ struct EventProxy(Arc<EventLoopProxy<UserEvent>>);
 pub trait App {
     fn update(&mut self, ctx: &egui::Context);
     fn should_close(&mut self) -> bool;
+    fn on_close(&mut self);
     fn as_any(&mut self) -> &mut dyn Any;
 }
 
@@ -89,8 +92,8 @@ impl WindowRunner {
 
         if let Some(proxy) = &self.event_loop_proxy {
             self.context.data_mut(|data| {
-                data.insert_temp(
-                    egui::Id::new("event_proxy"),
+                data.insert_persisted(
+                    Id::new(EVENT_PROXY),
                     EventProxy(Arc::new(proxy.clone())),
                 );
             });
@@ -135,7 +138,7 @@ impl WindowRunner {
 // This is a helper function which lets the app send a UserEvent into the context
 pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
     ctx.data(|data| {
-        if let Some(proxy) = data.get_temp::<EventProxy>(egui::Id::new("event_proxy")) {
+        if let Some(proxy) = data.get_temp::<EventProxy>(Id::new(EVENT_PROXY)) {
             let _ = proxy.0.send_event(event);
         }
     });

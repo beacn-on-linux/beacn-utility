@@ -112,6 +112,16 @@ impl App for BeacnMicApp {
         true
     }
 
+    fn on_close(&mut self) {
+        for audio_page in &mut self.audio_pages {
+            audio_page.on_close();
+        }
+
+        for controller_pages in &mut self.control_pages {
+            controller_pages.on_close();
+        }
+    }
+
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }

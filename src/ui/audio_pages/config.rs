@@ -13,7 +13,7 @@ use beacn_lib::types::HasRange;
 use egui::{Ui, vec2};
 
 pub struct Configuration {
-    equaliser_new: Box<ParametricEq>,
+    equaliser: Box<ParametricEq>,
 
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
@@ -22,7 +22,7 @@ pub struct Configuration {
 impl Configuration {
     pub fn new() -> Self {
         Self {
-            equaliser_new: Box::new(ParametricEq::new()),
+            equaliser: Box::new(ParametricEq::new()),
 
             selected_tab: 0,
             tab_pages: vec![
@@ -46,7 +46,7 @@ impl AudioPage for Configuration {
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);
             ui.set_max_size(eq_size);
-            self.equaliser_new.ui(ui, state);
+            self.equaliser.ui(ui, state);
         });
 
         ui.separator();
@@ -97,5 +97,9 @@ impl AudioPage for Configuration {
                 });
             });
         });
+    }
+
+    fn on_close(&mut self) {
+        self.equaliser.clear();
     }
 }
