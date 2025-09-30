@@ -6,14 +6,10 @@ use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,
     Spectrum,
 };
-use beacn_lib::audio::messages::lighting::{
-    Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingSpeed,
-    StudioLightingMode,
-};
+use beacn_lib::audio::messages::lighting::{Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingMuteMode, LightingSpeed, LightingSuspendBrightness, LightingSuspendMode, StudioLightingMode};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use egui::{Align, Layout, Response, RichText, Ui};
-use log::debug;
 
 pub struct LightingPage {}
 
@@ -34,7 +30,7 @@ impl AudioPage for LightingPage {
 
         // Lighting is relatively simple, we have a persistent bottom pane, and a top pane
         ui.add_sized(
-            [ui.available_width(), ui.available_height() - 200.],
+            [ui.available_width(), ui.available_height() - 190.],
             |ui: &mut Ui| {
                 ui.vertical_centered(|ui: &mut Ui| {
                     ui.horizontal_top(|ui| {
@@ -75,20 +71,89 @@ impl AudioPage for LightingPage {
         );
 
         ui.separator();
+        ui.add_space(5.0);
+        ui.label(RichText::new("Other Lighting Options (note, this do not work cleanly under Linux)").strong());
+        ui.add_space(5.0);
+        ui.separator();
 
         ui.add_sized(ui.available_size(), |ui: &mut Ui| {
             ui.horizontal(|ui: &mut Ui| {
                 let separator_width = ui.spacing().item_spacing.x;
                 let available_width = ui.available_width() - separator_width;
                 let panel_width = available_width / 2.0;
-                debug!("Height: {}", ui.available_height());
 
                 ui.add_sized([panel_width, ui.available_height()], |ui: &mut Ui| {
-                    ui.label("Bottom Left")
+                    ui.vertical(|ui| {
+                        let mute_mode = &mut state.lighting.mute_mode;
+
+                        // The easiest way to handle this is to monitor the previous and see if it's
+                        // changed, rather than having .click or .change on each radio
+                        let previous = *mute_mode;
+
+                        ui.label(RichText::new("When Muted").strong());
+                        ui.add_space(10.);
+                        ui.radio_value(mute_mode, LightingMuteMode::Nothing, "Do Nothing");
+                        ui.radio_value(mute_mode, LightingMuteMode::Solid, "Turn LED ring to a solid colour");
+                        ui.radio_value(mute_mode, LightingMuteMode::Off, "Turn off LED ring");
+
+                        if *mute_mode != previous {
+                            let message = Message::Lighting(Lighting::MuteMode(*mute_mode));
+                            state
+                                .handle_message(message)
+                                .expect("Failed to Send Message");
+                        }
+
+                        ui.add_space(15.);
+                        let mute_colour = &mut state.lighting.mute_colour;
+                        ui.label(RichText::new("Colour").strong());
+                        if ui.color_edit_button_srgb(mute_colour).changed() {
+                            let message = RGBA {
+                                red: mute_colour[0],
+                                green: mute_colour[1],
+                                blue: mute_colour[2],
+                                alpha: 0,
+                            };
+                            let message = Message::Lighting(Lighting::MuteColour(message));
+                            state
+                                .handle_message(message)
+                                .expect("Failed to Send Message");
+                        }
+                    }).response
                 });
                 ui.separator();
                 ui.add_sized([panel_width, ui.available_height()], |ui: &mut Ui| {
-                    ui.label("Bottom Right")
+                    ui.vertical(|ui| {
+                        let suspend_mode = &mut state.lighting.suspend_mode;
+
+                        // The easiest way to handle this is to monitor the previous and see if it's
+                        // changed, rather than having .click or .change on each radio
+                        let previous = *suspend_mode;
+
+                        ui.label(RichText::new("When USB is Suspended").strong());
+                        ui.add_space(10.);
+                        ui.radio_value(suspend_mode, LightingSuspendMode::Nothing, "Do Nothing");
+                        ui.radio_value(suspend_mode, LightingSuspendMode::Off, "Turn off LED ring");
+                        ui.radio_value(suspend_mode, LightingSuspendMode::Brightness, "Change the brightness:");
+                        if *suspend_mode != previous {
+                            let message = Message::Lighting(Lighting::SuspendMode(*suspend_mode));
+                            state
+                                .handle_message(message)
+                                .expect("Failed to Send Message");
+                        }
+
+
+                        if ui.add(egui::Slider::new(&mut state.lighting.suspend_brightness, 0..=100)).changed() {
+                            // We need to change the suspend mode if this is interacted with
+                            if state.lighting.suspend_mode != LightingSuspendMode::Brightness {
+                                let message = Message::Lighting(Lighting::SuspendMode(LightingSuspendMode::Brightness));
+                                state.handle_message(message).expect("Failed to Send Message");
+                            }
+
+                            let value = Lighting::SuspendBrightness(LightingSuspendBrightness(state.lighting.suspend_brightness));
+                            let message = Message::Lighting(value);
+                            state.handle_message(message).expect("Failed to Send Message");
+                        }
+                    }).response
                 });
             })
             .response
