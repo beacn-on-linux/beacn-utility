@@ -147,12 +147,25 @@ pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
 impl ApplicationHandler<UserEvent> for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let attributes = self.window_attributes.clone();
-            let window = Arc::new(event_loop.create_window(attributes).unwrap());
-            let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
+            debug!("Handling Resumed Event, creating window");
 
-            self.window = Some(window);
-            self.renderer = Some(renderer);
+            let attributes = self.window_attributes.clone();
+
+            match event_loop.create_window(attributes) {
+                Err(e) => {
+                    if event_loop.exiting() {
+                        panic!("Attempting to create window While Exiting: {}", e);
+                    }
+                    panic!("Failed to create event loop window: {}", e);
+                }
+                Ok(window) => {
+                    let window = Arc::new(window);
+                    let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
+
+                    self.window = Some(window);
+                    self.renderer = Some(renderer);
+                }
+            }
         }
     }
 
@@ -197,7 +210,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                 &window_handle,
                                 display_handle.as_ref(),
                             )
-                            .await;
+                                .await;
 
                             let request = Background::request()
                                 .identifier(identifier)
@@ -304,6 +317,14 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         event_loop.exit();
                     }
                 }
+                WindowEvent::Destroyed => {
+                    // Window has been destroyed, break out of the loop
+                    debug!("Window Destroyed, exiting event loop");
+                    self.window = None;
+                    self.renderer = None;
+
+                    event_loop.exit();
+                }
                 WindowEvent::Resized(physical_size) => {
                     self.window_attributes.inner_size = Some(physical_size.into());
                     renderer.resize(physical_size)
@@ -311,7 +332,17 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 WindowEvent::Moved(position) => {
                     self.window_attributes.position = Some(position.into());
                 }
-                _ => {}
+                _ => {
+                    // Ignore some spammy events which aren't needed
+                    if !matches!(event, WindowEvent::CursorMoved { device_id: _, position: _ }
+                        | WindowEvent::MouseInput { device_id: _, state: _, button: _ }
+                        | WindowEvent::KeyboardInput { device_id: _, event: _, is_synthetic: _ }
+                        | WindowEvent::CursorEntered { device_id: _ }
+                        | WindowEvent::CursorLeft { device_id: _ }
+                    ) {
+                        debug!("Unhandled Window Event: {event:?}")
+                    }
+                }
             }
         }
     }
@@ -334,7 +365,7 @@ impl GlowRenderer {
                 raw_display_handle,
                 glutin::display::DisplayApiPreference::Egl,
             )
-            .unwrap()
+                .unwrap()
         };
 
         // Create OpenGL config
