@@ -10,13 +10,17 @@ use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
 use egui_winit::winit::platform::x11::WindowAttributesExtX11;
 use egui_winit::winit::window::{Icon, Window};
-use log::{LevelFilter, debug, error};
+use file_rotate::compression::Compression;
+use file_rotate::suffix::AppendCount;
+use file_rotate::{ContentLimit, FileRotate};
+use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
 use once_cell::sync::Lazy;
-use simplelog::{ColorChoice, CombinedLogger, Config, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 use std::path::PathBuf;
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
+use xdg::BaseDirectories;
 
 mod device_manager;
 mod integrations;
@@ -43,12 +47,44 @@ pub fn run_async<F: Future>(future: F) -> F::Output {
 }
 
 fn main() -> Result<()> {
-    CombinedLogger::init(vec![TermLogger::new(
+    println!("Initialising Logging...");
+    let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
+
+    // Setup Console Logging
+    log_targets.push(TermLogger::new(
         LevelFilter::Debug,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
-    )])?;
+    ));
+
+    // Try to establish a log file in the XDG data directory
+    let xdg_dirs = BaseDirectories::with_prefix(APP_TLD);
+    let log_path = xdg_dirs.create_data_directory(PathBuf::from("logs"));
+    if let Ok(path) = log_path {
+        let log_file = path.join("beacn-utility.log");
+        println!("Logging to file: {log_file:?}");
+
+        let file_rotate = FileRotate::new(
+            log_file,
+            AppendCount::new(5),
+            ContentLimit::Bytes(1024 * 1024 * 2),
+            Compression::OnRotate(1),
+            #[cfg(unix)]
+            None,
+        );
+        log_targets.push(WriteLogger::new(
+            LevelFilter::Debug,
+            Config::default(),
+            file_rotate,
+        ));
+    }
+
+    CombinedLogger::init(log_targets)?;
+    info!("Logger initialized");
+
+    // Install a PANIC logger, to hopefully drop info if something breaks
+    log_panics::init();
 
     let args: Vec<String> = env::args().collect();
     let hide_initial = args.contains(&"--startup".to_string());

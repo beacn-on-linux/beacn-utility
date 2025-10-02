@@ -13,6 +13,8 @@ categories = ["hardware-support"]
 # Logging
 log = "0.4.28"
 simplelog = "0.12.2"
+file-rotate = "0.8.0"
+log-panics = { version = "2.1.0", features = ["with-backtrace"]}
 
 # Error Handling
 anyhow = "1.0.100"
