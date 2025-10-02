@@ -5,8 +5,7 @@ jobs:
   # Before we do anything, run the existing test suite
   verify:
     uses: ./.github/workflows/build.yml
-    secrets:
-      CROSS_REPO_DISPATCH_TOKEN: ${{ secrets.CROSS_REPO_DISPATCH_TOKEN }}
+    secrets: inherit
 
   # Grab the current version
   get_version:
