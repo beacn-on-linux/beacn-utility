@@ -16,7 +16,9 @@ use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
 use once_cell::sync::Lazy;
-use simplelog::{ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger};
+use simplelog::{
+    ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger,
+};
 use std::path::PathBuf;
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};

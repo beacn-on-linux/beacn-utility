@@ -6,7 +6,10 @@ use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,
     Spectrum,
 };
-use beacn_lib::audio::messages::lighting::{Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingMuteMode, LightingSpeed, LightingSuspendBrightness, LightingSuspendMode, StudioLightingMode};
+use beacn_lib::audio::messages::lighting::{
+    Lighting, LightingBrightness, LightingMeterSensitivty, LightingMeterSource, LightingMuteMode,
+    LightingSpeed, LightingSuspendBrightness, LightingSuspendMode, StudioLightingMode,
+};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use egui::{Align, Layout, Response, RichText, Ui};
@@ -72,7 +75,10 @@ impl AudioPage for LightingPage {
 
         ui.separator();
         ui.add_space(5.0);
-        ui.label(RichText::new("Other Lighting Options (note, this do not work cleanly under Linux)").strong());
+        ui.label(
+            RichText::new("Other Lighting Options (note, this do not work cleanly under Linux)")
+                .strong(),
+        );
         ui.add_space(5.0);
         ui.separator();
 
@@ -93,7 +99,11 @@ impl AudioPage for LightingPage {
                         ui.label(RichText::new("When Muted").strong());
                         ui.add_space(10.);
                         ui.radio_value(mute_mode, LightingMuteMode::Nothing, "Do Nothing");
-                        ui.radio_value(mute_mode, LightingMuteMode::Solid, "Turn LED ring to a solid colour");
+                        ui.radio_value(
+                            mute_mode,
+                            LightingMuteMode::Solid,
+                            "Turn LED ring to a solid colour",
+                        );
                         ui.radio_value(mute_mode, LightingMuteMode::Off, "Turn off LED ring");
 
                         if *mute_mode != previous {
@@ -118,7 +128,8 @@ impl AudioPage for LightingPage {
                                 .handle_message(message)
                                 .expect("Failed to Send Message");
                         }
-                    }).response
+                    })
+                    .response
                 });
                 ui.separator();
                 ui.add_sized([panel_width, ui.available_height()], |ui: &mut Ui| {
@@ -133,7 +144,11 @@ impl AudioPage for LightingPage {
                         ui.add_space(10.);
                         ui.radio_value(suspend_mode, LightingSuspendMode::Nothing, "Do Nothing");
                         ui.radio_value(suspend_mode, LightingSuspendMode::Off, "Turn off LED ring");
-                        ui.radio_value(suspend_mode, LightingSuspendMode::Brightness, "Change the brightness:");
+                        ui.radio_value(
+                            suspend_mode,
+                            LightingSuspendMode::Brightness,
+                            "Change the brightness:",
+                        );
                         if *suspend_mode != previous {
                             let message = Message::Lighting(Lighting::SuspendMode(*suspend_mode));
                             state
@@ -141,19 +156,33 @@ impl AudioPage for LightingPage {
                                 .expect("Failed to Send Message");
                         }
 
-
-                        if ui.add(egui::Slider::new(&mut state.lighting.suspend_brightness, 0..=100)).changed() {
+                        if ui
+                            .add(egui::Slider::new(
+                                &mut state.lighting.suspend_brightness,
+                                0..=100,
+                            ))
+                            .changed()
+                        {
                             // We need to change the suspend mode if this is interacted with
                             if state.lighting.suspend_mode != LightingSuspendMode::Brightness {
-                                let message = Message::Lighting(Lighting::SuspendMode(LightingSuspendMode::Brightness));
-                                state.handle_message(message).expect("Failed to Send Message");
+                                let message = Message::Lighting(Lighting::SuspendMode(
+                                    LightingSuspendMode::Brightness,
+                                ));
+                                state
+                                    .handle_message(message)
+                                    .expect("Failed to Send Message");
                             }
 
-                            let value = Lighting::SuspendBrightness(LightingSuspendBrightness(state.lighting.suspend_brightness));
+                            let value = Lighting::SuspendBrightness(LightingSuspendBrightness(
+                                state.lighting.suspend_brightness,
+                            ));
                             let message = Message::Lighting(value);
-                            state.handle_message(message).expect("Failed to Send Message");
+                            state
+                                .handle_message(message)
+                                .expect("Failed to Send Message");
                         }
-                    }).response
+                    })
+                    .response
                 });
             })
             .response

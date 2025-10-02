@@ -124,7 +124,10 @@ impl ParametricEq {
                 self.serial = Some(state.device_definition.device_info.serial.clone());
             }
         } else {
-            debug!("Loading EQ For: {}", state.device_definition.device_info.serial);
+            debug!(
+                "Loading EQ For: {}",
+                state.device_definition.device_info.serial
+            );
             self.serial = Some(state.device_definition.device_info.serial.clone());
         }
 

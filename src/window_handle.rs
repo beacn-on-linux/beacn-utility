@@ -92,10 +92,7 @@ impl WindowRunner {
 
         if let Some(proxy) = &self.event_loop_proxy {
             self.context.data_mut(|data| {
-                data.insert_persisted(
-                    Id::new(EVENT_PROXY),
-                    EventProxy(Arc::new(proxy.clone())),
-                );
+                data.insert_persisted(Id::new(EVENT_PROXY), EventProxy(Arc::new(proxy.clone())));
             });
         }
 
@@ -211,7 +208,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                 &window_handle,
                                 display_handle.as_ref(),
                             )
-                                .await;
+                            .await;
 
                             let request = Background::request()
                                 .identifier(identifier)
@@ -337,11 +334,21 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
                 _ => {
                     // Ignore some spammy events which aren't needed
-                    if !matches!(event, WindowEvent::CursorMoved { device_id: _, position: _ }
-                        | WindowEvent::MouseInput { device_id: _, state: _, button: _ }
-                        | WindowEvent::KeyboardInput { device_id: _, event: _, is_synthetic: _ }
-                        | WindowEvent::CursorEntered { device_id: _ }
-                        | WindowEvent::CursorLeft { device_id: _ }
+                    if !matches!(
+                        event,
+                        WindowEvent::CursorMoved {
+                            device_id: _,
+                            position: _
+                        } | WindowEvent::MouseInput {
+                            device_id: _,
+                            state: _,
+                            button: _
+                        } | WindowEvent::KeyboardInput {
+                            device_id: _,
+                            event: _,
+                            is_synthetic: _
+                        } | WindowEvent::CursorEntered { device_id: _ }
+                            | WindowEvent::CursorLeft { device_id: _ }
                     ) {
                         debug!("Unhandled Window Event: {event:?}")
                     }
@@ -368,7 +375,7 @@ impl GlowRenderer {
                 raw_display_handle,
                 glutin::display::DisplayApiPreference::Egl,
             )
-                .unwrap()
+            .unwrap()
         };
 
         // Create OpenGL config
