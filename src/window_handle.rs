@@ -180,6 +180,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
             }
             UserEvent::CloseWindow => {
+                debug!("Window Closed, exiting event loop");
                 self.window = None;
                 self.renderer = None;
 
@@ -309,6 +310,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
                 WindowEvent::CloseRequested => {
                     if self.app.should_close() {
+                        debug!("Window Closed, exiting event loop");
+
                         // Clear variables
                         self.window = None;
                         self.renderer = None;
