@@ -17,6 +17,8 @@ jobs:
 
   # Actually Create the Release
   create_release_draft:
+    permissions:
+      contents: write
     needs: [ verify, get_version, build ]
     runs-on: ubuntu-22.04
     steps:
