@@ -9,7 +9,9 @@ pub fn display_errors(ui: &mut Ui, load_state: &LoadState, errors: &Vec<ErrorMes
                 LoadState::PermissionDenied => {
                     ui.vertical(|ui| {
                         ui.label("Permission Denied");
-                        ui.label("The application does not have permission to access the connected device. Please check your system settings and ensure that the application has the necessary permissions to access audio devices.");
+                        ui.label("The application does not have permission to access the connected device.");
+                        ui.add_space(5.0);
+                        ui.hyperlink_to("Please visit this wiki page for help.", "https://github.com/beacn-on-linux/beacn-permissions/wiki/Installing-Device-Permission");
                     })
                     .response
                 }
