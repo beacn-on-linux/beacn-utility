@@ -16,6 +16,33 @@ In addition, this project accepts no responsibility or liability for any use of 
 which may occur from its use. Please read the LICENSE for more information.
 
 ***
+## Automatic Installation 
+
+The Beacn Utility project provides a simple script which will attempt to install the correct package for your
+distribution. This script will install an update site, so that future releases can be managed through your 
+standard package manager.
+
+Run the following in a Terminal, and follow the prompts:
+```bash
+curl -fsSL https://beacn-on-linux.github.io/beacn-utility-repo/scripts/install.sh | bash
+```
+
+## Manual Installation
+If you prefer to manually install the Beacn Utility, you can look into grabbing the packages from the 
+[release page](https://github.com/beacn-on-linux/beacn-utility/releases/latest), where a DEB file and an RPM file are
+provided. Do note that these packages do not provide automatic updates when a new release occurs.
+
+## Verification
+Everything that is distributed through the scripts can be confirmed and verified. We use github actions to build and
+distribute the packages. The flatpak distribution is managed via the [beacn-utility-flatpak](https://github.com/beacn-on-linux/beacn-utility-flatpak)
+repository, and the rpm / deb / Flatpak repositories are managed via the [beacn-utility-repo](https://github.com/beacn-on-linux/beacn-utility-repo)
+CI workflows. AUR is separately managed through the  [AUR repository](https://aur.archlinux.org/packages/beacn-utility).
+This should make it possible to verify that the code you are running is the same as what is in this repository.
+
+If you're unsure, feel free to reach out.
+
+
+***
 ![img.png](.github/resources/img.png)
 
 Currently, this tool is quite barebones and basic and is likely going to stay that way, it's primary goal is to provide
@@ -66,7 +93,6 @@ repository.
 ## Current Project Status
 
 Not Yet Implemented:
-* Lighting
 * Probably a button or two, let me know if you spot one.
 
 Not (currently) Planned:
