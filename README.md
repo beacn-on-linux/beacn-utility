@@ -96,6 +96,7 @@ repository.
 ## Current Project Status
 
 Not Yet Implemented:
+* Beacn Mix and Mix Create support (Need to make a mixer)
 * Probably a button or two, let me know if you spot one.
 
 Not (currently) Planned:
