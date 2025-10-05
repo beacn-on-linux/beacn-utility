@@ -8,8 +8,6 @@ use egui_glow::glow::HasContext;
 use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
-use egui_winit::winit::platform::x11::register_xlib_error_hook;
-use egui_winit::winit::raw_window_handle::RawDisplayHandle;
 #[allow(deprecated)]
 use egui_winit::winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
@@ -339,19 +337,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     // Ignore some spammy events which aren't needed
                     if !matches!(
                         event,
-                        WindowEvent::CursorMoved {
-                            device_id: _,
-                            position: _
-                        } | WindowEvent::MouseInput {
-                            device_id: _,
-                            state: _,
-                            button: _
-                        } | WindowEvent::KeyboardInput {
-                            device_id: _,
-                            event: _,
-                            is_synthetic: _
-                        } | WindowEvent::CursorEntered { device_id: _ }
-                            | WindowEvent::CursorLeft { device_id: _ }
+                        WindowEvent::CursorMoved { .. }
+                            | WindowEvent::MouseInput { .. }
+                            | WindowEvent::KeyboardInput { .. }
+                            | WindowEvent::CursorEntered { .. }
+                            | WindowEvent::AxisMotion { .. }
+                            | WindowEvent::CursorLeft { .. }
                     ) {
                         debug!("Unhandled Window Event: {event:?}")
                     }
@@ -404,7 +395,7 @@ impl GlowRenderer {
             match gl_display.create_context(&config, &context_attributes) {
                 Ok(ctx) => ctx,
                 Err(e) => {
-                    warn!("Failed to Create OpenGL Context, falling back to OpenGL ES: {}", e);
+                    warn!("Failed to Create OpenGL Context, trying OpenGL ES: {}", e);
                     gl_display
                         .create_context(&config, &fallback_context_attributes)
                         .expect("Failed to Create OpenGL ES Context")
