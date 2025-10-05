@@ -24,7 +24,9 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
+use egui_winit::winit::platform::x11::register_xlib_error_hook;
 use egui_winit::winit::raw_window_handle::RawDisplayHandle;
+use glutin::display::DisplayApiPreference;
 
 const EVENT_PROXY: &str = "event_proxy";
 
@@ -370,33 +372,18 @@ impl GlowRenderer {
         let raw_window_handle = window.raw_window_handle().unwrap();
         let raw_display_handle = window.raw_display_handle().unwrap();
 
-        // Create OpenGL display
-        // let gl_display = unsafe {
-        //     glutin::display::Display::new(
-        //         raw_display_handle,
-        //         glutin::display::DisplayApiPreference::Egl,
-        //     )
-        //     .unwrap()
-        // };
-
         // Create OpenGL config
         let config_template = ConfigTemplateBuilder::new()
-            .with_alpha_size(8)
             .with_transparency(false)
             .build();
 
-        let gl_display = unsafe {
-            let display_api_pref = match raw_display_handle {
-                RawDisplayHandle::Wayland(_) => glutin::display::DisplayApiPreference::Egl,
-                RawDisplayHandle::Xlib(_) | RawDisplayHandle::Xcb(_) => {
-                    glutin::display::DisplayApiPreference::Glx(Box::new(
-                        winit::platform::x11::register_xlib_error_hook
-                    ))
-                }
-                _ => glutin::display::DisplayApiPreference::Egl,
-            };
+        debug!("Creating glutin Display with Config: {:?}", config_template);
 
-            glutin::display::Display::new(raw_display_handle, display_api_pref)
+        let gl_display = unsafe {
+            glutin::display::Display::new(
+                raw_display_handle,
+                DisplayApiPreference::GlxThenEgl(Box::new(register_xlib_error_hook)),
+            )
                 .unwrap()
         };
 
