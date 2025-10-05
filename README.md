@@ -16,11 +16,15 @@ In addition, this project accepts no responsibility or liability for any use of 
 which may occur from its use. Please read the LICENSE for more information.
 
 ***
-## Automatic Installation 
+# Installation
 
+## Automatic Installation
 The Beacn Utility project provides a simple script which will attempt to install the correct package for your
-distribution. This script will install an update site, so that future releases can be managed through your 
+distribution. This script will install the utility in such a way that future releases will be managed through your
 standard package manager.
+
+There is a [wiki page](https://github.com/beacn-on-linux/beacn-utility/wiki/Release-Transparency) which describes the
+process, and how you can verify that the code you're running is the same as what is in this repository.
 
 Run the following in a Terminal, and follow the prompts:
 ```bash
@@ -28,19 +32,18 @@ curl -fsSL https://beacn-on-linux.github.io/beacn-utility-repo/scripts/install.s
 ```
 
 ## Manual Installation
-If you prefer to manually install the Beacn Utility, you can look into grabbing the packages from the 
-[release page](https://github.com/beacn-on-linux/beacn-utility/releases/latest), where a DEB file and an RPM file are
-provided. Do note that these packages do not provide automatic updates when a new release occurs.
+If you don't want to use the script, there are still options available! The [releases page](https://github.com/beacn-on-linux/beacn-utility/releases/latest) 
+contains the following:
 
-## Verification
-Everything that is distributed through the scripts can be confirmed and verified. We use github actions to build and
-distribute the packages. The flatpak distribution is managed via the [beacn-utility-flatpak](https://github.com/beacn-on-linux/beacn-utility-flatpak)
-repository, and the rpm / deb / Flatpak repositories are managed via the [beacn-utility-repo](https://github.com/beacn-on-linux/beacn-utility-repo)
-CI workflows. AUR is separately managed through the  [AUR repository](https://aur.archlinux.org/packages/beacn-utility).
-This should make it possible to verify that the code you are running is the same as what is in this repository.
+* `.rpm` package for Redhat based distributions (Fedora, CentOS, RHEL, etc)
+* `.deb` package for Debian based distributions (Debian, Ubuntu, Linux Mint, Pop, etc)
+* `.flatpakref` A reference file for the Beacn Utility Flatpak repository
+* Compile from Source (instructions below)
 
-If you're unsure, feel free to reach out.
-
+### Notes
+ * The Beacn Utility is also available in the AUR as `beacn-utility`
+ * The RPM and DEB packages do not provide automatic updates, and there's no app check.
+ * For Bazzite, you can install the rpm via ostree, although I'd recommend the flatpak instead.
 
 ***
 ![img.png](.github/resources/img.png)
