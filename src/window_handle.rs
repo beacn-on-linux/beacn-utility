@@ -8,6 +8,8 @@ use egui_glow::glow::HasContext;
 use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
+use egui_winit::winit::platform::x11::register_xlib_error_hook;
+use egui_winit::winit::raw_window_handle::RawDisplayHandle;
 #[allow(deprecated)]
 use egui_winit::winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
@@ -17,16 +19,14 @@ use egui_winit::winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
+use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
 use ini::Ini;
-use log::debug;
+use log::{debug, warn};
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
-use egui_winit::winit::platform::x11::register_xlib_error_hook;
-use egui_winit::winit::raw_window_handle::RawDisplayHandle;
-use glutin::display::DisplayApiPreference;
 
 const EVENT_PROXY: &str = "event_proxy";
 
@@ -380,11 +380,7 @@ impl GlowRenderer {
         debug!("Creating glutin Display with Config: {:?}", config_template);
 
         let gl_display = unsafe {
-            glutin::display::Display::new(
-                raw_display_handle,
-                DisplayApiPreference::GlxThenEgl(Box::new(register_xlib_error_hook)),
-            )
-                .unwrap()
+            glutin::display::Display::new(raw_display_handle, DisplayApiPreference::Egl).unwrap()
         };
 
         let config = unsafe {
@@ -400,10 +396,20 @@ impl GlowRenderer {
             .with_context_api(ContextApi::OpenGl(None))
             .build(Some(raw_window_handle));
 
+        let fallback_context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::Gles(None))
+            .build(Some(raw_window_handle));
+
         let not_current_gl_context = unsafe {
-            gl_display
-                .create_context(&config, &context_attributes)
-                .unwrap()
+            match gl_display.create_context(&config, &context_attributes) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    warn!("Failed to Create OpenGL Context, falling back to OpenGL ES: {}", e);
+                    gl_display
+                        .create_context(&config, &fallback_context_attributes)
+                        .expect("Failed to Create OpenGL ES Context")
+                }
+            }
         };
 
         // Create OpenGL surface
