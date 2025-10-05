@@ -24,6 +24,7 @@ use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
+use egui_winit::winit::raw_window_handle::RawDisplayHandle;
 
 const EVENT_PROXY: &str = "event_proxy";
 
@@ -370,13 +371,13 @@ impl GlowRenderer {
         let raw_display_handle = window.raw_display_handle().unwrap();
 
         // Create OpenGL display
-        let gl_display = unsafe {
-            glutin::display::Display::new(
-                raw_display_handle,
-                glutin::display::DisplayApiPreference::Egl,
-            )
-            .unwrap()
-        };
+        // let gl_display = unsafe {
+        //     glutin::display::Display::new(
+        //         raw_display_handle,
+        //         glutin::display::DisplayApiPreference::Egl,
+        //     )
+        //     .unwrap()
+        // };
 
         // Create OpenGL config
         let config_template = ConfigTemplateBuilder::new()
@@ -384,21 +385,27 @@ impl GlowRenderer {
             .with_transparency(false)
             .build();
 
+        let gl_display = unsafe {
+            let display_api_pref = match raw_display_handle {
+                RawDisplayHandle::Wayland(_) => glutin::display::DisplayApiPreference::Egl,
+                RawDisplayHandle::Xlib(_) | RawDisplayHandle::Xcb(_) => {
+                    glutin::display::DisplayApiPreference::Glx(Box::new(
+                        winit::platform::x11::register_xlib_error_hook
+                    ))
+                }
+                _ => glutin::display::DisplayApiPreference::Egl,
+            };
+
+            glutin::display::Display::new(raw_display_handle, display_api_pref)
+                .unwrap()
+        };
+
         let config = unsafe {
             gl_display
                 .find_configs(config_template)
                 .unwrap()
-                .reduce(|accum, config| {
-                    let transparency_check = config.supports_transparency().unwrap_or(false)
-                        & !accum.supports_transparency().unwrap_or(false);
-
-                    if transparency_check || config.num_samples() < accum.num_samples() {
-                        config
-                    } else {
-                        accum
-                    }
-                })
-                .unwrap()
+                .max_by_key(|config| config.num_samples())
+                .expect("No compatible OpenGL config found")
         };
 
         // Create OpenGL context, we won't specify an API version, glow will pick the best.
