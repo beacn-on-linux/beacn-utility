@@ -1,24 +1,36 @@
 use crate::device_manager::ControlMessage;
 use crate::device_manager::ControlMessage::SendImage;
-use crate::integrations::pipeweaver::channel::{BeacnImage, ChannelChangedProperty, ChannelRenderer, UpdateFrom};
-use crate::integrations::pipeweaver::layout::{BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, JPEG_QUALITY, POSITION_ROOT, CHANNEL_INNER_COLOUR};
+use crate::integrations::pipeweaver::channel::{
+    BeacnImage, ChannelChangedProperty, ChannelRenderer, UpdateFrom,
+};
+use crate::integrations::pipeweaver::layout::{
+    BG_COLOUR, CHANNEL_DIMENSIONS, CHANNEL_INNER_COLOUR, DISPLAY_DIMENSIONS, DrawingUtils,
+    JPEG_QUALITY, POSITION_ROOT,
+};
+use crate::runtime;
 use anyhow::{Context, Result, anyhow, bail};
-use beacn_lib::crossbeam::channel::Sender;
+use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
+use beacn_lib::crossbeam::channel::{Receiver, RecvError, Sender};
+use beacn_lib::manager::DeviceType;
+use beacn_lib::types::RGBA;
 use enum_map::EnumMap;
 use futures_util::{SinkExt, StreamExt};
 use image::{ImageBuffer, Rgba, RgbaImage};
 use log::{debug, info, warn};
+use pipeweaver_ipc::commands::APICommand::SetSourceVolume;
 use pipeweaver_ipc::commands::DaemonRequest::GetStatus;
-use pipeweaver_ipc::commands::{DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse};
+use pipeweaver_ipc::commands::{
+    DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse,
+};
 use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
 use pipeweaver_shared::{Colour, Mix, OrderGroup};
-use std::collections::HashMap;
-use std::time::Duration;
-use beacn_lib::controller::ButtonLighting;
-use beacn_lib::types::RGBA;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::select;
+use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
@@ -35,7 +47,11 @@ enum DeviceRef<'a> {
     Virtual(&'a VirtualSourceDevice),
 }
 
-pub async fn spawn_pipeweaver_handler(sender: Sender<ControlMessage>) {
+pub async fn spawn_pipeweaver_handler(
+    sender: Sender<ControlMessage>,
+    device: DeviceType,
+    input_rx: Receiver<Interactions>,
+) {
     info!("Starting Pipeweaver Manager");
     let url = "ws://localhost:14565/api/websocket";
 
@@ -54,7 +70,8 @@ pub async fn spawn_pipeweaver_handler(sender: Sender<ControlMessage>) {
         let (mut stream, _) = connection.unwrap();
         info!("Successfully connected to Pipeweaver");
 
-        let result = run_pipeweaver_socket(&mut stream, sender.clone()).await;
+        let result =
+            run_pipeweaver_socket(&mut stream, sender.clone(), device, input_rx.clone()).await;
         match result {
             Ok(_) => break,
             Err(e) => {
@@ -72,6 +89,8 @@ type Renderers = HashMap<Ulid, ChannelRenderer>;
 async fn run_pipeweaver_socket(
     stream: &mut WebSocket,
     sender: Sender<ControlMessage>,
+    device_type: DeviceType,
+    input_rx: Receiver<Interactions>,
 ) -> Result<()> {
     // There are some types (for example, HashMaps) which don't guarantee ordering, so going from
     // a DaemonStatus -> JSON before applying a PATCH could result in the wrong data being altered.
@@ -114,8 +133,14 @@ async fn run_pipeweaver_socket(
                 // We can occasionally get patches before the Status response, so verify the ID...
                 if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == 0u64 {
                     // This is our DaemonStatus response
-                    let data = object.get("data").ok_or(anyhow!("Failed to Read Data"))?.clone();
-                    raw_status = data.get("Status").ok_or(anyhow!("Failed to Read Status"))?.clone();
+                    let data = object
+                        .get("data")
+                        .ok_or(anyhow!("Failed to Read Data"))?
+                        .clone();
+                    raw_status = data
+                        .get("Status")
+                        .ok_or(anyhow!("Failed to Read Status"))?
+                        .clone();
                     status = serde_json::from_value::<DaemonStatus>(raw_status.clone())?;
                     break;
                 }
@@ -140,7 +165,9 @@ async fn run_pipeweaver_socket(
     // Send out a full device refresh
     let (tx, rx) = oneshot::channel();
     for (index, device) in devices_shown.iter().enumerate() {
-        let render = renderers.get(device).ok_or_else(|| anyhow!("Failed to get render"))?;
+        let render = renderers
+            .get(device)
+            .ok_or_else(|| anyhow!("Failed to get render"))?;
         let dial_button = match index {
             0 => ButtonLighting::Dial1,
             1 => ButtonLighting::Dial2,
@@ -157,7 +184,7 @@ async fn run_pipeweaver_socket(
             alpha: colour[3],
         };
 
-        let (tx,rx) = oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         sender.send(ControlMessage::ButtonColour(dial_button, beacn_colour, tx))?;
         rx.recv()??;
     }
@@ -168,6 +195,10 @@ async fn run_pipeweaver_socket(
 
     // We create a pending volume send, and store the 'final' value, this allows us to better
     // manage intermediate updates.
+    let (interaction_tx, mut interaction_rx) = channel(10);
+
+    // Ok, we need to wrap the input handler into something async
+    runtime().spawn_blocking(move || sync_to_async(input_rx, interaction_tx));
 
     // Ok, we can move into the websocket loop
     loop {
@@ -315,6 +346,104 @@ async fn run_pipeweaver_socket(
                     bail!("Received non-text message from Websocket!")
                 }
             }
+            Some(msg) = interaction_rx.recv() => {
+                match device_type {
+                    DeviceType::BeacnMix => {
+                        match msg {
+                            Interactions::ButtonPress(_,_) => {}
+                            Interactions::DialChanged(dial, change) => {
+                                let device_index = match dial {
+                                    Dials::Dial1 => 0,
+                                    Dials::Dial2 => 1,
+                                    Dials::Dial3 => 2,
+                                    Dials::Dial4 => 3,
+                                };
+                                if let Some(device) = devices_shown.get(device_index) {
+                                    let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+                                    let volume = current.volumes[active_mix];
+
+                                    let new_volume = (volume as i8 + change).clamp(0, 100);
+
+                                    let command = serde_json::to_string(&WebsocketRequest {
+                                        id: command_index,
+                                        data: DaemonRequest::Pipewire(SetSourceVolume(*device, active_mix, new_volume as u8)),
+                                    })?;
+                                    command_index += 1;
+                                    stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+                                }
+                            }
+                        }
+
+                    }
+                    DeviceType::BeacnMixCreate => {
+                        match msg {
+                            Interactions::ButtonPress(button, state) => {
+                                if state == ButtonState::Release {
+                                    match button {
+                                        Buttons::AudienceMix => {
+
+                                        }
+                                        Buttons::PageLeft => {
+
+                                        }
+                                        Buttons::PageRight => {
+
+                                        }
+                                        Buttons::Dial1 => {
+
+                                        }
+                                        Buttons::Dial2 => {
+
+                                        }
+                                        Buttons::Dial3 => {
+
+                                        }
+                                        Buttons::Dial4 => {
+
+                                        }
+                                        Buttons::Audience1 => {
+
+                                        }
+                                        Buttons::Audience2 => {
+
+                                        }
+                                        Buttons::Audience3 => {
+
+                                        }
+                                        Buttons::Audience4 => {
+
+                                        }
+                                    }
+                                }
+                            }
+                            Interactions::DialChanged(dial, change) => {
+                                let device_index = match dial {
+                                    Dials::Dial1 => 0,
+                                    Dials::Dial2 => 1,
+                                    Dials::Dial3 => 2,
+                                    Dials::Dial4 => 3,
+                                };
+                                if let Some(device) = devices_shown.get(device_index) {
+                                    let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+                                    let volume = current.volumes[active_mix];
+
+                                    let new_volume = (volume as i8 + change).clamp(0, 100);
+
+                                    let command = serde_json::to_string(&WebsocketRequest {
+                                        id: command_index,
+                                        data: DaemonRequest::Pipewire(SetSourceVolume(*device, active_mix, new_volume as u8)),
+                                    })?;
+                                    command_index += 1;
+
+                                    stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+                                }
+                            }
+                        }
+                    }
+                    _ => bail!("Received interaction from invalid device!"),
+                }
+                debug!("PW: Received: {}", msg);
+            }
         }
     }
 
@@ -415,4 +544,23 @@ fn get_page_channels(order: &EnumMap<OrderGroup, Vec<Ulid>>, page: u8) -> Vec<Ul
     }
 
     channels
+}
+
+fn sync_to_async(
+    rx: Receiver<Interactions>,
+    tx: tokio::sync::mpsc::Sender<Interactions>,
+) -> Result<()> {
+    debug!("Running Up Receiver..");
+    loop {
+        match rx.recv() {
+            Ok(val) => {
+                tx.blocking_send(val)?;
+            }
+            Err(_) => {
+                debug!("Error Occurred, stopping sync wrapper");
+                break;
+            }
+        }
+    }
+    Ok(())
 }
