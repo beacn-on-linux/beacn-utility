@@ -11,11 +11,11 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::{runtime, ManagerMessages};
-use crate::device_manager::DeviceMessage::DeviceRemoved;
-use crate::integrations::pipeweaver::{spawn_pipeweaver_handler};
 use crate::device_manager::ControlMessage::SendImage;
-use crate::managers::login::{spawn_login_handler, LoginEventTriggers};
+use crate::device_manager::DeviceMessage::DeviceRemoved;
+use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
+use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
+use crate::{ManagerMessages, runtime};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
@@ -32,6 +32,7 @@ use beacn_lib::{BeacnError, UsbError};
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
@@ -170,22 +171,29 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 // This is relatively similar, but the code paths are different. In
                                 // the future, we'd be setting up button handlers, a pipeweaver
                                 // connection and management.
-                                let (device, state) = match open_control_device(location, None) {
-                                    Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (
-                                        None,
-                                        DefinitionState::Error(match e {
-                                            BeacnError::Usb(UsbError::Access) => {
-                                                ErrorType::PermissionDenied
-                                            }
-                                            BeacnError::Usb(UsbError::Busy) => {
-                                                ErrorType::ResourceBusy
-                                            }
-                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
-                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
-                                        }),
-                                    ),
-                                };
+                                let (input_tx, input_rx) = channel::unbounded();
+
+                                let (device, state) =
+                                    match open_control_device(location, Some(input_tx)) {
+                                        Ok(d) => (Some(d), DefinitionState::Running),
+                                        Err(e) => (
+                                            None,
+                                            DefinitionState::Error(match e {
+                                                BeacnError::Usb(UsbError::Access) => {
+                                                    ErrorType::PermissionDenied
+                                                }
+                                                BeacnError::Usb(UsbError::Busy) => {
+                                                    ErrorType::ResourceBusy
+                                                }
+                                                BeacnError::Usb(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                                BeacnError::Other(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                            }),
+                                        ),
+                                    };
 
                                 let (serial, version) = match &device {
                                     Some(d) => (d.get_serial(), d.get_version()),
@@ -207,19 +215,10 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
-                                // Send a splash to the device.
-                                // let img_tx = tx.clone();
-                                // let (tx2, rx2) = oneshot::channel();
-                                // let img = Vec::from(TEMP_SPLASH);
-                                // let _ = img_tx.send(SendImage(img, 0, 0, tx2));
-                                // debug!("Waiting Result..");
-                                // let _ = rx2.recv();
-                                // debug!("Got Result?");
-
                                 // Use the async runtime for this
                                 debug!("Starting PipeWeaver Handler");
                                 let img_tx = tx.clone();
-                                runtime().spawn(spawn_pipeweaver_handler(img_tx));
+                                runtime().spawn(spawn_pipeweaver_handler(img_tx, device_type, input_rx));
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
