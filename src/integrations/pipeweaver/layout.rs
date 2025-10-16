@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use enum_map::EnumMap;
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
-use image::{ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage};
+use image::{load_from_memory, ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage};
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use pipeweaver_shared::Mix;
@@ -43,6 +43,8 @@ type DialVolumeJPEG = Lazy<EnumMap<Mix, HashMap<u8, Vec<u8>>>>;
 pub(crate) static DISPLAY_DIMENSIONS: Dimension = (800, 480);
 pub(crate) static CHANNEL_COUNT: u32 = 4;
 
+pub(crate) static POSITION_ROOT: Position = (0, 60);
+
 // Ok, so these statics are all self referencing, retrieving a jpeg for a dial will cause it
 // to generate the angle map for the circles, the text, the Mix A / B images for each percentage
 // as well as a base circle. All of these then get composited and cached into about 200 "final"
@@ -61,7 +63,7 @@ pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::comp
 
 // Next up, we define some colours, which will be used when generating components
 pub(crate) static TEXT_COLOUR: Rgba<u8> = Rgba([180, 180, 180, 255]);
-pub(crate) static BACKGROUND_COLOUR: Rgba<u8> = Rgba([42, 48, 45, 255]);
+pub(crate) static BG_COLOUR: Rgba<u8> = Rgba([42, 48, 45, 255]);
 
 pub(crate) static DIAL_INACTIVE: Rgba<u8> = Rgba([37, 41, 39, 255]);
 pub(crate) static MIX_A_DIAL: Rgba<u8> = Rgba([89, 177, 182, 255]);
@@ -71,7 +73,10 @@ pub(crate) static CHANNEL_BORDER_COLOUR: Rgba<u8> = Rgba([101, 101, 101, 255]);
 pub(crate) static CHANNEL_INNER_COLOUR: Rgba<u8> = Rgba([51, 55, 53, 255]);
 
 // Ok, so for positions and sizing, start with the basic draw area for a channel
-pub(crate) static CHANNEL_DIMENSIONS: Dimension = (DISPLAY_DIMENSIONS.0 / CHANNEL_COUNT, 480);
+pub(crate) static CHANNEL_DIMENSIONS: Dimension = (
+    DISPLAY_DIMENSIONS.0 / CHANNEL_COUNT,
+    DISPLAY_DIMENSIONS.1 - POSITION_ROOT.1,
+);
 
 // So we're going to approach this by creating a 'base' canvas of DISPLAY_WIDTH / CHANNEL_COUNT,
 // so 200x480, and all elements need absolute positioning inside that region. So we're going
@@ -80,7 +85,7 @@ pub(crate) static CHANNEL_MARGIN: u32 = 10;
 
 // Define the Dimensions, Positions and style of the 'Inner' Box
 pub(crate) static CHANNEL_INNER_DIMENSIONS: Dimension =
-    (CHANNEL_DIMENSIONS.0 - (CHANNEL_MARGIN * 2), 300);
+    (CHANNEL_DIMENSIONS.0 - (CHANNEL_MARGIN * 2), 310);
 pub(crate) static CHANNEL_INNER_POSITION: Position = (CHANNEL_MARGIN, CHANNEL_MARGIN);
 pub(crate) static CHANNEL_INNER_BORDER: BorderThickness = BorderThickness(3, 3, 3, 3);
 pub(crate) static CHANNEL_INNER_RADIUS: BorderRadius = BorderRadius(8, 8, 0, 0);
@@ -106,43 +111,82 @@ pub(crate) static HEADER_FONT_SIZE: f32 = 22.0;
 pub(crate) static HEADER_FONT: &[u8] = FONT_BOLD;
 pub(crate) static HEADER_TEXT_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 30);
 
+// Generic Bar Layout
+pub(crate) static BAR_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 6);
+
 // Next the coloured Bar
-pub(crate) static HEADER_BAR_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 6);
 pub(crate) static HEADER_BAR_POSITION: Position =
     (CONTENT_POSITION.0, HEADER_POSITION.1 + HEADER_DIMENSIONS.1);
 
 // Now the Dial (Simple Square)
 static VOLUME_CROP: u32 = 10;
 pub(crate) static VOLUME_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, CONTENT_DIMENSIONS.0);
-pub(crate) static VOLUME_POSITION: Position = (
-    CONTENT_POSITION.0,
-    HEADER_BAR_POSITION.1 + HEADER_BAR_DIMENSIONS.1,
-);
+pub(crate) static VOLUME_POSITION: Position =
+    (CONTENT_POSITION.0, HEADER_BAR_POSITION.1 + BAR_DIMENSIONS.1);
 static VOLUME_FONT: &[u8] = FONT_BOLD;
 static VOLUME_FONT_SIZE: f32 = 34.0;
 
 // Next a coloured bar before the mute buttons
-pub(crate) static MUTE_BAR_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 6);
 pub(crate) static MUTE_BAR_POSITION: Position = (
     CONTENT_POSITION.0,
     VOLUME_POSITION.1 + VOLUME_DIMENSIONS.1 - VOLUME_CROP,
 );
 
 // Finally, the Mute Button Section
-pub(crate) static MUTE_AREA_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 70);
-pub(crate) static MUTE_AREA_POSITION: Position = (
-    CONTENT_POSITION.0,
-    MUTE_BAR_POSITION.1 + MUTE_BAR_DIMENSIONS.1,
+pub(crate) static MUTE_AREA_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 85);
+pub(crate) static MUTE_AREA_POSITION: Position =
+    (CONTENT_POSITION.0, MUTE_BAR_POSITION.1 + BAR_DIMENSIONS.1);
+
+pub(crate) static MUTE_BUTTON_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 37);
+
+pub(crate) static MUTE_POSITION_A: Position = MUTE_AREA_POSITION;
+pub(crate) static MUTE_LOCAL_POSITION_A: Position = (0, 0);
+pub(crate) static MUTE_A_BORDER: BorderThickness = BorderThickness(0, 0, 2, 0);
+
+pub(crate) static MUTE_GAP: Dimension = (0, 9);
+
+pub(crate) static ICON_MARGIN: u32 = 10;
+
+pub(crate) static MUTE_TEXT_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 30);
+pub(crate) static MUTE_FONT_SIZE: f32 = 20.0;
+pub(crate) static MUTE_FONT: &[u8] = FONT;
+
+pub(crate) static MUTE_POSITION_B: Position = (
+    MUTE_POSITION_A.0,
+    MUTE_POSITION_A.1 + MUTE_BUTTON_DIMENSIONS.1 + MUTE_A_BORDER.3 + MUTE_GAP.1,
 );
+pub(crate) static MUTE_LOCAL_POSITION_B: Position = (
+    MUTE_LOCAL_POSITION_A.0,
+    MUTE_LOCAL_POSITION_A.1 + MUTE_BUTTON_DIMENSIONS.1 + MUTE_A_BORDER.3 + MUTE_GAP.1,
+);
+pub(crate) static MUTE_B_BORDER: BorderThickness = BorderThickness(2, 0, 0, 0);
+
+pub(crate) static MUTE_COLOUR_OFF: Rgba<u8> = Rgba([80, 80, 80, 220]);
+pub(crate) static MUTE_COLOUR_ON: Rgba<u8> = Rgba([255, 0, 0, 100]);
+
+static MUTE_UNMUTED_ICON_BYTES: &[u8] = include_bytes!("../../../resources/ui/icons/volume-high-solid.png");
+pub(crate) static MUTE_UNMUTED_ICON: Lazy<RgbaImage> = Lazy::new(|| {
+    load_from_memory(MUTE_UNMUTED_ICON_BYTES)
+        .expect("Failed to Load Image")
+        .to_rgba8()
+});
+static MUTE_MUTED_ICON_BYTES: &[u8] = include_bytes!("../../../resources/ui/icons/volume-xmark-solid.png");
+pub(crate) static MUTE_MUTED_ICON: Lazy<RgbaImage> = Lazy::new(|| {
+    load_from_memory(MUTE_MUTED_ICON_BYTES)
+        .expect("Failed to Load Image")
+        .to_rgba8()
+});
+
+pub(crate) static BORDER_RADIUS_NONE: BorderRadius = BorderRadius(0, 0, 0, 0);
 
 // Helper Structs
 /// Top left, Top right, Bottom left, Bottom right
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct BorderRadius(u32, u32, u32, u32);
 
 /// Top, Right, Bottom, Left
-#[derive(Copy, Clone)]
-pub(crate) struct BorderThickness(u32, u32, u32, u32);
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct BorderThickness(pub(crate) u32, pub(crate) u32, pub(crate) u32, pub(crate) u32);
 
 pub(crate) enum GradientDirection {
     TopToBottom,
@@ -385,13 +429,6 @@ impl DrawingUtils {
 
             cursor_x += metrics.advance_width as i32;
         }
-
-        // Debug lines to show top and bottom
-        // for x in 0..img.width() {
-        //     img.put_pixel(x, 0, Rgba([255, 0, 0, 255]));
-        //     img.put_pixel(x, img.height() - 1, Rgba([255, 0, 0, 255]));
-        // }
-
         img
     }
 
@@ -407,25 +444,35 @@ impl DrawingUtils {
                 continue;
             }
 
-            let [r, g, b, a] = overlay_pixel.0;
-            if a == 0 {
+            let [sr, sg, sb, sa] = overlay_pixel.0;
+            if sa == 0 {
                 continue;
             }
 
-            let base_pixel = base.get_pixel_mut(dest_x, dest_y).0;
+            let [dr, dg, db, da] = base.get_pixel(dest_x, dest_y).0;
 
-            // Alpha blending
-            let alpha = a as f32 / 255.0;
-            let inv_alpha = 1.0 - alpha;
+            let src_a = sa as f32 / 255.0;
+            let dst_a = da as f32 / 255.0;
+
+            // Result alpha (source-over)
+            let out_a = src_a + dst_a * (1.0 - src_a);
+            if out_a == 0.0 {
+                continue;
+            }
+
+            // Blend colors
+            let out_r = (sr as f32 * src_a + dr as f32 * dst_a * (1.0 - src_a)) / out_a;
+            let out_g = (sg as f32 * src_a + dg as f32 * dst_a * (1.0 - src_a)) / out_a;
+            let out_b = (sb as f32 * src_a + db as f32 * dst_a * (1.0 - src_a)) / out_a;
 
             base.put_pixel(
                 dest_x,
                 dest_y,
                 Rgba([
-                    (base_pixel[0] as f32 * inv_alpha + r as f32 * alpha) as u8,
-                    (base_pixel[1] as f32 * inv_alpha + g as f32 * alpha) as u8,
-                    (base_pixel[2] as f32 * inv_alpha + b as f32 * alpha) as u8,
-                    (base_pixel[3] as f32 * inv_alpha + a as f32 * alpha) as u8,
+                    (out_r.clamp(0.0, 255.0)) as u8,
+                    (out_g.clamp(0.0, 255.0)) as u8,
+                    (out_b.clamp(0.0, 255.0)) as u8,
+                    (out_a * 255.0).clamp(0.0, 255.0) as u8,
                 ]),
             );
         }
@@ -455,7 +502,7 @@ impl DrawingUtils {
         Ok(jpeg_data)
     }
 
-    fn flatten_rgba_image(rgba_img: &RgbaImage, background: Rgba<u8>) -> RgbImage {
+    pub fn flatten_rgba_image(rgba_img: &RgbaImage, background: Rgba<u8>) -> RgbImage {
         let (width, height) = rgba_img.dimensions();
         let mut rgb_img = RgbImage::new(width, height);
 
@@ -489,6 +536,20 @@ impl DrawingUtils {
             blend(pixel[1], bg[1]),
             blend(pixel[2], bg[2]),
         ])
+    }
+
+    pub fn rgb_to_rgba(rgb: &RgbImage) -> RgbaImage {
+        let (width, height) = rgb.dimensions();
+        let mut rgba = RgbaImage::new(width, height);
+
+        for (src, dst) in rgb.as_raw().chunks_exact(3).zip(rgba.as_mut().chunks_exact_mut(4)) {
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+            dst[3] = 255; // alpha
+        }
+
+        rgba
     }
 
     pub fn get_volume_image(volume: u8, mix: Mix) -> Result<Vec<u8>> {

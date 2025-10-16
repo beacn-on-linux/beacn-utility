@@ -1,4 +1,4 @@
-use crate::{APP_NAME, AUTO_START_KEY, get_autostart_file, run_async};
+use crate::{APP_NAME, AUTO_START_KEY, get_autostart_file, run_async_blocking};
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
@@ -204,7 +204,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
                         let reason = "Manage Beacn Devices on Startup";
 
-                        run_async(async {
+                        run_async_blocking(async {
                             let identifier = WindowIdentifier::from_raw_handle(
                                 &window_handle,
                                 display_handle.as_ref(),

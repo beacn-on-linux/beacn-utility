@@ -21,6 +21,7 @@ use simplelog::{
 };
 use std::path::PathBuf;
 use std::{env, thread};
+use std::sync::OnceLock;
 use tokio::runtime::{Builder, Runtime};
 use xdg::BaseDirectories;
 
@@ -36,16 +37,14 @@ const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
-// We need a minimum tokio runtime, so we can use libs that utilise async inside our sync code
-static TOKIO: Lazy<Runtime> = Lazy::new(|| {
-    debug!("Spawning tokio runtime..");
-    Builder::new_current_thread()
-        .enable_io()
-        .build()
-        .expect("Failed to Create tokio Runtime")
-});
-pub fn run_async<F: Future>(future: F) -> F::Output {
-    TOKIO.block_on(future)
+static TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
+pub fn runtime() -> &'static Runtime {
+    TOKIO_RUNTIME.get_or_init(|| {
+        Builder::new_multi_thread().enable_all().build().unwrap()
+    })
+}
+pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
+    runtime().block_on(future)
 }
 
 fn main() -> Result<()> {
