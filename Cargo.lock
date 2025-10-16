@@ -365,8 +365,8 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "beacn-lib"
-version = "0.1.0"
-source = "git+https://github.com/beacn-on-linux/beacn-lib.git#420e3100e9bfd17be8607c30fa08e79e501793ac"
+version = "0.1.1"
+source = "git+https://github.com/beacn-on-linux/beacn-lib.git?tag=v0.1.1#b455f57c10885f157ba225c1d38b2d9412ffad4b"
 dependencies = [
  "anyhow",
  "byteorder",
