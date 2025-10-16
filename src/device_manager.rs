@@ -11,8 +11,9 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::{runtime, ManagerMessages, ToMainMessages};
 use crate::device_manager::DeviceMessage::DeviceRemoved;
-use crate::{ManagerMessages, ToMainMessages};
+use crate::integrations::pipeweaver::{spawn_pipeweaver_handler};
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
 use crate::managers::login::spawn_login_handler;
@@ -210,13 +211,18 @@ pub fn spawn_device_manager(
                                 }
 
                                 // Send a splash to the device.
+                                // let img_tx = tx.clone();
+                                // let (tx2, rx2) = oneshot::channel();
+                                // let img = Vec::from(TEMP_SPLASH);
+                                // let _ = img_tx.send(SendImage(img, 0, 0, tx2));
+                                // debug!("Waiting Result..");
+                                // let _ = rx2.recv();
+                                // debug!("Got Result?");
+
+                                // Use the async runtime for this
+                                debug!("Starting PipeWeaver Handler");
                                 let img_tx = tx.clone();
-                                thread::spawn(move || {
-                                    let (tx, rx) = oneshot::channel();
-                                    let img = Vec::from(TEMP_SPLASH);
-                                    let _ = img_tx.send(SendImage(img, 0, 0, tx));
-                                    let _ = rx.recv();
-                                });
+                                runtime().spawn(spawn_pipeweaver_handler(img_tx));
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
@@ -241,11 +247,11 @@ pub fn spawn_device_manager(
             i if i == keepalive_index => match operation.recv(&keepalive) {
                 Ok(_instant) => {
                     // Disable the keepalive for now, show the message then let the device turn off
-                    // for device in &receiver_map {
-                    //     if let DeviceMap::Control(device, _, _) = device {
-                    //         let _ = device.send_keepalive();
-                    //     }
-                    // }
+                    for device in &receiver_map {
+                        if let DeviceMap::Control(device, _, _) = device {
+                            let _ = device.send_keepalive();
+                        }
+                    }
                 }
                 Err(e) => {
                     error!("KeepAlive Poller Failed, {e}");

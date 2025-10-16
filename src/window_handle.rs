@@ -1,6 +1,6 @@
 use crate::device_manager::DeviceMessage;
 use crate::{
-    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context, run_async,
+    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context, run_async_blocking,
 };
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
@@ -252,7 +252,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
                         let reason = "Manage Beacn Devices on Startup";
 
-                        run_async(async {
+                        run_async_blocking(async {
                             let identifier = WindowIdentifier::from_raw_handle(
                                 &window_handle,
                                 display_handle.as_ref(),
