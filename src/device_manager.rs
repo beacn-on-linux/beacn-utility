@@ -15,7 +15,7 @@ use crate::{runtime, ManagerMessages};
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 use crate::integrations::pipeweaver::{spawn_pipeweaver_handler};
 use crate::device_manager::ControlMessage::SendImage;
-use crate::managers::login::spawn_login_handler;
+use crate::managers::login::{spawn_login_handler, LoginEventTriggers};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
@@ -98,22 +98,22 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                 if let Ok(msg) = operation.recv(&login_rx) {
                     debug!("Received Login State Message: {msg:?}");
                     // Do nothing until we have a full impl
-                    // match msg {
-                    //     LoginEventTriggers::Sleep(tx) => {
-                    //         enable_devices(&receiver_map, false);
-                    //         let _ = tx.send(());
-                    //     }
-                    //     LoginEventTriggers::Wake(tx) => {
-                    //         enable_devices(&receiver_map, true);
-                    //         let _ = tx.send(());
-                    //     }
-                    //     LoginEventTriggers::Lock => {
-                    //         enable_devices(&receiver_map, false);
-                    //     }
-                    //     LoginEventTriggers::Unlock => {
-                    //         enable_devices(&receiver_map, true);
-                    //     }
-                    // }
+                    match msg {
+                        LoginEventTriggers::Sleep(tx) => {
+                            enable_devices(&receiver_map, false);
+                            let _ = tx.send(());
+                        }
+                        LoginEventTriggers::Wake(tx) => {
+                            enable_devices(&receiver_map, true);
+                            let _ = tx.send(());
+                        }
+                        LoginEventTriggers::Lock => {
+                            enable_devices(&receiver_map, false);
+                        }
+                        LoginEventTriggers::Unlock => {
+                            enable_devices(&receiver_map, true);
+                        }
+                    }
                 }
             }
             i if i == hotplug_index => match operation.recv(&plug_rx) {
