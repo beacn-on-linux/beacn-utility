@@ -4,11 +4,11 @@ use crate::integrations::pipeweaver::channel::{
     BeacnImage, ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };
 use crate::integrations::pipeweaver::layout::{
-    BG_COLOUR, CHANNEL_DIMENSIONS, CHANNEL_INNER_COLOUR, DISPLAY_DIMENSIONS, DrawingUtils,
+    DrawingUtils, BG_COLOUR, CHANNEL_DIMENSIONS, CHANNEL_INNER_COLOUR, DISPLAY_DIMENSIONS,
     JPEG_QUALITY, POSITION_ROOT,
 };
 use crate::runtime;
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{anyhow, bail, Context, Result};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, RecvError, Sender};
 use beacn_lib::manager::DeviceType;
@@ -20,10 +20,10 @@ use log::{debug, info, warn};
 use pipeweaver_ipc::commands::APICommand::SetSourceVolume;
 use pipeweaver_ipc::commands::DaemonRequest::GetStatus;
 use pipeweaver_ipc::commands::{
-    DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse,
+    APICommand, DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse,
 };
 use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
-use pipeweaver_shared::{Colour, Mix, OrderGroup};
+use pipeweaver_shared::{Colour, Mix, MuteTarget, OrderGroup};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -33,11 +33,24 @@ use tokio::select;
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use ulid::Ulid;
 
 mod channel;
 mod layout;
+
+const COLOUR_MIX_A: RGBA = RGBA {
+    red: 89,
+    green: 177,
+    blue: 182,
+    alpha: 255,
+};
+const COLOUR_MIX_B: RGBA = RGBA {
+    red: 244,
+    green: 124,
+    blue: 36,
+    alpha: 255,
+};
 
 // This is so we can more cleanly Map Physical / Virtual devices, because the data we need from
 // them is the same regardless, and ChannelRenderer has From<> for Both
@@ -161,9 +174,6 @@ async fn run_pipeweaver_socket(
     }
 
     let mut active_mix = Mix::A;
-
-    // Send out a full device refresh
-    let (tx, rx) = oneshot::channel();
     for (index, device) in devices_shown.iter().enumerate() {
         let render = renderers
             .get(device)
@@ -188,6 +198,18 @@ async fn run_pipeweaver_socket(
         sender.send(ControlMessage::ButtonColour(dial_button, beacn_colour, tx))?;
         rx.recv()??;
     }
+
+    // We're MIX::A by default, set the button colour
+    let (tx, rx) = oneshot::channel();
+    sender.send(ControlMessage::ButtonColour(
+        ButtonLighting::Mix,
+        COLOUR_MIX_B,
+        tx,
+    ))?;
+    rx.recv()??;
+
+    // Send out a full device refresh
+    let (tx, rx) = oneshot::channel();
     let img = do_full_render(active_mix, &devices_shown, &renderers)?;
     let (x, y) = img.position;
     sender.send(SendImage(img_as_jpeg(img.image, BG_COLOUR)?, x, y, tx))?;
@@ -381,7 +403,44 @@ async fn run_pipeweaver_socket(
                                 if state == ButtonState::Release {
                                     match button {
                                         Buttons::AudienceMix => {
+                                            active_mix = match active_mix {
+                                                Mix::A => Mix::B,
+                                                Mix::B => Mix::A,
+                                            };
 
+                                            // Redraw the volumes
+                                            for (index, device) in devices_shown.iter().enumerate() {
+                                                let render = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+
+                                                let img = render.get_volume(active_mix)?;
+                                                let (x, y) = img.position;
+
+                                                let (ch_w, _) = CHANNEL_DIMENSIONS;
+                                                let base_x = ch_w * index as u32;
+
+                                                let (root_x, root_y) = POSITION_ROOT;
+                                                let x = base_x + x + root_x;
+                                                let y = y + root_y;
+
+                                                let (tx,rx) = oneshot::channel();
+                                                sender.send(SendImage(img.image, x, y, tx))?;
+                                                rx.recv()??;
+
+                                                // Update the Button Colour
+                                                let button_colour = if active_mix == Mix::A {
+                                                    COLOUR_MIX_B
+                                                } else {
+                                                    COLOUR_MIX_A
+                                                };
+                                                let (tx, rx) = oneshot::channel();
+                                                sender.send(ControlMessage::ButtonColour(
+                                                    ButtonLighting::Mix,
+                                                    button_colour,
+                                                    tx,
+                                                ))?;
+                                                rx.recv()??;
+
+                                            }
                                         }
                                         Buttons::PageLeft => {
 
@@ -389,29 +448,33 @@ async fn run_pipeweaver_socket(
                                         Buttons::PageRight => {
 
                                         }
-                                        Buttons::Dial1 => {
+                                        Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 | Buttons::Audience1 | Buttons::Audience2 | Buttons::Audience3 | Buttons::Audience4 => {
+                                            let (index, target) = match button {
+                                                Buttons::Dial1 => (0, MuteTarget::TargetA),
+                                                Buttons::Dial2 => (1, MuteTarget::TargetA),
+                                                Buttons::Dial3 => (2, MuteTarget::TargetA),
+                                                Buttons::Dial4 => (3, MuteTarget::TargetA),
+                                                Buttons::Audience1 => (0, MuteTarget::TargetB),
+                                                Buttons::Audience2 => (1, MuteTarget::TargetB),
+                                                Buttons::Audience3 => (2, MuteTarget::TargetB),
+                                                Buttons::Audience4 => (3, MuteTarget::TargetB),
+                                                _ => bail!("This shouldn't happen.")
+                                            };
 
-                                        }
-                                        Buttons::Dial2 => {
-
-                                        }
-                                        Buttons::Dial3 => {
-
-                                        }
-                                        Buttons::Dial4 => {
-
-                                        }
-                                        Buttons::Audience1 => {
-
-                                        }
-                                        Buttons::Audience2 => {
-
-                                        }
-                                        Buttons::Audience3 => {
-
-                                        }
-                                        Buttons::Audience4 => {
-
+                                            if let Some(device) = devices_shown.get(index) {
+                                                let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+                                                let message = if current.mute_states[target].is_active {
+                                                    APICommand::DelSourceMuteTarget(*device, target)
+                                                } else {
+                                                    APICommand::AddSourceMuteTarget(*device, target)
+                                                };
+                                                let command = serde_json::to_string(&WebsocketRequest {
+                                                    id: command_index,
+                                                    data: DaemonRequest::Pipewire(message),
+                                                })?;
+                                                command_index += 1;
+                                                stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+                                            }
                                         }
                                     }
                                 }
