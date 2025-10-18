@@ -26,7 +26,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::net::TcpStream;
-use tokio::select;
+use tokio::{select, time};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
@@ -213,6 +213,12 @@ impl PipeweaverHandler {
         let (interaction_tx, mut interaction_rx) = channel(10);
         runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx));
 
+        let mut keep_alive = time::interval(Duration::from_secs(10));
+
+        let (tx, rx) = oneshot::channel();
+        self.sender.send(ControlMessage::Enabled(true, tx))?;
+        rx.recv()??;
+
         debug!("Starting Pipeweaver Message Loop");
         loop {
             select! {
@@ -342,6 +348,11 @@ impl PipeweaverHandler {
                         },
                         None => bail!("Receive Handler Closed!")
                     }
+                }
+                _instant = keep_alive.tick() => {
+                    let (tx,rx) = oneshot::channel();
+                    self.sender.send(ControlMessage::KeepAlive(tx))?;
+                    rx.recv()??;
                 }
             }
         }
@@ -592,7 +603,7 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    // This is primarily offloaded so we can 'fake' button presses depending on situation
+    // Handle Button Presses
     async fn handle_button(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
         match button {
             Buttons::AudienceMix => {

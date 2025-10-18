@@ -53,8 +53,6 @@ pub fn spawn_device_manager(
     // We need a hashmap that'll map a receiver to an object
     let mut receiver_map: Vec<DeviceMap> = vec![];
 
-    let keepalive = tick(Duration::from_secs(10));
-
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
     thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
 
@@ -71,9 +69,6 @@ pub fn spawn_device_manager(
 
         // Next, the hotplug receiver
         let hotplug_index = selector.recv(&plug_rx);
-
-        // Now the Keepalive ticker
-        let keepalive_index = selector.recv(&keepalive);
 
         // Finally, we'll follow up with the 'known' devices, we'll map the crossbeam index with
         // their index in the receiver_map.
@@ -231,7 +226,7 @@ pub fn spawn_device_manager(
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
                     HotPlugMessage::DeviceRemoved(location) => {
-                        let _ = event_tx.send(DeviceRemoved(location));
+                        let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
                         receiver_map.retain(|e| match e {
                             DeviceMap::Audio(_, d, _) => d.location != location,
                             DeviceMap::Control(_, d, _) => d.location != location,
@@ -242,20 +237,6 @@ pub fn spawn_device_manager(
                     HotPlugMessage::ThreadStopped => break,
                 },
                 Err(_) => break,
-            },
-            i if i == keepalive_index => match operation.recv(&keepalive) {
-                Ok(_instant) => {
-                    // Disable the keepalive for now, show the message then let the device turn off
-                    for device in &receiver_map {
-                        if let DeviceMap::Control(device, _, _) = device {
-                            let _ = device.send_keepalive();
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("KeepAlive Poller Failed, {e}");
-                    break;
-                }
             },
             i => {
                 // Find the specific device for this index
@@ -314,6 +295,9 @@ pub fn spawn_device_manager(
                                         }
                                         ControlMessage::Enabled(enabled, tx) => {
                                             let _ = tx.send(dev.set_enabled(enabled));
+                                        }
+                                        ControlMessage::KeepAlive(tx) => {
+                                            let _ = tx.send(dev.send_keepalive());
                                         }
                                     };
                                 }
@@ -386,6 +370,7 @@ pub enum LinkedCommands {
 #[allow(unused)]
 pub enum ControlMessage {
     Enabled(bool, oneshot::Sender<Result<(), BeacnError>>),
+    KeepAlive(oneshot::Sender<Result<(), BeacnError>>),
     SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<(), BeacnError>>),
     DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
