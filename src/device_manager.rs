@@ -11,11 +11,9 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::device_manager::ControlMessage::SendImage;
-use crate::device_manager::DeviceMessage::DeviceRemoved;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
-use crate::{ManagerMessages, runtime};
+use crate::{ManagerMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
@@ -49,8 +47,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
     let mut receiver_map: Vec<DeviceMap> = vec![];
     let mut context = None;
 
-    let keepalive = tick(Duration::from_secs(10));
-
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
     thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
 
@@ -67,9 +63,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
         // Next, the hotplug receiver
         let hotplug_index = selector.recv(&plug_rx);
-
-        // Now the Keepalive ticker
-        let keepalive_index = selector.recv(&keepalive);
 
         // Finally, we'll follow up with the 'known' devices, we'll map the crossbeam index with
         // their index in the receiver_map.
@@ -215,11 +208,21 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
-                                // Use the async runtime for this
-                                debug!("Starting PipeWeaver Handler");
-                                let img_tx = tx.clone();
-                                spawn_pipeweaver_handler(img_tx, device_type, input_rx);
-
+                                if device_type == DeviceType::BeacnMix {
+                                    // Send a splash to the device.
+                                    let img_tx = tx.clone();
+                                    thread::spawn(move || {
+                                        let (tx, rx) = oneshot::channel();
+                                        let img = Vec::from(TEMP_SPLASH);
+                                        let _ = img_tx.send(ControlMessage::SendImage(img, 0, 0, tx));
+                                        let _ = rx.recv();
+                                    });
+                                } else {
+                                    // Use the async runtime for this
+                                    debug!("Starting PipeWeaver Handler");
+                                    let img_tx = tx.clone();
+                                    spawn_pipeweaver_handler(img_tx, device_type, input_rx);
+                                }
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
                                 let _ = event_tx.send(message);
@@ -230,7 +233,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                         }
                     }
                     HotPlugMessage::DeviceRemoved(location) => {
-                        let _ = event_tx.send(DeviceRemoved(location));
+                        let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
                         receiver_map.retain(|e| match e {
                             DeviceMap::Audio(_, d, _) => d.location != location,
                             DeviceMap::Control(_, d, _) => d.location != location,
@@ -243,20 +246,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                     HotPlugMessage::ThreadStopped => break,
                 },
                 Err(_) => break,
-            },
-            i if i == keepalive_index => match operation.recv(&keepalive) {
-                Ok(_instant) => {
-                    // Disable the keepalive for now, show the message then let the device turn off
-                    for device in &receiver_map {
-                        if let DeviceMap::Control(device, _, _) = device {
-                            let _ = device.send_keepalive();
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("KeepAlive Poller Failed, {e}");
-                    break;
-                }
             },
             i => {
                 // Find the specific device for this index
@@ -315,6 +304,9 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                         }
                                         ControlMessage::Enabled(enabled, tx) => {
                                             let _ = tx.send(dev.set_enabled(enabled));
+                                        }
+                                        ControlMessage::KeepAlive(tx) => {
+                                            let _ = tx.send(dev.send_keepalive());
                                         }
                                     };
                                 }
@@ -385,6 +377,7 @@ pub enum LinkedCommands {
 #[allow(unused)]
 pub enum ControlMessage {
     Enabled(bool, oneshot::Sender<Result<(), BeacnError>>),
+    KeepAlive(oneshot::Sender<Result<(), BeacnError>>),
     SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<(), BeacnError>>),
     DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
