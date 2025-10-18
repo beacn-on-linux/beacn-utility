@@ -1,19 +1,17 @@
 use crate::device_manager::ControlMessage;
 use crate::device_manager::ControlMessage::SendImage;
 use crate::integrations::pipeweaver::channel::{
-    BeacnImage, ChannelChangedProperty, ChannelRenderer, UpdateFrom,
+    ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };
 use crate::integrations::pipeweaver::layout::{
-    DrawingUtils, BG_COLOUR, CHANNEL_DIMENSIONS, CHANNEL_INNER_COLOUR, DISPLAY_DIMENSIONS,
-    JPEG_QUALITY, POSITION_ROOT,
+    DrawingUtils, BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, JPEG_QUALITY, POSITION_ROOT,
 };
 use crate::runtime;
 use anyhow::{anyhow, bail, Context, Result};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
-use beacn_lib::crossbeam::channel::{Receiver, RecvError, Sender};
+use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
-use enum_map::EnumMap;
 use futures_util::{SinkExt, StreamExt};
 use image::{ImageBuffer, Rgba, RgbaImage};
 use log::{debug, info, warn};
@@ -23,10 +21,9 @@ use pipeweaver_ipc::commands::{
     APICommand, DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse,
 };
 use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
-use pipeweaver_shared::{Colour, Mix, MuteTarget, OrderGroup};
+use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::select;
@@ -52,6 +49,20 @@ const COLOUR_MIX_B: RGBA = RGBA {
     alpha: 255,
 };
 
+const COLOUR_WHITE: RGBA = RGBA {
+    red: 255,
+    green: 255,
+    blue: 255,
+    alpha: 255,
+};
+
+const COLOUR_BLACK: RGBA = RGBA {
+    red: 0,
+    green: 0,
+    blue: 0,
+    alpha: 0,
+};
+
 // This is so we can more cleanly Map Physical / Virtual devices, because the data we need from
 // them is the same regardless, and ChannelRenderer has From<> for Both
 #[derive(Debug)]
@@ -60,124 +71,396 @@ enum DeviceRef<'a> {
     Virtual(&'a VirtualSourceDevice),
 }
 
-pub async fn spawn_pipeweaver_handler(
+type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type Renderers = HashMap<Ulid, ChannelRenderer>;
+
+struct PipeweaverHandler {
+    device_type: DeviceType,
     sender: Sender<ControlMessage>,
-    device: DeviceType,
     input_rx: Receiver<Interactions>,
-) {
-    info!("Starting Pipeweaver Manager");
-    let url = "ws://localhost:14565/api/websocket";
 
-    // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
-    // and try again after 5 seconds,
-    loop {
-        info!("Attempting Connection to Pipeweaver");
+    command_index: u64,
+    raw_status: Value,
+    status: DaemonStatus,
 
-        // Attempt a connection to Pipeweaver
-        let connection = connect_async(url).await;
-        if let Err(e) = connection {
-            warn!("Error Connecting to Pipeweaver: {}", e);
-            sleep(Duration::from_secs(5)).await;
-            continue;
+    active_page: u8,
+    active_mix: Mix,
+    devices_shown: Vec<Ulid>,
+    renderers: Renderers,
+}
+
+impl PipeweaverHandler {
+    pub fn new(
+        device_type: DeviceType,
+        sender: Sender<ControlMessage>,
+        input_rx: Receiver<Interactions>,
+    ) -> Self {
+        Self {
+            device_type,
+            sender,
+            input_rx,
+
+            command_index: 0,
+            raw_status: Value::Null,
+            status: DaemonStatus::default(),
+
+            active_page: 0,
+            active_mix: Mix::A,
+            devices_shown: Vec::with_capacity(4),
+            renderers: HashMap::new(),
         }
-        let (mut stream, _) = connection.unwrap();
-        info!("Successfully connected to Pipeweaver");
+    }
 
-        let result =
-            run_pipeweaver_socket(&mut stream, sender.clone(), device, input_rx.clone()).await;
-        match result {
-            Ok(_) => break,
-            Err(e) => {
-                warn!("Pipeweaver Error, closing socket: {}", e);
-                let _ = stream.close(None).await;
+    pub async fn run_handler(&mut self) {
+        info!("Starting Pipeweaver Manager");
+        let url = "ws://localhost:14565/api/websocket";
+
+        // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
+        // and try again after 5 seconds,
+        loop {
+            if let Err(e) = self.handle_connection(url).await {
+                // It doesn't matter if we lose an input here, we're not handling them anyway.
+                if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
+                    warn!("Interaction Handler Terminated, Bailing!");
+                    break;
+                }
+
+                warn!("Pipeweaver Error: {}", e);
                 sleep(Duration::from_secs(5)).await;
                 continue;
+            } else {
+
+                // We've returned with 'OK', this generally doesn't happen
+                break;
             }
         }
     }
-}
 
-type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
-type Renderers = HashMap<Ulid, ChannelRenderer>;
-async fn run_pipeweaver_socket(
-    stream: &mut WebSocket,
-    sender: Sender<ControlMessage>,
-    device_type: DeviceType,
-    input_rx: Receiver<Interactions>,
-) -> Result<()> {
-    // There are some types (for example, HashMaps) which don't guarantee ordering, so going from
-    // a DaemonStatus -> JSON before applying a PATCH could result in the wrong data being altered.
-    // So we'll maintain a raw state to apply patches to, then update the Status after changes
-    let mut raw_status: Value = Value::Null;
+    async fn handle_connection(&mut self, url: &str) -> Result<()> {
+        let (mut stream, _) = connect_async(url).await?;
+        info!("Successfully connected to Pipeweaver");
 
-    let mut status = DaemonStatus::default();
-    let mut command_index = 0;
+        self.load_status(&mut stream).await?;
+        self.load_initial_state().await?;
+        self.run_message_loop(&mut stream).await?;
 
-    // Perform the Initial Status Fetch
-    let status_request = serde_json::to_string(&WebsocketRequest {
-        id: command_index,
-        data: GetStatus,
-    })?;
-
-    if let Err(e) = stream
-        .send(Message::Text(Utf8Bytes::from(status_request)))
-        .await
-    {
-        bail!("Failed to fetch Status: {}", e)
+        Ok(())
     }
 
-    command_index += 1;
+    async fn load_status(&mut self, stream: &mut WebSocket) -> Result<()> {
+        // Perform the Initial Status Fetch
+        let status_request = serde_json::to_string(&WebsocketRequest {
+            id: self.get_command_index(),
+            data: GetStatus,
+        })?;
 
-    // There are occasionally patch messages which could occur before the status response,
-    // so we'll loop here until we get the answer we're looking for
-    loop {
-        let message = stream.next().await;
-        if let Some(message) = message {
-            let message = message?;
-            if let Message::Text(msg) = message {
-                let value = serde_json::from_str::<Value>(msg.as_str())?;
+        let message = Message::Text(Utf8Bytes::from(status_request));
+        if let Err(e) = stream.send(message).await {
+            bail!("Failed to fetch Status: {}", e)
+        }
 
-                // This should be a WebSocketResponse object
-                let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
+        // There are occasionally patch messages which could occur before the status response,
+        // so we'll loop here until we get the answer we're looking for
+        loop {
+            let message = stream.next().await;
+            if let Some(message) = message {
+                let message = message?;
+                if let Message::Text(msg) = message {
+                    let value = serde_json::from_str::<Value>(msg.as_str())?;
 
-                // Check the ID (should always be present)
-                let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
+                    // This should be a WebSocketResponse object
+                    let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
 
-                // We can occasionally get patches before the Status response, so verify the ID...
-                if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == 0u64 {
-                    // This is our DaemonStatus response
-                    let data = object
-                        .get("data")
-                        .ok_or(anyhow!("Failed to Read Data"))?
-                        .clone();
-                    raw_status = data
-                        .get("Status")
-                        .ok_or(anyhow!("Failed to Read Status"))?
-                        .clone();
-                    status = serde_json::from_value::<DaemonStatus>(raw_status.clone())?;
-                    break;
+                    // Check the ID (should always be present)
+                    let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
+
+                    // We can occasionally get patches before the Status response, so verify the ID...
+                    if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == 0u64 {
+                        // This is our DaemonStatus response
+                        let error = anyhow!("Failed to Read Data");
+                        let data = object.get("data").ok_or(error)?.clone();
+
+                        let error = anyhow!("Failed to Read Status");
+                        self.raw_status = data.get("Status").ok_or(error)?.clone();
+
+                        let raw = self.raw_status.clone();
+                        self.status = serde_json::from_value::<DaemonStatus>(raw)?;
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn load_initial_state(&mut self) -> Result<()> {
+        let devices_shown = self.get_channels_on_page();
+        self.devices_shown = devices_shown;
+
+        // Update the Rendering Nodes
+        self.update_renderers()?;
+
+        // Perform the initial screen render
+        self.perform_full_refresh()?;
+
+        Ok(())
+    }
+
+    async fn run_message_loop(&mut self, stream: &mut WebSocket) -> Result<()> {
+        debug!("Spawning Sync <-> Async Loop");
+
+        let sync_receiver = self.input_rx.clone();
+        let (interaction_tx, mut interaction_rx) = channel(10);
+        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx));
+
+        debug!("Starting Pipeweaver Message Loop");
+        loop {
+            select! {
+                Some(message) = stream.next() => {
+                    let message = message?;
+                    if message.is_text() {
+                        let result = serde_json::from_str::<WebsocketResponse>(message.to_text()?)?;
+                        if let DaemonResponse::Patch(patch) = result.data {
+                            // Update the raw status for the change
+                            json_patch::patch(&mut self.raw_status, &patch)?;
+                            self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
+
+                            // Check whether the channel list has changed
+                            let sources = &self.status.audio.profile.devices.sources;
+                            let devices = self.get_channels_on_page();
+
+                            if devices != self.devices_shown {
+                                self.devices_shown = devices.clone();
+
+                                self.update_renderers()?;
+
+                                // Set the Button Colours
+                                self.load_all_dial_button_colours()?;
+                                self.perform_full_redraw()?;
+                            } else {
+                                // Check whether any existing devices have changed
+                                for (index, device) in self.devices_shown.iter().enumerate() {
+                                    let mut refresh_button_colour = false;
+
+                                    let dev_ref = self.get_device_ref(device, sources)?;
+                                    let render = self.renderers.get_mut(&device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+
+                                    let update = match dev_ref {
+                                        DeviceRef::Physical(d) => render.update_from(d.clone()),
+                                        DeviceRef::Virtual(d) => render.update_from(d.clone()),
+                                    };
+
+                                    for part in update {
+                                        let (img, x, y) = match part {
+                                            ChannelChangedProperty::Title => {
+                                                let img = render.draw_header();
+
+                                                let (x, y) = img.position;
+                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                (img, x, y)
+                                            }
+                                            ChannelChangedProperty::Colour => {
+                                                // Set the Button Colour to Refresh
+                                                refresh_button_colour = true;
+
+                                                // We need to redraw the entire channel
+                                                let img = render.full_render(self.active_mix);
+
+                                                let (x, y) = img.position;
+                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                (img, x, y)
+                                            }
+                                            ChannelChangedProperty::Volumes(mix) => {
+                                                if mix != self.active_mix {
+                                                    continue
+                                                }
+
+                                                let img = render.get_volume(self.active_mix)?;
+                                                let (x, y) = img.position;
+
+                                                (img.image, x, y)
+                                            }
+                                            ChannelChangedProperty::MuteState(target) => {
+                                                let img = render.draw_mute_box(target);
+
+                                                let (x, y) = img.position;
+                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                (img, x, y)
+                                            }
+                                        };
+
+                                        // Determine the 'start' position of this channel
+                                        let (ch_w, _) = CHANNEL_DIMENSIONS;
+                                        let base_x = ch_w * index as u32;
+
+                                        // Get the position relative to the main image root
+                                        let (root_x, root_y) = POSITION_ROOT;
+                                        let x = base_x + x + root_x;
+                                        let y = y + root_y;
+
+                                        // Send it
+                                        let (tx,rx) = oneshot::channel();
+                                        self.sender.send(SendImage(img, x, y, tx))?;
+                                        rx.recv()??;
+                                    };
+
+                                    // We split this out because there's a lot of borrowing going on
+                                    // inside the loops regards the renderer, which makes executing
+                                    // earlier more difficult :D
+                                    if refresh_button_colour {
+                                        self.load_dial_button_colour(index)?;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        bail!("Received non-text message from Websocket!")
+                    }
+                }
+                maybe_msg = interaction_rx.recv() => {
+                    match maybe_msg {
+                        Some(msg) => {
+                            match self.device_type {
+                                DeviceType::BeacnMix => {}
+                                DeviceType::BeacnMixCreate => {
+                                    match msg {
+                                        Interactions::ButtonPress(button, state) => {
+                                            if state == ButtonState::Release {
+                                                self.handle_button(button, stream).await?;
+                                            }
+                                        }
+                                        Interactions::DialChanged(dial, change) => {
+                                            self.handle_dial(dial, change, stream).await?;
+                                        }
+                                    }
+                                }
+                                t => bail!("WTF is this doing here?! {:?}", t)
+                            }
+                        },
+                        None => bail!("Receive Handler Closed!")
+                    }
                 }
             }
         }
     }
 
-    // Next, we need to find the channels, and create a renderer
-    let mut renderers: Renderers = HashMap::new();
+    fn perform_full_refresh(&self) -> Result<()> {
+        self.perform_full_redraw()?;
+        self.load_all_dial_button_colours()?;
+        self.load_page_button_colours()?;
+        self.load_mix_button_colours()?;
 
-    let mut page = 0;
-    let sources = &status.audio.profile.devices.sources;
-    let mut devices_shown = get_page_channels(&sources.device_order, page);
-
-    for device in &devices_shown {
-        let render = get_channel_renderers(device, sources);
-        renderers.insert(*device, render?);
+        Ok(())
     }
 
-    let mut active_mix = Mix::A;
-    for (index, device) in devices_shown.iter().enumerate() {
-        let render = renderers
-            .get(device)
-            .ok_or_else(|| anyhow!("Failed to get render"))?;
+    fn update_renderers(&mut self) -> Result<()> {
+        for device in &self.devices_shown {
+            if !self.renderers.contains_key(&device) {
+                let render = self.get_channel_renderer(&device)?;
+                self.renderers.insert(*device, render);
+            }
+        }
+        // Remove configs which aren't shown anymore
+        self.renderers
+            .retain(|id, _| self.devices_shown.contains(id));
+        Ok(())
+    }
+
+    fn perform_full_redraw(&self) -> Result<()> {
+        let (width, height) = DISPLAY_DIMENSIONS;
+        let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
+
+        for (index, item) in self.devices_shown.iter().enumerate() {
+            let error = anyhow!("No Such Render Object");
+            let renderer = self.renderers.get(item).ok_or_else(|| error)?;
+            let drawing = renderer.full_render(self.active_mix);
+            let (_, y) = drawing.position;
+            let (width, _) = CHANNEL_DIMENSIONS;
+            let x = width * index as u32;
+            DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
+        }
+
+        let (tx, rx) = oneshot::channel();
+        let img = img_as_jpeg(base, BG_COLOUR)?;
+        self.sender.send(SendImage(img, 0, 0, tx))?;
+        rx.recv()??;
+
+        Ok(())
+    }
+
+    fn redraw_volumes(&self) -> Result<()> {
+        for (index, item) in self.devices_shown.iter().enumerate() {
+            let error = anyhow!("No Such Render Object");
+            let renderer = self.renderers.get(item).ok_or_else(|| error)?;
+            let drawing = renderer.get_volume(self.active_mix)?;
+            let (x, y) = drawing.position;
+
+            // Determine the 'start' position of this channel
+            let (ch_w, _) = CHANNEL_DIMENSIONS;
+            let base_x = ch_w * index as u32;
+
+            // Get the position relative to the main image root
+            let (root_x, root_y) = POSITION_ROOT;
+            let x = base_x + x + root_x;
+            let y = y + root_y;
+
+            // Send it
+            let (tx, rx) = oneshot::channel();
+            self.sender.send(SendImage(drawing.image, x, y, tx))?;
+            rx.recv()??;
+        }
+
+        Ok(())
+    }
+
+    fn load_all_dial_button_colours(&self) -> Result<()> {
+        for index in 0..self.devices_shown.len() {
+            self.load_dial_button_colour(index)?;
+        }
+        Ok(())
+    }
+
+    fn load_page_button_colours(&self) -> Result<()> {
+        let left_colour = match self.active_page == 0 {
+            true => COLOUR_BLACK,
+            false => COLOUR_WHITE,
+        };
+
+        // Map the Previous / Next Button colours
+        let right_colour = match self.get_page_count() {
+            1 => COLOUR_BLACK,
+            c => match self.active_page == c - 1 {
+                true => COLOUR_BLACK,
+                false => COLOUR_WHITE,
+            },
+        };
+
+        // Send the page colours
+        self.set_button_colour(ButtonLighting::Left, left_colour)?;
+        self.set_button_colour(ButtonLighting::Right, right_colour)?;
+
+        Ok(())
+    }
+
+    fn load_mix_button_colours(&self) -> Result<()> {
+        let colour = match self.active_mix {
+            Mix::A => COLOUR_MIX_B,
+            Mix::B => COLOUR_MIX_A,
+        };
+        self.set_button_colour(ButtonLighting::Mix, colour)?;
+        Ok(())
+    }
+
+    fn load_dial_button_colour(&self, index: usize) -> Result<()> {
+        let error = anyhow!("No Such Index");
+        let device_id = self.devices_shown.get(index).ok_or_else(|| error)?;
+
+        let error = anyhow!("Failed to Fetch Renderer");
+        let render = self.renderers.get(device_id).ok_or_else(|| error)?;
+
         let dial_button = match index {
             0 => ButtonLighting::Dial1,
             1 => ButtonLighting::Dial2,
@@ -194,419 +477,236 @@ async fn run_pipeweaver_socket(
             alpha: colour[3],
         };
 
-        let (tx, rx) = oneshot::channel();
-        sender.send(ControlMessage::ButtonColour(dial_button, beacn_colour, tx))?;
-        rx.recv()??;
+        self.set_button_colour(dial_button, beacn_colour)?;
+        Ok(())
     }
 
-    // We're MIX::A by default, set the button colour
-    let (tx, rx) = oneshot::channel();
-    sender.send(ControlMessage::ButtonColour(
-        ButtonLighting::Mix,
-        COLOUR_MIX_B,
-        tx,
-    ))?;
-    rx.recv()??;
+    fn get_command_index(&mut self) -> u64 {
+        let result = self.command_index;
+        self.command_index += 1;
+        result
+    }
 
-    // Send out a full device refresh
-    let (tx, rx) = oneshot::channel();
-    let img = do_full_render(active_mix, &devices_shown, &renderers)?;
-    let (x, y) = img.position;
-    sender.send(SendImage(img_as_jpeg(img.image, BG_COLOUR)?, x, y, tx))?;
-    rx.recv()??;
+    fn get_channel_renderer(&self, device: &Ulid) -> Result<ChannelRenderer> {
+        let sources = &self.status.audio.profile.devices.sources;
+        let dev = self.get_device_ref(device, sources)?;
 
-    // We create a pending volume send, and store the 'final' value, this allows us to better
-    // manage intermediate updates.
-    let (interaction_tx, mut interaction_rx) = channel(10);
+        let renderer = match dev {
+            DeviceRef::Physical(d) => ChannelRenderer::from(d.clone()),
+            DeviceRef::Virtual(d) => ChannelRenderer::from(d.clone()),
+        };
+        Ok(renderer)
+    }
 
-    // Ok, we need to wrap the input handler into something async
-    runtime().spawn_blocking(move || sync_to_async(input_rx, interaction_tx));
+    fn refresh_page(&mut self) -> Result<()> {
+        self.devices_shown = self.get_channels_on_page();
+        self.update_renderers()?;
+        self.perform_full_refresh()?;
+        Ok(())
+    }
 
-    // Ok, we can move into the websocket loop
-    loop {
-        select! {
-            Some(message) = stream.next() => {
-                let message = message?;
-                if message.is_text() {
-                    let result = serde_json::from_str::<WebsocketResponse>(message.to_text()?)?;
-                    if let DaemonResponse::Patch(patch) = result.data {
-                        // Update the raw status for the change
-                        json_patch::patch(&mut raw_status, &patch)?;
-                        status = serde_json::from_value::<DaemonStatus>(raw_status.clone())?;
+    fn get_page_count(&self) -> u8 {
+        let order = &self.status.audio.profile.devices.sources.device_order;
 
-                        // Check whether the channel list has changed
-                        let sources = &status.audio.profile.devices.sources;
-                        let devices = get_page_channels(&sources.device_order, page);
+        // If we can't display any other channels because we're populated with pins, send 1 page.
+        if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].len() == 0 {
+            return 1;
+        }
 
-                        if devices != devices_shown {
-                            devices_shown = devices.clone();
-                            for device in devices {
-                                if !renderers.contains_key(&device) {
-                                    let render = get_channel_renderers(&device, sources)?;
-                                    renderers.insert(device, render);
-                                }
-                            }
-                            // Remove configs which aren't shown anymore
-                            renderers.retain(|id, _| devices_shown.contains(id));
+        let channels_per_page = 4 - order[OrderGroup::Pinned].len() as u8;
+        let channel_count = order[OrderGroup::Default].len() as u8;
+        (channels_per_page + channel_count - 1) / channels_per_page
+    }
 
-                            // Set the Button Colours
-                            for (index, device) in devices_shown.iter().enumerate() {
-                                let render = renderers.get(device).ok_or_else(|| anyhow!("Failed to get render"))?;
-                                let dial_button = match index {
-                                    0 => ButtonLighting::Dial1,
-                                    1 => ButtonLighting::Dial2,
-                                    2 => ButtonLighting::Dial3,
-                                    3 => ButtonLighting::Dial4,
-                                    _ => bail!("Invalid Dial Index"),
-                                };
+    fn get_channels_on_page(&self) -> Vec<Ulid> {
+        let order = &self.status.audio.profile.devices.sources.device_order;
+        let mut channels = Vec::with_capacity(4);
 
-                                let colour = render.colour;
-                                let beacn_colour = RGBA {
-                                    red: colour[0],
-                                    green: colour[1],
-                                    blue: colour[2],
-                                    alpha: colour[3],
-                                };
+        // This is a little complicated, we need to check the pinned channels and add them first
+        let pinned = &order[OrderGroup::Pinned];
+        let others = &order[OrderGroup::Default];
 
-                                let (tx,rx) = oneshot::channel();
-                                sender.send(ControlMessage::ButtonColour(dial_button, beacn_colour, tx))?;
-                                rx.recv()??;
-                            }
+        if pinned.is_empty() && others.is_empty() {
+            warn!("No channels are defined!");
+            return channels;
+        }
 
-                            // Perform a full redraw of the display
-                            let (tx, rx) = oneshot::channel();
-                            let img = do_full_render(active_mix, &devices_shown, &renderers)?;
-                            let (x, y) = img.position;
-                            sender.send(SendImage(img_as_jpeg(img.image, BG_COLOUR)?, x, y, tx))?;
-                            rx.recv()??;
-                        } else {
-                            // Check whether any existing devices have changed
-                            for (index, device) in devices_shown.iter().enumerate() {
-                                let dev_ref = get_device_ref(device, sources)?;
-                                let render = renderers.get_mut(&device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+        // The pinned options should appear on all the pages
+        for channel in pinned.iter().take(channels.capacity() - channels.len()) {
+            channels.push(*channel);
+        }
 
-                                let update = match dev_ref {
-                                    DeviceRef::Physical(d) => render.update_from(d.clone()),
-                                    DeviceRef::Virtual(d) => render.update_from(d.clone()),
-                                };
+        // If the user has 4 pinned channels, we really can't do paging
+        if channels.len() == channels.capacity() {
+            return channels;
+        }
 
-                                for part in update {
-                                    let (img, x, y) = match part {
-                                        ChannelChangedProperty::Title => {
-                                            let img = render.draw_header();
+        // Ok, now we need to work out how many non-pinned channels per page we can have
+        let channels_per_page = 4 - pinned.len() as u8;
 
-                                            let (x, y) = img.position;
-                                            let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                            (img, x, y)
-                                        }
-                                        ChannelChangedProperty::Colour => {
-                                            // Firstly, set the button colour
-                                            let dial_button = match index {
-                                                0 => ButtonLighting::Dial1,
-                                                1 => ButtonLighting::Dial2,
-                                                2 => ButtonLighting::Dial3,
-                                                3 => ButtonLighting::Dial4,
-                                                _ => bail!("Invalid Dial Index"),
-                                            };
-
-                                            let colour = render.colour;
-                                            let beacn_colour = RGBA {
-                                                red: colour[0],
-                                                green: colour[1],
-                                                blue: colour[2],
-                                                alpha: colour[3],
-                                            };
-
-                                            let (tx,rx) = oneshot::channel();
-                                            sender.send(ControlMessage::ButtonColour(dial_button, beacn_colour, tx))?;
-                                            rx.recv()??;
-
-                                            // We need to redraw the entire channel
-                                            let img = render.full_render(active_mix);
-
-                                            let (x, y) = img.position;
-                                            let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                            (img, x, y)
-                                        }
-                                        ChannelChangedProperty::Volumes(mix) => {
-                                            if mix != active_mix {
-                                                continue
-                                            }
-
-                                            let img = render.get_volume(active_mix)?;
-                                            let (x, y) = img.position;
-
-                                            (img.image, x, y)
-                                        }
-                                        ChannelChangedProperty::MuteState(target) => {
-                                            let img = render.draw_mute_box(target);
-
-                                            let (x, y) = img.position;
-                                            let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                            (img, x, y)
-                                        }
-                                    };
-
-                                    let (ch_w, _) = CHANNEL_DIMENSIONS;
-                                    let base_x = ch_w * index as u32;
-
-                                    let (root_x, root_y) = POSITION_ROOT;
-                                    let x = base_x + x + root_x;
-                                    let y = y + root_y;
-
-                                    let (tx,rx) = oneshot::channel();
-                                    sender.send(SendImage(img, x, y, tx))?;
-                                    rx.recv()??;
-                                };
-                            }
-                        }
-                    }
-                } else {
-                    bail!("Received non-text message from Websocket!")
-                }
+        if others.len() < channels_per_page as usize {
+            for other in others {
+                channels.push(*other);
             }
-            Some(msg) = interaction_rx.recv() => {
-                match device_type {
-                    DeviceType::BeacnMix => {
-                        match msg {
-                            Interactions::ButtonPress(_,_) => {}
-                            Interactions::DialChanged(dial, change) => {
-                                let device_index = match dial {
-                                    Dials::Dial1 => 0,
-                                    Dials::Dial2 => 1,
-                                    Dials::Dial3 => 2,
-                                    Dials::Dial4 => 3,
-                                };
-                                if let Some(device) = devices_shown.get(device_index) {
-                                    let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-                                    let volume = current.volumes[active_mix];
+            return channels;
+        }
 
-                                    let new_volume = (volume as i8 + change).clamp(0, 100);
+        let channel_start = ((channels_per_page * self.active_page) + channels_per_page);
+        let start = if channel_start as usize > others.len() {
+            // Clamp to the Last item in the list if this overflows
+            others.len().saturating_sub(channels_per_page as usize)
+        } else {
+            (channels_per_page * self.active_page) as usize
+        };
 
-                                    let command = serde_json::to_string(&WebsocketRequest {
-                                        id: command_index,
-                                        data: DaemonRequest::Pipewire(SetSourceVolume(*device, active_mix, new_volume as u8)),
-                                    })?;
-                                    command_index += 1;
-                                    stream.send(Message::Text(Utf8Bytes::from(command))).await?;
-                                }
-                            }
-                        }
-
-                    }
-                    DeviceType::BeacnMixCreate => {
-                        match msg {
-                            Interactions::ButtonPress(button, state) => {
-                                if state == ButtonState::Release {
-                                    match button {
-                                        Buttons::AudienceMix => {
-                                            active_mix = match active_mix {
-                                                Mix::A => Mix::B,
-                                                Mix::B => Mix::A,
-                                            };
-
-                                            // Redraw the volumes
-                                            for (index, device) in devices_shown.iter().enumerate() {
-                                                let render = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-
-                                                let img = render.get_volume(active_mix)?;
-                                                let (x, y) = img.position;
-
-                                                let (ch_w, _) = CHANNEL_DIMENSIONS;
-                                                let base_x = ch_w * index as u32;
-
-                                                let (root_x, root_y) = POSITION_ROOT;
-                                                let x = base_x + x + root_x;
-                                                let y = y + root_y;
-
-                                                let (tx,rx) = oneshot::channel();
-                                                sender.send(SendImage(img.image, x, y, tx))?;
-                                                rx.recv()??;
-
-                                                // Update the Button Colour
-                                                let button_colour = if active_mix == Mix::A {
-                                                    COLOUR_MIX_B
-                                                } else {
-                                                    COLOUR_MIX_A
-                                                };
-                                                let (tx, rx) = oneshot::channel();
-                                                sender.send(ControlMessage::ButtonColour(
-                                                    ButtonLighting::Mix,
-                                                    button_colour,
-                                                    tx,
-                                                ))?;
-                                                rx.recv()??;
-
-                                            }
-                                        }
-                                        Buttons::PageLeft => {
-
-                                        }
-                                        Buttons::PageRight => {
-
-                                        }
-                                        Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 | Buttons::Audience1 | Buttons::Audience2 | Buttons::Audience3 | Buttons::Audience4 => {
-                                            let (index, target) = match button {
-                                                Buttons::Dial1 => (0, MuteTarget::TargetA),
-                                                Buttons::Dial2 => (1, MuteTarget::TargetA),
-                                                Buttons::Dial3 => (2, MuteTarget::TargetA),
-                                                Buttons::Dial4 => (3, MuteTarget::TargetA),
-                                                Buttons::Audience1 => (0, MuteTarget::TargetB),
-                                                Buttons::Audience2 => (1, MuteTarget::TargetB),
-                                                Buttons::Audience3 => (2, MuteTarget::TargetB),
-                                                Buttons::Audience4 => (3, MuteTarget::TargetB),
-                                                _ => bail!("This shouldn't happen.")
-                                            };
-
-                                            if let Some(device) = devices_shown.get(index) {
-                                                let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-                                                let message = if current.mute_states[target].is_active {
-                                                    APICommand::DelSourceMuteTarget(*device, target)
-                                                } else {
-                                                    APICommand::AddSourceMuteTarget(*device, target)
-                                                };
-                                                let command = serde_json::to_string(&WebsocketRequest {
-                                                    id: command_index,
-                                                    data: DaemonRequest::Pipewire(message),
-                                                })?;
-                                                command_index += 1;
-                                                stream.send(Message::Text(Utf8Bytes::from(command))).await?;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Interactions::DialChanged(dial, change) => {
-                                let device_index = match dial {
-                                    Dials::Dial1 => 0,
-                                    Dials::Dial2 => 1,
-                                    Dials::Dial3 => 2,
-                                    Dials::Dial4 => 3,
-                                };
-                                if let Some(device) = devices_shown.get(device_index) {
-                                    let current = renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-                                    let volume = current.volumes[active_mix];
-
-                                    let new_volume = (volume as i8 + change).clamp(0, 100);
-
-                                    let command = serde_json::to_string(&WebsocketRequest {
-                                        id: command_index,
-                                        data: DaemonRequest::Pipewire(SetSourceVolume(*device, active_mix, new_volume as u8)),
-                                    })?;
-                                    command_index += 1;
-
-                                    stream.send(Message::Text(Utf8Bytes::from(command))).await?;
-                                }
-                            }
-                        }
-                    }
-                    _ => bail!("Received interaction from invalid device!"),
-                }
-                debug!("PW: Received: {}", msg);
+        for channel in others.iter().skip(start) {
+            if channels.len() != channels.capacity() {
+                channels.push(*channel);
             }
         }
+
+        channels
+    }
+    fn get_device_ref<'a>(
+        &self,
+        device: &Ulid,
+        sources: &'a SourceDevices,
+    ) -> Result<DeviceRef<'a>> {
+        sources
+            .physical_devices
+            .iter()
+            .map(DeviceRef::Physical)
+            .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
+            .find(|dev| match dev {
+                DeviceRef::Physical(d) => d.description.id == *device,
+                DeviceRef::Virtual(d) => d.description.id == *device,
+            })
+            .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
     }
 
-    Ok(())
+    fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = ControlMessage::ButtonColour(button, colour, tx);
+        self.sender.send(message)?;
+        rx.recv()??;
+        Ok(())
+    }
+
+    // This is primarily offloaded so we can 'fake' button presses depending on situation
+    async fn handle_button(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
+        match button {
+            Buttons::AudienceMix => {
+                // This one is now stupidly simple
+                self.active_mix = match self.active_mix {
+                    Mix::A => Mix::B,
+                    Mix::B => Mix::A,
+                };
+                self.redraw_volumes()?;
+                self.load_mix_button_colours()?;
+            }
+            Buttons::PageLeft | Buttons::PageRight => {
+                let change: i8 = match button {
+                    Buttons::PageLeft => -1,
+                    Buttons::PageRight => 1,
+                    _ => bail!("Invalid button"),
+                };
+
+                if self.active_page == 0 && change == -1 {
+                    return Ok(());
+                }
+                if self.active_page == self.get_page_count() - 1 && change == 1 {
+                    return Ok(());
+                }
+
+                self.active_page = self.active_page.wrapping_add_signed(change);
+                self.refresh_page()?;
+            }
+
+            // The general behaviour for all the main buttons is the same, just with minor tweaks
+            // depending on which was pressed
+            Buttons::Dial1
+            | Buttons::Dial2
+            | Buttons::Dial3
+            | Buttons::Dial4
+            | Buttons::Audience1
+            | Buttons::Audience2
+            | Buttons::Audience3
+            | Buttons::Audience4 => {
+                // Get our refined information from the button
+                let (index, target) = match button {
+                    Buttons::Dial1 => (0, MuteTarget::TargetA),
+                    Buttons::Dial2 => (1, MuteTarget::TargetA),
+                    Buttons::Dial3 => (2, MuteTarget::TargetA),
+                    Buttons::Dial4 => (3, MuteTarget::TargetA),
+                    Buttons::Audience1 => (0, MuteTarget::TargetB),
+                    Buttons::Audience2 => (1, MuteTarget::TargetB),
+                    Buttons::Audience3 => (2, MuteTarget::TargetB),
+                    Buttons::Audience4 => (3, MuteTarget::TargetB),
+                    _ => bail!("This shouldn't happen."),
+                };
+
+                if let Some(device) = self.devices_shown.get(index) {
+                    let error = anyhow!("Failed to get Renderer");
+                    let current = self.renderers.get_mut(device).ok_or_else(|| error)?;
+                    let message = if current.mute_states[target].is_active {
+                        APICommand::DelSourceMuteTarget(*device, target)
+                    } else {
+                        APICommand::AddSourceMuteTarget(*device, target)
+                    };
+                    let command = serde_json::to_string(&WebsocketRequest {
+                        id: self.get_command_index(),
+                        data: DaemonRequest::Pipewire(message),
+                    })?;
+                    stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_dial(&mut self, dial: Dials, change: i8, stream: &mut WebSocket) -> Result<()> {
+        let device_index = match dial {
+            Dials::Dial1 => 0,
+            Dials::Dial2 => 1,
+            Dials::Dial3 => 2,
+            Dials::Dial4 => 3,
+        };
+
+        let command_index = self.get_command_index();
+        if let Some(device) = self.devices_shown.get(device_index) {
+            let error = anyhow!("Failed to get Renderer");
+            let current = self.renderers.get(device).ok_or_else(|| error)?;
+            let volume = current.volumes[self.active_mix];
+
+            let new_volume = (volume as i8 + change).clamp(0, 100);
+            let command = serde_json::to_string(&WebsocketRequest {
+                id: command_index,
+                data: DaemonRequest::Pipewire(SetSourceVolume(
+                    *device,
+                    self.active_mix,
+                    new_volume as u8,
+                )),
+            })?;
+
+            stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+        }
+
+        Ok(())
+    }
+}
+
+pub fn spawn_pipeweaver_handler(
+    sender: Sender<ControlMessage>,
+    device: DeviceType,
+    input_rx: Receiver<Interactions>,
+) {
+    let mut handler = PipeweaverHandler::new(device, sender, input_rx);
+    let _ = runtime().spawn(async move { handler.run_handler().await });
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
     DrawingUtils::image_as_jpeg(image, background, JPEG_QUALITY)
-}
-
-fn do_full_render(mix: Mix, list: &Vec<Ulid>, map: &Renderers) -> Result<BeacnImage> {
-    let (width, height) = DISPLAY_DIMENSIONS;
-    let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
-
-    for (index, item) in list.iter().enumerate() {
-        let renderer = map
-            .get(item)
-            .ok_or_else(|| anyhow!("No such render object"))?;
-        let drawing = renderer.full_render(mix);
-        let (_, y) = drawing.position;
-        let (width, _) = CHANNEL_DIMENSIONS;
-        let x = width * index as u32;
-        DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
-    }
-
-    Ok(BeacnImage {
-        position: (0, 0),
-        image: base,
-    })
-}
-
-fn get_device_ref<'a>(device: &Ulid, sources: &'a SourceDevices) -> Result<DeviceRef<'a>> {
-    sources
-        .physical_devices
-        .iter()
-        .map(DeviceRef::Physical)
-        .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
-        .find(|dev| match dev {
-            DeviceRef::Physical(d) => d.description.id == *device,
-            DeviceRef::Virtual(d) => d.description.id == *device,
-        })
-        .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
-}
-
-fn get_channel_renderers(device: &Ulid, sources: &SourceDevices) -> Result<ChannelRenderer> {
-    let dev = get_device_ref(device, sources)?;
-
-    let renderer = match dev {
-        DeviceRef::Physical(d) => ChannelRenderer::from(d.clone()),
-        DeviceRef::Virtual(d) => ChannelRenderer::from(d.clone()),
-    };
-    Ok(renderer)
-}
-
-fn get_page_channels(order: &EnumMap<OrderGroup, Vec<Ulid>>, page: u8) -> Vec<Ulid> {
-    let mut channels = Vec::with_capacity(4);
-
-    // This is a little complicated, we need to check the pinned channels and add them first
-    let pinned = &order[OrderGroup::Pinned];
-    let others = &order[OrderGroup::Default];
-
-    if pinned.is_empty() && others.is_empty() {
-        warn!("No channels are defined!");
-        return channels;
-    }
-
-    // The pinned options should appear on all the pages
-    for channel in pinned.iter().take(channels.capacity() - channels.len()) {
-        channels.push(*channel);
-    }
-
-    // If the user has 4 pinned channels, we really can't do paging
-    if channels.len() == channels.capacity() {
-        return channels;
-    }
-
-    // Ok, now we need to work out how many non-pinned channels per page we can have
-    let channels_per_page = 4 - pinned.len() as u8;
-
-    if others.len() < channels_per_page as usize {
-        for other in others {
-            channels.push(*other);
-        }
-        return channels;
-    }
-
-    let start = if ((channels_per_page * page) + channels_per_page) as usize > others.len() {
-        // Clamp to the Last item in the list if this overflows
-        others.len().saturating_sub(channels_per_page as usize)
-    } else {
-        (channels_per_page * page) as usize
-    };
-
-    for channel in others.iter().skip(start) {
-        if channels.len() != channels.capacity() {
-            channels.push(*channel);
-        }
-    }
-
-    channels
 }
 
 fn sync_to_async(
@@ -619,8 +719,8 @@ fn sync_to_async(
             Ok(val) => {
                 tx.blocking_send(val)?;
             }
-            Err(_) => {
-                debug!("Error Occurred, stopping sync wrapper");
+            Err(e) => {
+                debug!("Error Occurred, stopping sync wrapper: {}", e);
                 break;
             }
         }

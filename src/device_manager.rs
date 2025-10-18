@@ -221,7 +221,7 @@ pub fn spawn_device_manager(
                                 // Use the async runtime for this
                                 debug!("Starting PipeWeaver Handler");
                                 let img_tx = tx.clone();
-                                runtime().spawn(spawn_pipeweaver_handler(img_tx, device_type, input_rx));
+                                spawn_pipeweaver_handler(img_tx, device_type, input_rx);
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
