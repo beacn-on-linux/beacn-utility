@@ -11,6 +11,7 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::ManagerMessages;
 use crate::{runtime, ManagerMessages, ToMainMessages};
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
@@ -23,17 +24,16 @@ use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender, tick};
+use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use log::{debug, error};
+use log::debug;
 use std::collections::HashMap;
 use std::panic::catch_unwind;
-use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
@@ -213,6 +213,22 @@ pub fn spawn_device_manager(
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
+                                if device_type == DeviceType::BeacnMix {
+                                    // Send a splash to the device.
+                                    let img_tx = tx.clone();
+                                    thread::spawn(move || {
+                                        let (tx, rx) = oneshot::channel();
+                                        let img = Vec::from(TEMP_SPLASH);
+                                        let _ =
+                                            img_tx.send(ControlMessage::SendImage(img, 0, 0, tx));
+                                        let _ = rx.recv();
+                                    });
+                                } else {
+                                    // Use the async runtime for this
+                                    debug!("Starting PipeWeaver Handler");
+                                    let img_tx = tx.clone();
+                                    spawn_pipeweaver_handler(img_tx, device_type, input_rx);
+                                }
                                 // Use the async runtime for this
                                 debug!("Starting PipeWeaver Handler");
                                 let img_tx = tx.clone();

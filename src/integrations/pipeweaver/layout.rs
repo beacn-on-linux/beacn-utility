@@ -538,20 +538,6 @@ impl DrawingUtils {
         ])
     }
 
-    pub fn rgb_to_rgba(rgb: &RgbImage) -> RgbaImage {
-        let (width, height) = rgb.dimensions();
-        let mut rgba = RgbaImage::new(width, height);
-
-        for (src, dst) in rgb.as_raw().chunks_exact(3).zip(rgba.as_mut().chunks_exact_mut(4)) {
-            dst[0] = src[0];
-            dst[1] = src[1];
-            dst[2] = src[2];
-            dst[3] = 255; // alpha
-        }
-
-        rgba
-    }
-
     pub fn get_volume_image(volume: u8, mix: Mix) -> Result<Vec<u8>> {
         let mut base = DIAL_BASE_IMAGE.clone();
         let dial = DIAL_MIX_IMAGES[mix]

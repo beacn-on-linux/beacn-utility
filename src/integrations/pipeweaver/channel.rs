@@ -3,10 +3,10 @@
 
 use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, TopToBottom};
 use crate::integrations::pipeweaver::layout::*;
-use anyhow::{anyhow, Result};
-use enum_map::{enum_map, EnumMap};
-use image::{load_from_memory, ImageBuffer, Rgba, RgbaImage};
+use anyhow::{Result, anyhow};
+use enum_map::{EnumMap, enum_map};
 use image::imageops::crop_imm;
+use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use pipeweaver_profile::{
     DeviceDescription, MuteStates, PhysicalSourceDevice, VirtualSourceDevice, Volumes,
 };
@@ -198,13 +198,13 @@ impl ChannelRenderer {
 
     pub fn draw_volume(&self, mix: Mix) -> BeacnImage {
         let volume = self.volumes[mix];
-        if let Some(jpeg_data) = DIAL_VOLUME_JPEG[mix].get(&volume) {
-            if let Ok(img) = load_from_memory(jpeg_data) {
-                return BeacnImage {
-                    position: VOLUME_POSITION,
-                    image: img.into_rgba8(),
-                };
-            }
+        if let Some(jpeg_data) = DIAL_VOLUME_JPEG[mix].get(&volume)
+            && let Ok(img) = load_from_memory(jpeg_data)
+        {
+            return BeacnImage {
+                position: VOLUME_POSITION,
+                image: img.into_rgba8(),
+            };
         }
         panic!("Unable to Load Volume Image for Mix: {mix:?}");
     }
@@ -274,7 +274,7 @@ impl ChannelRenderer {
         let mut background = self.draw_mute_background().image;
         let text = match self.mute_states[target].is_mute_to_all {
             true => "Mute to All",
-            false => "Mute To..."
+            false => "Mute To...",
         };
 
         let border_draw = match target {
@@ -295,7 +295,7 @@ impl ChannelRenderer {
             border_draw,
             BORDER_RADIUS_NONE,
             CHANNEL_BORDER_COLOUR,
-            Rgba([0,0,0,0]),    // The background needs to be transparent so we can overlay it
+            Rgba([0, 0, 0, 0]), // The background needs to be transparent so we can overlay it
             colour,
         );
 
@@ -335,7 +335,7 @@ impl ChannelRenderer {
 
         // Find the Middle position
         DrawingUtils::composite_from(&mut background, &text, text_x, text_y);
-        DrawingUtils::composite_from(&mut background, &icon, icon_x, icon_y);
+        DrawingUtils::composite_from(&mut background, icon, icon_x, icon_y);
 
         // Grab the specific area from the Mute Box
         let cropped = crop_imm(&background, x, y, width, height).to_image();
@@ -347,7 +347,7 @@ impl ChannelRenderer {
 
         BeacnImage {
             image: cropped,
-            position
+            position,
         }
     }
 }
