@@ -11,26 +11,25 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::ManagerMessages;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
-use crate::{ManagerMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender, tick};
+use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use log::{debug, error};
+use log::debug;
 use std::collections::HashMap;
 use std::panic::catch_unwind;
-use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
@@ -214,7 +213,8 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     thread::spawn(move || {
                                         let (tx, rx) = oneshot::channel();
                                         let img = Vec::from(TEMP_SPLASH);
-                                        let _ = img_tx.send(ControlMessage::SendImage(img, 0, 0, tx));
+                                        let _ =
+                                            img_tx.send(ControlMessage::SendImage(img, 0, 0, tx));
                                         let _ = rx.recv();
                                     });
                                 } else {

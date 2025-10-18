@@ -117,22 +117,16 @@ impl PipeweaverHandler {
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
-        loop {
-            if let Err(e) = self.handle_connection(url).await {
-                // It doesn't matter if we lose an input here, we're not handling them anyway.
-                if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
-                    warn!("Interaction Handler Terminated, Bailing!");
-                    break;
-                }
-
-                warn!("Pipeweaver Error: {}", e);
-                sleep(Duration::from_secs(5)).await;
-                continue;
-            } else {
-
-                // We've returned with 'OK', this generally doesn't happen
+        while let Err(e) = self.handle_connection(url).await {
+            // It doesn't matter if we lose an input here, we're not handling them anyway.
+            if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
+                warn!("Interaction Handler Terminated, Bailing!");
                 break;
             }
+
+            warn!("Pipeweaver Error: {}", e);
+            sleep(Duration::from_secs(5)).await;
+            continue;
         }
     }
 
@@ -249,7 +243,7 @@ impl PipeweaverHandler {
                                     let mut refresh_button_colour = false;
 
                                     let dev_ref = self.get_device_ref(device, sources)?;
-                                    let render = self.renderers.get_mut(&device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+                                    let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
 
                                     let update = match dev_ref {
                                         DeviceRef::Physical(d) => render.update_from(d.clone()),
@@ -369,8 +363,8 @@ impl PipeweaverHandler {
 
     fn update_renderers(&mut self) -> Result<()> {
         for device in &self.devices_shown {
-            if !self.renderers.contains_key(&device) {
-                let render = self.get_channel_renderer(&device)?;
+            if !self.renderers.contains_key(device) {
+                let render = self.get_channel_renderer(device)?;
                 self.renderers.insert(*device, render);
             }
         }
@@ -386,7 +380,7 @@ impl PipeweaverHandler {
 
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
-            let renderer = self.renderers.get(item).ok_or_else(|| error)?;
+            let renderer = self.renderers.get(item).ok_or(error)?;
             let drawing = renderer.full_render(self.active_mix);
             let (_, y) = drawing.position;
             let (width, _) = CHANNEL_DIMENSIONS;
@@ -405,7 +399,7 @@ impl PipeweaverHandler {
     fn redraw_volumes(&self) -> Result<()> {
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
-            let renderer = self.renderers.get(item).ok_or_else(|| error)?;
+            let renderer = self.renderers.get(item).ok_or(error)?;
             let drawing = renderer.get_volume(self.active_mix)?;
             let (x, y) = drawing.position;
 
@@ -467,10 +461,10 @@ impl PipeweaverHandler {
 
     fn load_dial_button_colour(&self, index: usize) -> Result<()> {
         let error = anyhow!("No Such Index");
-        let device_id = self.devices_shown.get(index).ok_or_else(|| error)?;
+        let device_id = self.devices_shown.get(index).ok_or(error)?;
 
         let error = anyhow!("Failed to Fetch Renderer");
-        let render = self.renderers.get(device_id).ok_or_else(|| error)?;
+        let render = self.renderers.get(device_id).ok_or(error)?;
 
         let dial_button = match index {
             0 => ButtonLighting::Dial1,
@@ -520,7 +514,7 @@ impl PipeweaverHandler {
         let order = &self.status.audio.profile.devices.sources.device_order;
 
         // If we can't display any other channels because we're populated with pins, send 1 page.
-        if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].len() == 0 {
+        if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() {
             return 1;
         }
 
@@ -562,7 +556,7 @@ impl PipeweaverHandler {
             return channels;
         }
 
-        let channel_start = ((channels_per_page * self.active_page) + channels_per_page);
+        let channel_start = (channels_per_page * self.active_page) + channels_per_page;
         let start = if channel_start as usize > others.len() {
             // Clamp to the Last item in the list if this overflows
             others.len().saturating_sub(channels_per_page as usize)
@@ -658,7 +652,7 @@ impl PipeweaverHandler {
 
                 if let Some(device) = self.devices_shown.get(index) {
                     let error = anyhow!("Failed to get Renderer");
-                    let current = self.renderers.get_mut(device).ok_or_else(|| error)?;
+                    let current = self.renderers.get_mut(device).ok_or(error)?;
                     let message = if current.mute_states[target].is_active {
                         APICommand::DelSourceMuteTarget(*device, target)
                     } else {
@@ -687,7 +681,7 @@ impl PipeweaverHandler {
         let command_index = self.get_command_index();
         if let Some(device) = self.devices_shown.get(device_index) {
             let error = anyhow!("Failed to get Renderer");
-            let current = self.renderers.get(device).ok_or_else(|| error)?;
+            let current = self.renderers.get(device).ok_or(error)?;
             let volume = current.volumes[self.active_mix];
 
             let new_volume = (volume as i8 + change).clamp(0, 100);
@@ -713,7 +707,7 @@ pub fn spawn_pipeweaver_handler(
     input_rx: Receiver<Interactions>,
 ) {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx);
-    let _ = runtime().spawn(async move { handler.run_handler().await });
+    runtime().spawn(async move { handler.run_handler().await });
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
