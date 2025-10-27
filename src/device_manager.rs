@@ -207,22 +207,11 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
-                                if device_type == DeviceType::BeacnMix {
-                                    // Send a splash to the device.
-                                    let img_tx = tx.clone();
-                                    thread::spawn(move || {
-                                        let (tx, rx) = oneshot::channel();
-                                        let img = Vec::from(TEMP_SPLASH);
-                                        let _ =
-                                            img_tx.send(ControlMessage::SendImage(img, 0, 0, tx));
-                                        let _ = rx.recv();
-                                    });
-                                } else {
-                                    // Use the async runtime for this
-                                    debug!("Starting PipeWeaver Handler");
-                                    let img_tx = tx.clone();
-                                    spawn_pipeweaver_handler(img_tx, device_type, input_rx);
-                                }
+                                // Use the async runtime for this
+                                debug!("Starting PipeWeaver Handler");
+                                let img_tx = tx.clone();
+                                spawn_pipeweaver_handler(img_tx, device_type, input_rx);
+                                
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
                                 let _ = event_tx.send(message);

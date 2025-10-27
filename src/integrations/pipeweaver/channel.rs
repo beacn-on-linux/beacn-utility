@@ -158,6 +158,8 @@ impl ChannelRenderer {
 
         // Draw all the elements
         let mut base = ImageBuffer::from_pixel(w, h, BG_COLOUR);
+        
+        // TODO: Content_box sizes must be computed depending on Mix or Mix Create
         let content = self.draw_content_box();
         let header = self.draw_header();
         let header_bar = self.draw_bar(HEADER_BAR_POSITION);
@@ -165,7 +167,9 @@ impl ChannelRenderer {
         let mute_bg = self.draw_mute_background();
         let dial = self.draw_volume(active_mix);
         let mute_a = self.draw_mute_box(MuteTarget::TargetA);
-        let mute_b = self.draw_mute_box(MuteTarget::TargetB);
+        
+        // If DeviceType is Mix, do not draw second mute box
+        // let mute_b = self.draw_mute_box(MuteTarget::TargetB);
 
         // Composite all the elements together
         DrawingUtils::composite_from_pos(&mut base, &content.image, content.position);
@@ -175,7 +179,9 @@ impl ChannelRenderer {
         DrawingUtils::composite_from_pos(&mut base, &mute_bg.image, mute_bg.position);
         DrawingUtils::composite_from_pos(&mut base, &dial.image, dial.position);
         DrawingUtils::composite_from_pos(&mut base, &mute_a.image, mute_a.position);
-        DrawingUtils::composite_from_pos(&mut base, &mute_b.image, mute_b.position);
+        
+        // If DeviceType is Mix, do not draw second mute box
+        // DrawingUtils::composite_from_pos(&mut base, &mute_b.image, mute_b.position);
 
         // Return the result
         BeacnImage {

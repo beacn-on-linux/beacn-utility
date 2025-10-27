@@ -324,8 +324,7 @@ impl PipeweaverHandler {
                     match maybe_msg {
                         Some(msg) => {
                             match self.device_type {
-                                DeviceType::BeacnMix => {}
-                                DeviceType::BeacnMixCreate => {
+                                DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                                     match msg {
                                         Interactions::ButtonPress(button, state) => {
                                             if state == ButtonState::Release {
