@@ -34,8 +34,6 @@ use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
 
-const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
-
 pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
     let (manage_tx, manage_rx) = channel::unbounded();
