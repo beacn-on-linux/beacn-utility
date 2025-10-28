@@ -1,5 +1,5 @@
 use crate::device_manager::ControlMessage;
-use crate::device_manager::ControlMessage::SendImage;
+use crate::device_manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{
     ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };
@@ -184,7 +184,7 @@ impl PipeweaverHandler {
     fn disable_buttons(&self) {
         for button in ButtonLighting::iter() {
             let (tx, rx) = oneshot::channel();
-            let _ = self.sender.send(ControlMessage::ButtonColour(button, COLOUR_BLACK, tx));
+            let _ = self.sender.send(ButtonColour(button, COLOUR_BLACK, tx));
             let _ = rx.recv();
         }
     }
@@ -660,7 +660,7 @@ impl PipeweaverHandler {
 
     fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        let message = ControlMessage::ButtonColour(button, colour, tx);
+        let message = ButtonColour(button, colour, tx);
         self.sender.send(message)?;
         rx.recv()??;
         Ok(())

@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use enum_map::EnumMap;
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
-use image::{load_from_memory, ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage};
+use image::{ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage, load_from_memory};
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use pipeweaver_shared::Mix;
@@ -22,8 +22,10 @@ use xdg::BaseDirectories;
 
 // First thing we need, is to device the font used for rendering on the screen
 #[allow(unused)]
-pub(crate) static FONT: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
-pub(crate) static FONT_BOLD: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
+pub(crate) static FONT: &[u8] =
+    include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
+pub(crate) static FONT_BOLD: &[u8] =
+    include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
 
 pub(crate) static JPEG_QUALITY: u8 = 70;
 
@@ -138,7 +140,8 @@ pub(crate) static MUTE_BAR_POSITION: Position = (
 
 // Finally, the Mute Button Section
 pub(crate) static MUTE_AREA_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 85);
-pub(crate) static MUTE_AREA_DIMENSIONS_MIX: Dimension = (CONTENT_DIMENSIONS.0, MUTE_BUTTON_DIMENSIONS.1);
+pub(crate) static MUTE_AREA_DIMENSIONS_MIX: Dimension =
+    (CONTENT_DIMENSIONS.0, MUTE_BUTTON_DIMENSIONS.1);
 pub(crate) static MUTE_AREA_POSITION: Position =
     (CONTENT_POSITION.0, MUTE_BAR_POSITION.1 + BAR_DIMENSIONS.1);
 
@@ -169,13 +172,15 @@ pub(crate) static MUTE_B_BORDER: BorderThickness = BorderThickness(2, 0, 0, 0);
 pub(crate) static MUTE_COLOUR_OFF: Rgba<u8> = Rgba([80, 80, 80, 220]);
 pub(crate) static MUTE_COLOUR_ON: Rgba<u8> = Rgba([255, 0, 0, 100]);
 
-static MUTE_UNMUTED_ICON_BYTES: &[u8] = include_bytes!("../../../resources/ui/icons/volume-high-solid.png");
+static MUTE_UNMUTED_ICON_BYTES: &[u8] =
+    include_bytes!("../../../resources/ui/icons/volume-high-solid.png");
 pub(crate) static MUTE_UNMUTED_ICON: Lazy<RgbaImage> = Lazy::new(|| {
     load_from_memory(MUTE_UNMUTED_ICON_BYTES)
         .expect("Failed to Load Image")
         .to_rgba8()
 });
-static MUTE_MUTED_ICON_BYTES: &[u8] = include_bytes!("../../../resources/ui/icons/volume-xmark-solid.png");
+static MUTE_MUTED_ICON_BYTES: &[u8] =
+    include_bytes!("../../../resources/ui/icons/volume-xmark-solid.png");
 pub(crate) static MUTE_MUTED_ICON: Lazy<RgbaImage> = Lazy::new(|| {
     load_from_memory(MUTE_MUTED_ICON_BYTES)
         .expect("Failed to Load Image")
@@ -191,7 +196,12 @@ pub(crate) struct BorderRadius(u32, u32, u32, u32);
 
 /// Top, Right, Bottom, Left
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct BorderThickness(pub(crate) u32, pub(crate) u32, pub(crate) u32, pub(crate) u32);
+pub(crate) struct BorderThickness(
+    pub(crate) u32,
+    pub(crate) u32,
+    pub(crate) u32,
+    pub(crate) u32,
+);
 
 pub(crate) enum GradientDirection {
     TopToBottom,

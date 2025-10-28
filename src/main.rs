@@ -19,8 +19,8 @@ use simplelog::{
     ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
 use std::path::PathBuf;
-use std::{env, thread};
 use std::sync::OnceLock;
+use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
 use xdg::BaseDirectories;
 
@@ -38,9 +38,7 @@ const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png")
 
 static TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
 pub fn runtime() -> &'static Runtime {
-    TOKIO_RUNTIME.get_or_init(|| {
-        Builder::new_multi_thread().enable_all().build().unwrap()
-    })
+    TOKIO_RUNTIME.get_or_init(|| Builder::new_multi_thread().enable_all().build().unwrap())
 }
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
