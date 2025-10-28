@@ -22,8 +22,8 @@ use xdg::BaseDirectories;
 
 // First thing we need, is to device the font used for rendering on the screen
 #[allow(unused)]
-static FONT: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
-static FONT_BOLD: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
+pub(crate) static FONT: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
+pub(crate) static FONT_BOLD: &[u8] = include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
 
 pub(crate) static JPEG_QUALITY: u8 = 70;
 
@@ -376,10 +376,11 @@ impl DrawingUtils {
         height: u32,
         font: &[u8],
         font_size: f32,
+        colour: Rgba<u8>,
         align: TextAlign,
     ) -> RgbaImage {
         let font = Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
-        let (font_r, font_g, font_b) = (TEXT_COLOUR[0], TEXT_COLOUR[1], TEXT_COLOUR[2]);
+        let (font_r, font_g, font_b) = (colour[0], colour[1], colour[2]);
         let mut img = RgbaImage::new(width, height);
 
         // Font-wide vertical metrics
@@ -644,6 +645,7 @@ impl DialHandler {
                 height,
                 VOLUME_FONT,
                 VOLUME_FONT_SIZE,
+                TEXT_COLOUR,
                 TextAlign::Center,
             );
             map.insert(i, img);
