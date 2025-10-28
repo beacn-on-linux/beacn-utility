@@ -143,8 +143,10 @@ impl PipeweaverHandler {
 
     async fn load_status(&mut self, stream: &mut WebSocket) -> Result<()> {
         // Perform the Initial Status Fetch
+        let status_id = self.get_command_index();
+
         let status_request = serde_json::to_string(&WebsocketRequest {
-            id: self.get_command_index(),
+            id: status_id,
             data: GetStatus,
         })?;
 
@@ -169,7 +171,7 @@ impl PipeweaverHandler {
                     let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
 
                     // We can occasionally get patches before the Status response, so verify the ID...
-                    if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == 0u64 {
+                    if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
                         // This is our DaemonStatus response
                         let error = anyhow!("Failed to Read Data");
                         let data = object.get("data").ok_or(error)?.clone();
@@ -386,7 +388,6 @@ impl PipeweaverHandler {
             let error = anyhow!("No Such Render Object");
             let renderer = self.renderers.get(item).ok_or(error)?;
             let drawing = renderer.full_render(self.active_mix);
-            let (_, y) = drawing.position;
             let (width, _) = CHANNEL_DIMENSIONS;
             let x = width * index as u32;
             let y = POSITION_ROOT.1;
