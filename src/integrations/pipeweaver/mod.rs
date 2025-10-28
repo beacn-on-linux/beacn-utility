@@ -389,6 +389,7 @@ impl PipeweaverHandler {
             let (_, y) = drawing.position;
             let (width, _) = CHANNEL_DIMENSIONS;
             let x = width * index as u32;
+            let y = POSITION_ROOT.1;
             DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
         }
 
