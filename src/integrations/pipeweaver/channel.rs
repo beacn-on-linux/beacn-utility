@@ -190,7 +190,7 @@ impl ChannelRenderer {
 
         // Return the result
         BeacnImage {
-            position: POSITION_ROOT,
+            position: (0, 0),
             image: base,
         }
     }
