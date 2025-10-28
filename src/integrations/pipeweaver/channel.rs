@@ -224,7 +224,7 @@ impl ChannelRenderer {
         let channel_inner = match self.beacn_type {
             DeviceType::BeacnMix => CHANNEL_INNER_DIMENSIONS_MIX,
             DeviceType::BeacnMixCreate => CHANNEL_INNER_DIMENSIONS,
-            _ => panic!("Bad Device Type")
+            _ => panic!("Bad Device Type"),
         };
 
         BeacnImage {
@@ -286,7 +286,7 @@ impl ChannelRenderer {
         let gradient = match self.beacn_type {
             DeviceType::BeacnMixCreate => gradient_base,
             DeviceType::BeacnMix => crop(&mut gradient_base, 0, 0, m1, h1).to_image(),
-            _ => panic!("Bad Device Type")
+            _ => panic!("Bad Device Type"),
         };
 
         BeacnImage {
