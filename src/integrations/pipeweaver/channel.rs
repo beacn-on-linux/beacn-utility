@@ -254,6 +254,7 @@ impl ChannelRenderer {
             text_height,
             HEADER_FONT,
             HEADER_FONT_SIZE,
+            TEXT_COLOUR,
             TextAlign::Center,
         );
 
@@ -344,6 +345,7 @@ impl ChannelRenderer {
             text_height,
             MUTE_FONT,
             MUTE_FONT_SIZE,
+            TEXT_COLOUR,
             TextAlign::Left,
         );
 

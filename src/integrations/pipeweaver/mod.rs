@@ -4,10 +4,11 @@ use crate::integrations::pipeweaver::channel::{
     ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };
 use crate::integrations::pipeweaver::layout::{
-    DrawingUtils, BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, JPEG_QUALITY, POSITION_ROOT,
+    BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, JPEG_QUALITY,
+    POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
 use crate::runtime;
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
@@ -25,13 +26,16 @@ use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
+use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
-use tokio::{select, time};
 use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
+use tokio::{select, time};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use ulid::Ulid;
+
+const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
 
 mod channel;
 mod layout;
@@ -79,6 +83,9 @@ struct PipeweaverHandler {
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
 
+    has_connected: bool,
+    displaying_error: bool,
+
     command_index: u64,
     raw_status: Value,
     status: DaemonStatus,
@@ -100,6 +107,9 @@ impl PipeweaverHandler {
             sender,
             input_rx,
 
+            has_connected: false,
+            displaying_error: false,
+
             command_index: 0,
             raw_status: Value::Null,
             status: DaemonStatus::default(),
@@ -115,6 +125,11 @@ impl PipeweaverHandler {
         info!("Starting Pipeweaver Manager");
         let url = "ws://localhost:14565/api/websocket";
 
+        // Send the Pipeweaver Splash
+        self.draw_splash();
+        self.draw_status("Loading...");
+        self.disable_buttons();
+
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
         while let Err(e) = self.handle_connection(url).await {
@@ -124,15 +139,62 @@ impl PipeweaverHandler {
                 break;
             }
 
+            if !self.displaying_error {
+                if !self.has_connected {
+                    self.draw_status("Failed to connect to Pipeweaver");
+                    self.disable_buttons();
+                } else {
+                    self.draw_splash();
+                    self.draw_status("Connection to Pipeweaver lost");
+                    self.disable_buttons();
+                }
+            }
+            self.displaying_error = true;
+
             warn!("Pipeweaver Error: {}", e);
             sleep(Duration::from_secs(5)).await;
             continue;
         }
     }
 
+    fn draw_splash(&self) {
+        let (tx, rx) = oneshot::channel();
+        let _ = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
+        let _ = rx.recv();
+    }
+
+    fn draw_status(&self, text: &str) {
+        let text = DrawingUtils::draw_text(
+            text.into(),
+            800,
+            30,
+            FONT_BOLD,
+            28.,
+            TEXT_COLOUR,
+            TextAlign::Center,
+        );
+
+        if let Ok(img) = img_as_jpeg(text, Rgba([0, 0, 0, 255])) {
+            let (tx, rx) = oneshot::channel();
+            let _ = self.sender.send(SendImage(img, 0, 330, tx));
+            let _ = rx.recv();
+        }
+    }
+
+    fn disable_buttons(&self) {
+        for button in ButtonLighting::iter() {
+            let (tx, rx) = oneshot::channel();
+            let _ = self.sender.send(ControlMessage::ButtonColour(button, COLOUR_BLACK, tx));
+            let _ = rx.recv();
+        }
+    }
+
     async fn handle_connection(&mut self, url: &str) -> Result<()> {
         let (mut stream, _) = connect_async(url).await?;
         info!("Successfully connected to Pipeweaver");
+
+        self.has_connected = true;
+        self.displaying_error = false;
 
         self.load_status(&mut stream).await?;
         self.load_initial_state().await?;
