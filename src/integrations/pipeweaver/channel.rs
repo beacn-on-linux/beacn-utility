@@ -4,8 +4,9 @@
 use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, TopToBottom};
 use crate::integrations::pipeweaver::layout::*;
 use anyhow::{Result, anyhow};
+use beacn_lib::manager::DeviceType;
 use enum_map::{EnumMap, enum_map};
-use image::imageops::crop_imm;
+use image::imageops::{crop, crop_imm};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use pipeweaver_profile::{
     DeviceDescription, MuteStates, PhysicalSourceDevice, VirtualSourceDevice, Volumes,
@@ -60,6 +61,8 @@ pub(crate) enum ChannelChangedProperty {
 
 #[allow(unused)]
 pub(crate) struct ChannelRenderer {
+    beacn_type: DeviceType,
+
     pub(crate) title: String,
     pub(crate) colour: Rgba<u8>,
 
@@ -89,6 +92,7 @@ impl ChannelRenderer {
         let mutes = device.mute_states();
 
         Self {
+            beacn_type: DeviceType::BeacnMixCreate,
             title: desc.name.clone(),
             colour: Rgba([desc.colour.red, desc.colour.green, desc.colour.blue, 255]),
             volumes: vols.volume,
@@ -103,6 +107,10 @@ impl ChannelRenderer {
                 }
             },
         }
+    }
+
+    pub fn set_beacn_device(&mut self, device_type: DeviceType) {
+        self.beacn_type = device_type;
     }
 
     pub fn update_from_device(
@@ -165,7 +173,6 @@ impl ChannelRenderer {
         let mute_bg = self.draw_mute_background();
         let dial = self.draw_volume(active_mix);
         let mute_a = self.draw_mute_box(MuteTarget::TargetA);
-        let mute_b = self.draw_mute_box(MuteTarget::TargetB);
 
         // Composite all the elements together
         DrawingUtils::composite_from_pos(&mut base, &content.image, content.position);
@@ -175,7 +182,11 @@ impl ChannelRenderer {
         DrawingUtils::composite_from_pos(&mut base, &mute_bg.image, mute_bg.position);
         DrawingUtils::composite_from_pos(&mut base, &dial.image, dial.position);
         DrawingUtils::composite_from_pos(&mut base, &mute_a.image, mute_a.position);
-        DrawingUtils::composite_from_pos(&mut base, &mute_b.image, mute_b.position);
+
+        if self.beacn_type == DeviceType::BeacnMixCreate {
+            let mute_b = self.draw_mute_box(MuteTarget::TargetB);
+            DrawingUtils::composite_from_pos(&mut base, &mute_b.image, mute_b.position);
+        }
 
         // Return the result
         BeacnImage {
@@ -210,11 +221,17 @@ impl ChannelRenderer {
     }
 
     fn draw_content_box(&self) -> BeacnImage {
+        let channel_inner = match self.beacn_type {
+            DeviceType::BeacnMix => CHANNEL_INNER_DIMENSIONS_MIX,
+            DeviceType::BeacnMixCreate => CHANNEL_INNER_DIMENSIONS,
+            _ => panic!("Bad Device Type")
+        };
+
         BeacnImage {
             position: CHANNEL_INNER_POSITION,
             image: DrawingUtils::draw_box(
-                CHANNEL_INNER_DIMENSIONS.0,
-                CHANNEL_INNER_DIMENSIONS.1,
+                channel_inner.0,
+                channel_inner.1,
                 CHANNEL_INNER_BORDER,
                 CHANNEL_INNER_RADIUS,
                 CHANNEL_BORDER_COLOUR,
@@ -259,13 +276,21 @@ impl ChannelRenderer {
 
     fn draw_mute_background(&self) -> BeacnImage {
         let (w, h) = MUTE_AREA_DIMENSIONS;
+        let (m1, h1) = MUTE_AREA_DIMENSIONS_MIX;
 
         let mut colour = self.colour;
         colour[3] = 120;
 
+        let mut gradient_base = DrawingUtils::draw_gradient(w, h, colour, BottomToTop);
+        let gradient = match self.beacn_type {
+            DeviceType::BeacnMixCreate => gradient_base,
+            DeviceType::BeacnMix => crop(&mut gradient_base, 0, 0, m1, h1).to_image(),
+            _ => panic!("Bad Device Type")
+        };
+
         BeacnImage {
             position: MUTE_AREA_POSITION,
-            image: DrawingUtils::draw_gradient(w, h, colour, BottomToTop),
+            image: gradient,
         }
     }
 

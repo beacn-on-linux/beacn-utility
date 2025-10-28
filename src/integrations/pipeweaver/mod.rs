@@ -283,6 +283,11 @@ impl PipeweaverHandler {
                                                 (img.image, x, y)
                                             }
                                             ChannelChangedProperty::MuteState(target) => {
+                                                // Don't draw MixB Mute updates on the Beacn Mix
+                                                if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix {
+                                                    continue;
+                                                }
+
                                                 let img = render.draw_mute_box(target);
 
                                                 let (x, y) = img.position;
@@ -324,8 +329,7 @@ impl PipeweaverHandler {
                     match maybe_msg {
                         Some(msg) => {
                             match self.device_type {
-                                DeviceType::BeacnMix => {}
-                                DeviceType::BeacnMixCreate => {
+                                DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                                     match msg {
                                         Interactions::ButtonPress(button, state) => {
                                             if state == ButtonState::Release {
@@ -496,10 +500,11 @@ impl PipeweaverHandler {
         let sources = &self.status.audio.profile.devices.sources;
         let dev = self.get_device_ref(device, sources)?;
 
-        let renderer = match dev {
+        let mut renderer = match dev {
             DeviceRef::Physical(d) => ChannelRenderer::from(d.clone()),
             DeviceRef::Virtual(d) => ChannelRenderer::from(d.clone()),
         };
+        renderer.set_beacn_device(self.device_type);
         Ok(renderer)
     }
 
