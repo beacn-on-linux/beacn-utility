@@ -86,6 +86,10 @@ pub(crate) static CHANNEL_MARGIN: u32 = 10;
 // Define the Dimensions, Positions and style of the 'Inner' Box
 pub(crate) static CHANNEL_INNER_DIMENSIONS: Dimension =
     (CHANNEL_DIMENSIONS.0 - (CHANNEL_MARGIN * 2), 310);
+
+pub(crate) static CHANNEL_INNER_DIMENSIONS_MIX: Dimension =
+    (CHANNEL_DIMENSIONS.0 - (CHANNEL_MARGIN * 2), 262);
+
 pub(crate) static CHANNEL_INNER_POSITION: Position = (CHANNEL_MARGIN, CHANNEL_MARGIN);
 pub(crate) static CHANNEL_INNER_BORDER: BorderThickness = BorderThickness(3, 3, 3, 3);
 pub(crate) static CHANNEL_INNER_RADIUS: BorderRadius = BorderRadius(8, 8, 0, 0);
@@ -134,6 +138,7 @@ pub(crate) static MUTE_BAR_POSITION: Position = (
 
 // Finally, the Mute Button Section
 pub(crate) static MUTE_AREA_DIMENSIONS: Dimension = (CONTENT_DIMENSIONS.0, 85);
+pub(crate) static MUTE_AREA_DIMENSIONS_MIX: Dimension = (CONTENT_DIMENSIONS.0, MUTE_BUTTON_DIMENSIONS.1);
 pub(crate) static MUTE_AREA_POSITION: Position =
     (CONTENT_POSITION.0, MUTE_BAR_POSITION.1 + BAR_DIMENSIONS.1);
 
