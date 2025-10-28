@@ -54,8 +54,8 @@ impl BeacnControllerState {
 
         // Grab the settings from a possible saved config file
         state.load_from_file();
-        let _ = state.set_display_brightness(state.saved_settings.button_brightness, false);
-        let _ = state.set_button_brightness(state.saved_settings.display_brightness, false);
+        let _ = state.set_display_brightness(state.saved_settings.display_brightness, false);
+        let _ = state.set_button_brightness(state.saved_settings.button_brightness, false);
         let _ = state.set_display_dim(state.saved_settings.display_dim, false);
 
         state
