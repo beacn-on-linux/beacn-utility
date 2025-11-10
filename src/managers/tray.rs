@@ -1,4 +1,3 @@
-use crate::window_handle::{UserEvent, send_user_event};
 use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
 use anyhow::Result;
 use beacn_lib::crossbeam::channel::{Receiver, Sender};

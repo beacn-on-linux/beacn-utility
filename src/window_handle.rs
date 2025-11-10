@@ -25,7 +25,6 @@ use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
 use ini::Ini;
 use log::{debug, warn};
-use std::any::Any;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
@@ -51,7 +50,6 @@ pub trait App {
     fn update(&mut self, ctx: &Context);
     fn should_close(&mut self) -> bool;
     fn on_close(&mut self);
-    fn as_any(&mut self) -> &mut dyn Any;
 
     // I don't like this being here, but it's easiest this way
     fn handle_device_message(&mut self, msg: DeviceMessage);

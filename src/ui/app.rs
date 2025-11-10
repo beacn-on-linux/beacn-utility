@@ -13,7 +13,6 @@ use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
 use log::debug;
-use std::any::Any;
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -118,10 +117,6 @@ impl App for BeacnMicApp {
         for controller_pages in &mut self.control_pages {
             controller_pages.on_close();
         }
-    }
-
-    fn as_any(&mut self) -> &mut dyn Any {
-        self
     }
 
     fn handle_device_message(&mut self, message: DeviceMessage) {

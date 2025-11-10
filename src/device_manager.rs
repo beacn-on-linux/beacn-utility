@@ -11,8 +11,8 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::{ManagerMessages, ToMainMessages};
 use crate::device_manager::DeviceMessage::DeviceRemoved;
+use crate::{ManagerMessages, ToMainMessages};
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
 use crate::managers::login::spawn_login_handler;
@@ -38,7 +38,11 @@ use strum_macros::Display;
 
 const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
-pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, self_tx: Sender<ToMainMessages>, event_tx: Sender<DeviceMessage>) {
+pub fn spawn_device_manager(
+    self_rx: Receiver<ManagerMessages>,
+    self_tx: Sender<ToMainMessages>,
+    event_tx: Sender<DeviceMessage>,
+) {
     let (plug_tx, plug_rx) = channel::unbounded();
     let (manage_tx, manage_rx) = channel::unbounded();
     let (login_tx, login_rx) = channel::bounded(5);

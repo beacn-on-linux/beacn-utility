@@ -195,7 +195,7 @@ fn main() -> Result<()> {
     }
 
     debug!("Waiting for Threads to Terminate..");
-    let _ = send_user_event(&context, UserEvent::Quit);
+    send_user_event(&context, UserEvent::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
