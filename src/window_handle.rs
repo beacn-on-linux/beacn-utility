@@ -18,7 +18,7 @@ use egui_winit::winit::{
     window::{Window, WindowId},
 };
 use glutin::display::DisplayApiPreference;
-use glutin::prelude::{GlSurface, PossiblyCurrentGlContext};
+use glutin::prelude::{GlSurface};
 use ini::Ini;
 use log::{debug, warn};
 use std::any::Any;
