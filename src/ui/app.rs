@@ -60,13 +60,11 @@ impl BeacnMicApp {
     }
 }
 
-impl BeacnMicApp {
-    pub fn with_context(&self, ctx: &Context) {
+impl App for BeacnMicApp {
+    fn with_context(&mut self, ctx: &Context) {
         egui_extras::install_image_loaders(ctx);
     }
-}
 
-impl App for BeacnMicApp {
     fn update(&mut self, ctx: &Context) {
         // Grab any device information that's been sent since the last update
         let messages: Vec<DeviceMessage> = self.device_recv.try_iter().collect();
@@ -125,10 +123,8 @@ impl App for BeacnMicApp {
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }
-}
 
-impl BeacnMicApp {
-    pub fn handle_device_message(&mut self, message: DeviceMessage) {
+    fn handle_device_message(&mut self, message: DeviceMessage) {
         match message {
             DeviceMessage::DeviceArrived(device) => match device {
                 DeviceArriveMessage::Audio(definition, sender) => {
@@ -190,7 +186,9 @@ impl BeacnMicApp {
             }
         }
     }
+}
 
+impl BeacnMicApp {
     fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
         if self.device_list.is_empty() || self.active_device.is_none() {
             debug!("NOT DRAWING");

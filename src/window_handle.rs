@@ -1,8 +1,12 @@
-use crate::{APP_NAME, AUTO_START_KEY, get_autostart_file, run_async};
+use crate::device_manager::DeviceMessage;
+use crate::{
+    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context, run_async,
+};
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
-use egui::Id;
+use beacn_lib::crossbeam::channel::Sender;
+use egui::{Context, Id};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
@@ -32,9 +36,10 @@ const EVENT_PROXY: &str = "event_proxy";
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     RequestRedraw,
-    CloseWindow,
     FocusWindow,
+    DeviceMessage(DeviceMessage),
     SetAutoStart(bool),
+    Quit,
 }
 
 // This is a reference to the Event Proxy, which we can store inside the context
@@ -42,21 +47,29 @@ pub enum UserEvent {
 struct EventProxy(Arc<EventLoopProxy<UserEvent>>);
 
 pub trait App {
-    fn update(&mut self, ctx: &egui::Context);
+    fn with_context(&mut self, ctx: &Context);
+    fn update(&mut self, ctx: &Context);
     fn should_close(&mut self) -> bool;
     fn on_close(&mut self);
     fn as_any(&mut self) -> &mut dyn Any;
+
+    // I don't like this being here, but it's easiest this way
+    fn handle_device_message(&mut self, msg: DeviceMessage);
 }
 
 pub struct WindowRunner {
     app: Box<dyn App>,
+    initial_hide: bool,
+
     window: Option<Arc<Window>>,
     renderer: Option<GlowRenderer>,
     app_start_time: Instant,
-    context: egui::Context,
+    context: Context,
     event_loop_proxy: Option<EventLoopProxy<UserEvent>>,
 
     window_attributes: WindowAttributes,
+
+    sender: Sender<ToMainMessages>,
 }
 
 struct GlowRenderer {
@@ -68,45 +81,43 @@ struct GlowRenderer {
 }
 
 impl WindowRunner {
-    pub fn new(app: Box<dyn App>, context: egui::Context, attributes: WindowAttributes) -> Self {
+    pub fn new(
+        app: Box<dyn App>,
+        sender: Sender<ToMainMessages>,
+        attributes: WindowAttributes,
+    ) -> Self {
         Self {
             app,
+
+            initial_hide: true,
+
             window: None,
             renderer: None,
             app_start_time: Instant::now(),
 
-            context,
+            context: Default::default(),
             event_loop_proxy: None,
 
             window_attributes: attributes,
+
+            sender,
         }
     }
 
-    pub fn run(
-        mut self,
-        event_loop: &mut EventLoop<UserEvent>,
-    ) -> Result<(Box<dyn App>, WindowAttributes)> {
+    pub fn run(mut self, event_loop: &mut EventLoop<UserEvent>, initial_hide: bool) -> Result<()> {
+        self.initial_hide = initial_hide;
         event_loop.set_control_flow(ControlFlow::Wait);
 
         // Create the event loop proxy
         self.event_loop_proxy = Some(event_loop.create_proxy());
 
-        if let Some(proxy) = &self.event_loop_proxy {
-            self.context.data_mut(|data| {
-                data.insert_persisted(Id::new(EVENT_PROXY), EventProxy(Arc::new(proxy.clone())));
-            });
-        }
-
-        // Set a wakeup for a redraw
-        let proxy = self.event_loop_proxy.as_ref().unwrap().clone();
-        self.context.set_request_repaint_callback(move |_info| {
-            let _ = proxy.send_event(UserEvent::RequestRedraw);
-        });
+        // Create an initial context, this will be replaced when a window is created
+        self.create_new_context();
 
         // Use run_app_on_demand instead of run() so it can return when window closes
         event_loop.run_app_on_demand(&mut self)?;
 
-        Ok((self.app, self.window_attributes))
+        Ok(())
     }
 
     fn render_frame(&mut self) {
@@ -131,6 +142,61 @@ impl WindowRunner {
                 .unwrap();
         }
     }
+
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_none() {
+            debug!("Creating Window");
+
+            // Create a new context for the window
+            self.create_new_context();
+
+            // Now try creating the Window
+            let attributes = self.window_attributes.clone();
+            match event_loop.create_window(attributes) {
+                Err(e) => {
+                    panic!("Failed to Create Event Loop Window: {}", e);
+                }
+                Ok(window) => {
+                    let window = Arc::new(window);
+                    let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
+
+                    self.window = Some(window);
+                    self.renderer = Some(renderer);
+                }
+            }
+        }
+    }
+
+    fn create_new_context(&mut self) {
+        // Prepare a new context for the window
+        self.context = Context::default();
+        prepare_context(&mut self.context);
+        self.app.with_context(&self.context);
+
+        // Attach the proxy in the new context
+        if let Some(proxy) = &self.event_loop_proxy {
+            self.context.data_mut(|data| {
+                data.insert_persisted(Id::new(EVENT_PROXY), EventProxy(Arc::new(proxy.clone())));
+            });
+        }
+
+        // Set up the Redraw Handler
+        let proxy = self.event_loop_proxy.as_ref().unwrap().clone();
+        self.context.set_request_repaint_callback(move |_info| {
+            let _ = proxy.send_event(UserEvent::RequestRedraw);
+        });
+
+        // Update the main thread with the new context
+        let _ = self
+            .sender
+            .send(ToMainMessages::UpdateContext(self.context.clone()));
+    }
+
+    fn destroy_window(&mut self) {
+        self.window = None;
+        self.renderer = None;
+        self.app.on_close();
+    }
 }
 
 // This is a helper function which lets the app send a UserEvent into the context
@@ -144,32 +210,13 @@ pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
 
 impl ApplicationHandler<UserEvent> for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_none() {
-            debug!("Handling Resumed Event, creating window");
-
-            let attributes = self.window_attributes.clone();
-
-            match event_loop.create_window(attributes) {
-                Err(e) => {
-                    if event_loop.exiting() {
-                        panic!("Attempting to create window While Exiting: {}", e);
-                    }
-                    panic!("Failed to create event loop window: {}", e);
-                }
-                Ok(window) => {
-                    let window = Arc::new(window);
-                    let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
-
-                    self.window = Some(window);
-                    self.renderer = Some(renderer);
-                }
-            }
+        if !self.initial_hide {
+            self.create_window(event_loop);
+        } else {
+            self.initial_hide = false;
         }
     }
 
-    // ASHPD expects the RawWindowHandle and RawWindowDisplay to present a permission
-    // check to the user when adding an autostart entry.
-    #[allow(deprecated)]
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {
@@ -177,14 +224,10 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     window.request_redraw();
                 }
             }
-            UserEvent::CloseWindow => {
-                debug!("Window Closed, exiting event loop");
-                self.window = None;
-                self.renderer = None;
-
-                event_loop.exit();
-            }
             UserEvent::FocusWindow => {
+                // Create a window if it doesn't exist
+                self.create_window(event_loop);
+
                 if let Some(window) = &self.window {
                     if let Some(true) = window.is_minimized() {
                         window.set_minimized(false);
@@ -194,12 +237,19 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     window.request_user_attention(Some(UserAttentionType::Informational));
                 }
             }
+            UserEvent::DeviceMessage(msg) => {
+                self.app.handle_device_message(msg);
+            }
             UserEvent::SetAutoStart(create) => {
                 let key = Id::new(AUTO_START_KEY);
                 if let Some(window) = &self.window {
                     if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
                         println!("Running inside Flatpak, using Background Portal");
+
+                        #[allow(deprecated)]
                         let window_handle = window.raw_window_handle().unwrap();
+
+                        #[allow(deprecated)]
                         let display_handle = window.raw_display_handle().ok();
 
                         let reason = "Manage Beacn Devices on Startup";
@@ -285,15 +335,15 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     }
                 }
             }
+            UserEvent::Quit => {
+                debug!("Quit Event Received, closing window");
+                self.destroy_window();
+                event_loop.exit();
+            }
         }
     }
 
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: WindowId,
-        event: WindowEvent,
-    ) {
+    fn window_event(&mut self, _: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             let response = renderer.winit_state.on_window_event(window, &event);
 
@@ -308,23 +358,14 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
                 WindowEvent::CloseRequested => {
                     if self.app.should_close() {
-                        debug!("Window Closed, exiting event loop");
-
-                        // Clear variables
-                        self.window = None;
-                        self.renderer = None;
-
-                        // Exit the event loop when window closes so run() can return
-                        event_loop.exit();
+                        debug!("Window Closed, cleaning handlers");
+                        self.destroy_window();
                     }
                 }
                 WindowEvent::Destroyed => {
                     // Window has been destroyed, break out of the loop
-                    debug!("Window Destroyed, exiting event loop");
-                    self.window = None;
-                    self.renderer = None;
-
-                    event_loop.exit();
+                    debug!("Window Destroyed, cleaning handlers");
+                    self.destroy_window();
                 }
                 WindowEvent::Resized(physical_size) => {
                     self.window_attributes.inner_size = Some(physical_size.into());

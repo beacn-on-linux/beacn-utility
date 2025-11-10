@@ -1,14 +1,14 @@
 use crate::device_manager::spawn_device_manager;
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui::app::BeacnMicApp;
-use crate::window_handle::{App, UserEvent, WindowRunner};
+use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::Result;
 use anyhow::bail;
 use beacn_lib::crossbeam::{channel, select};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
-use egui_winit::winit::platform::x11::WindowAttributesExtX11;
+use egui_winit::winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11};
 use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
@@ -90,7 +90,6 @@ fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
     let hide_initial = args.contains(&"--startup".to_string());
-    let mut first_run = true;
 
     // Firstly, create a message bus which allows threads to message back to here
     let (main_tx, main_rx) = channel::unbounded();
@@ -116,106 +115,79 @@ fn main() -> Result<()> {
 
     // This one sends and receives messages when devices are attached and removed
     let (device_tx, device_rx) = channel::unbounded();
-    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, device_tx));
-
-    // Create the event loop, an egui context, and the initial app state
-    let mut event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
-    let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx.clone()));
+    let dev_main_tx = main_tx.clone();
+    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
     let resource_class = format!("{APP_TLD}.{APP_NAME}");
 
-    let mut window_attributes = Window::default_attributes()
+    let window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(ICON)))
         .with_inner_size(LogicalSize::new(1024, 500))
         .with_name(resource_class, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
-    'mainloop: loop {
-        if !hide_initial || !first_run {
-            // Spawn up a new egui context
-            let mut context = Context::default();
-            prepare_context(&mut context);
+    // Ok, spawn up the thread responsible for the UI
+    let device_rx_inner = device_rx.clone();
+    let window_main_tx = main_tx.clone();
+    let window = thread::spawn(move || {
+        let app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
 
-            // app is a Box<dyn App>, we need to downcast it back to a Box<BeacnMicApp>
-            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
-                // Attach the new context to the app
-                app.with_context(&context);
-            }
+        // Create the event loop, an egui context, and the initial app state
+        let mut event_loop = EventLoop::<UserEvent>::with_user_event()
+            // This is a Linux tool, so we're safe to run the UI in a separate thread
+            .with_any_thread(true)
+            .build()
+            .expect("Failed to create event loop");
+        let runner = WindowRunner::new(app, window_main_tx, window_attributes.clone());
+        runner.run(&mut event_loop, hide_initial).expect("UI Crash");
+    });
 
-            // Send the new context off to our threads, this needs to be done because this thread
-            // will be locked into the Window event loop, so if an update or behaviour change needs
-            // to be triggered, the threads will have to call it themselves.
-            let _ = manage_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-            let _ = ipc_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-            let _ = tray_tx.send(ManagerMessages::SetContext(Some(context.clone())));
-
-            // Create a window runner
-            let runner = WindowRunner::new(app, context, window_attributes.clone());
-
-            // Run the event loop, this will block until the Window is closed
-            match runner.run(&mut event_loop) {
-                // The window runner will return the app (and window attributes) to us, so we can
-                // store them, and use them the next time the window needs to be open.
-                Ok((a, w)) => {
-                    app = a;
-                    window_attributes = w
-                }
-                Err(e) => bail!("Error: {}", e),
-            }
-
-            // app is a Box<dyn App>, we need to downcast it back to a Box<BeacnMicApp>
-            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
-                // Trigger the 'On Close' event to allow some cleanup
-                app.on_close();
-            }
-        }
-        first_run = false;
-
-        // Clear the Context from our threads
-        let _ = manage_tx.send(ManagerMessages::SetContext(None));
-        let _ = ipc_tx.send(ManagerMessages::SetContext(None));
-        let _ = tray_tx.send(ManagerMessages::SetContext(None));
-
-        // Wait for a message to do stuff
-        debug!("Window Closed, awaiting new Messages");
-        loop {
-            select! {
-                recv(main_rx) -> msg => {
-                    match msg {
-                        Ok(msg) => {
-                            match msg {
-                                ToMainMessages::SpawnWindow => {
-                                    // Window Re-Open requested
-                                    continue 'mainloop;
-                                }
-                                ToMainMessages::Quit => {
-                                    // Break out and Close
-                                    break 'mainloop;
-                                }
+    // Wait for a message to do stuff
+    debug!("Running Message Handler...");
+    let mut context = Context::default();
+    loop {
+        select! {
+            recv(main_rx) -> msg => {
+                match msg {
+                    Ok(msg) => {
+                        match msg {
+                            ToMainMessages::UpdateContext(new_ctx) => {
+                                debug!("Context Updated");
+                                // Context Update
+                                context = new_ctx;
                             }
-                        }
-                        Err(e) => {
-                            error!("Main Loop Broken, bailing: {e}");
-                            break 'mainloop;
+                            ToMainMessages::SpawnWindow => {
+                                // Window Re-Open requested
+                                send_user_event(&context, UserEvent::FocusWindow);
+                            }
+                            ToMainMessages::RequestRedraw => {
+                                // Repaint requested
+                                send_user_event(&context, UserEvent::RequestRedraw);
+                            }
+                            ToMainMessages::Quit => {
+                                // Break out and Close
+                                break;
+                            }
                         }
                     }
+                    Err(e) => {
+                        error!("Main Loop Broken, bailing: {e}");
+                        break;
+                    }
                 }
-                recv(device_rx) -> msg => {
-                    match msg {
-                        Ok(msg) => {
-                            // A device message has come in, while we don't have an active window
-                            // we can still pass this into the App to update its state
-                            if let Some(app) = app.as_mut().as_any().downcast_mut::<BeacnMicApp>() {
-                                app.handle_device_message(msg);
-                            }
-                        }
-                        Err(e) => {
-                            error!("Device Handler Broken, bailing: {e}");
-                            break 'mainloop;
-                        }
+            }
+            recv(device_rx) -> msg => {
+                match msg {
+                    Ok(msg) => {
+                        // Pump this to the UI
+                        send_user_event(&context, UserEvent::DeviceMessage(msg))
+                    }
+                    Err(e) => {
+                        error!("Device Handler Broken, bailing: {e}");
+                        break;
                     }
                 }
             }
@@ -223,10 +195,12 @@ fn main() -> Result<()> {
     }
 
     debug!("Waiting for Threads to Terminate..");
+    let _ = send_user_event(&context, UserEvent::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
 
+    let _ = window.join();
     let _ = tray.join();
     let _ = device_manager.join();
     let _ = ipc.join();
@@ -288,11 +262,12 @@ pub fn get_autostart_file() -> Result<PathBuf> {
 // tray handler, device manager, socket listener) to allow them to keep track and
 // trigger events on the UI
 pub enum ManagerMessages {
-    SetContext(Option<Context>),
     Quit,
 }
 
 pub enum ToMainMessages {
     SpawnWindow,
+    RequestRedraw,
+    UpdateContext(Context),
     Quit,
 }

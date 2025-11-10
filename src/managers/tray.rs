@@ -41,8 +41,6 @@ pub fn handle_tray(
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
     let handle = icon.spawn_without_dbus_name()?;
 
-    let mut egui_context = None;
-
     loop {
         select! {
             recv(icon_rx) -> msg => {
@@ -50,20 +48,12 @@ pub fn handle_tray(
                     Ok(msg) => {
                         match msg {
                             TrayMessages::Activate => {
-                                if let Some(context) = &egui_context {
-                                    send_user_event(context, UserEvent::FocusWindow);
-                                } else {
-                                    // Tell the Main Thread to spawn a new window
-                                    let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
-                                }
+                                // Tell the Main Thread to spawn a new window
+                                let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
                                 debug!("Activate Triggered");
                             },
                             TrayMessages::Quit => {
                                 // If we have an active window, we need to close it first.
-                                if let Some(context) = &egui_context {
-                                    send_user_event(context, UserEvent::CloseWindow);
-                                }
-
                                 // Tell the parent to immediately quit
                                 let _ = tray_main_tx.send(ToMainMessages::Quit);
                             }
@@ -79,9 +69,6 @@ pub fn handle_tray(
                 match msg {
                     Ok(msg) => {
                         match msg {
-                            ManagerMessages::SetContext(context) => {
-                                egui_context = context;
-                            }
                             ManagerMessages::Quit => {
                                 break;
                             }

@@ -48,7 +48,6 @@ pub fn handle_ipc(
     }
 
     let poll_duration = Duration::from_millis(50);
-    let mut context = None;
 
     debug!("IPC listener started at {socket_path:?}");
     loop {
@@ -57,7 +56,6 @@ pub fn handle_ipc(
                 match msg {
                     Ok(msg) => {
                         match msg {
-                            ManagerMessages::SetContext(ctx) => context = ctx,
                             ManagerMessages::Quit => break,
                         }
                     }
@@ -78,11 +76,7 @@ pub fn handle_ipc(
                         } else {
                             match msg.as_str() {
                                 "TRIGGER" => {
-                                    if let Some(context) = &context {
-                                        send_user_event(context, UserEvent::FocusWindow);
-                                    } else {
-                                        let _ = main_tx.send(ToMainMessages::SpawnWindow);
-                                    }
+                                    let _ = main_tx.send(ToMainMessages::SpawnWindow);
                                 },
                                 _ => {
                                     debug!("Unknown Message, aborting: {msg}");

@@ -11,7 +11,7 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::ManagerMessages;
+use crate::{ManagerMessages, ToMainMessages};
 use crate::device_manager::DeviceMessage::DeviceRemoved;
 //use crate::integrations::pipeweaver::perform_test_render;
 use crate::device_manager::ControlMessage::SendImage;
@@ -38,7 +38,7 @@ use strum_macros::Display;
 
 const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
-pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender<DeviceMessage>) {
+pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, self_tx: Sender<ToMainMessages>, event_tx: Sender<DeviceMessage>) {
     let (plug_tx, plug_rx) = channel::unbounded();
     let (manage_tx, manage_rx) = channel::unbounded();
     let (login_tx, login_rx) = channel::bounded(5);
@@ -46,7 +46,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
 
     // We need a hashmap that'll map a receiver to an object
     let mut receiver_map: Vec<DeviceMap> = vec![];
-    let mut context = None;
 
     let keepalive = tick(Duration::from_secs(10));
 
@@ -89,7 +88,6 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
             i if i == self_index => {
                 if let Ok(msg) = operation.recv(&self_rx) {
                     match msg {
-                        ManagerMessages::SetContext(ctx) => context = ctx,
                         ManagerMessages::Quit => break,
                     }
                 }
@@ -221,9 +219,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                                 let _ = event_tx.send(message);
                             }
                         }
-                        if let Some(context) = &context {
-                            context.request_repaint();
-                        }
+                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
                     HotPlugMessage::DeviceRemoved(location) => {
                         let _ = event_tx.send(DeviceRemoved(location));
@@ -232,9 +228,7 @@ pub fn spawn_device_manager(self_rx: Receiver<ManagerMessages>, event_tx: Sender
                             DeviceMap::Control(_, d, _) => d.location != location,
                         });
 
-                        if let Some(context) = &context {
-                            context.request_repaint();
-                        }
+                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
                     HotPlugMessage::ThreadStopped => break,
                 },
@@ -358,11 +352,13 @@ enum DeviceMap {
     ),
 }
 
+#[derive(Debug, Clone)]
 pub enum DeviceMessage {
     DeviceArrived(DeviceArriveMessage),
     DeviceRemoved(DeviceLocation),
 }
 
+#[derive(Debug, Clone)]
 pub enum DeviceArriveMessage {
     Audio(DeviceDefinition, Sender<AudioMessage>),
     Control(DeviceDefinition, Sender<ControlMessage>),
