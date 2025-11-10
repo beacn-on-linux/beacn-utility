@@ -7,7 +7,9 @@ use anyhow::bail;
 use beacn_lib::crossbeam::{channel, select};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
+use egui_winit::winit::event_loop::EventLoop;
 use egui_winit::winit::platform::x11::WindowAttributesExtX11;
+use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
@@ -18,7 +20,6 @@ use simplelog::{
     ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
 use std::path::PathBuf;
-use std::time::Duration;
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
 use xdg::BaseDirectories;
@@ -121,10 +122,6 @@ fn main() -> Result<()> {
     let mut event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
     let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx.clone()));
 
-    // Used to pump the event loop prior to opening a window
-    let pump_timeout = Some(Duration::from_millis(50));
-    let mut pump_dummy = DummyHandler {};
-
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
     let resource_class = format!("{APP_TLD}.{APP_NAME}");
@@ -138,23 +135,6 @@ fn main() -> Result<()> {
 
     'mainloop: loop {
         if !hide_initial || !first_run {
-            if !first_run {
-                debug!("Pumping event loop to clear stale messages");
-                let mut count = 0;
-                loop {
-                    match event_loop.pump_app_events(pump_timeout, &mut pump_dummy) {
-                        PumpStatus::Continue => {
-                            debug!("Pumping Event {}", count + 1);
-                            count += 1
-                        },
-                        PumpStatus::Exit(_) => {
-                            debug!("Pumped {} times to clear state", count);
-                            break;
-                        },
-                    }
-                }
-            }
-
             // Spawn up a new egui context
             let mut context = Context::default();
             prepare_context(&mut context);
@@ -315,33 +295,4 @@ pub enum ManagerMessages {
 pub enum ToMainMessages {
     SpawnWindow,
     Quit,
-}
-
-/*
-  This is primarily a guess, but the Utility will crash during a 'resume' call if there's evidence
-  that the global surface has changed more than once while the Window has been closed:
-
-  09:39:05 [DEBUG] (1) sctk: Bound new global [78] wl_output v4
-  09:39:05 [DEBUG] (1) sctk: Bound new global [80] wl_output v4
-  wl_registry#2: error 0: invalid global wl_output (78)
-
-  My assumption at the moment is that when the surface changes, a resume() call gets pushed into
-  the (at that point) inactive EventLoop, and when the window is re-opened, everything in the event
-  loop then gets processed, including potentially stale resume() calls.
-
-  So this 'Application' exists purely to clean the queue and swallow any events with a noop, and
-  gets called just prior to opening the Window again.
-*/
-use egui_winit::winit::application::ApplicationHandler;
-use egui_winit::winit::event::WindowEvent;
-use egui_winit::winit::event_loop::{ActiveEventLoop, EventLoop};
-use egui_winit::winit::platform::pump_events::{EventLoopExtPumpEvents, PumpStatus};
-use egui_winit::winit::window::{Icon, Window, WindowId};
-
-struct DummyHandler {}
-
-impl ApplicationHandler<UserEvent> for DummyHandler {
-    fn resumed(&mut self, _: &ActiveEventLoop) {}
-    fn user_event(&mut self, _: &ActiveEventLoop, _: UserEvent) {}
-    fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
 }

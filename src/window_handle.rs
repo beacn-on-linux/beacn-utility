@@ -18,7 +18,7 @@ use egui_winit::winit::{
     window::{Window, WindowId},
 };
 use glutin::display::DisplayApiPreference;
-use glutin::prelude::{GlSurface};
+use glutin::prelude::GlSurface;
 use ini::Ini;
 use log::{debug, warn};
 use std::any::Any;
@@ -179,8 +179,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
             }
             UserEvent::CloseWindow => {
                 debug!("Window Closed, exiting event loop");
-                self.renderer = None;
                 self.window = None;
+                self.renderer = None;
 
                 event_loop.exit();
             }
@@ -311,8 +311,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         debug!("Window Closed, exiting event loop");
 
                         // Clear variables
-                        self.renderer = None;
                         self.window = None;
+                        self.renderer = None;
 
                         // Exit the event loop when window closes so run() can return
                         event_loop.exit();
@@ -321,8 +321,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 WindowEvent::Destroyed => {
                     // Window has been destroyed, break out of the loop
                     debug!("Window Destroyed, exiting event loop");
-                    self.renderer = None;
                     self.window = None;
+                    self.renderer = None;
 
                     event_loop.exit();
                 }
@@ -495,7 +495,6 @@ impl GlowRenderer {
 
 impl Drop for GlowRenderer {
     fn drop(&mut self) {
-        debug!("Destroying Painter");
         self.painter.destroy();
     }
 }
