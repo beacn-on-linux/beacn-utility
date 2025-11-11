@@ -11,13 +11,7 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::ManagerMessages;
-use crate::{runtime, ManagerMessages, ToMainMessages};
-use crate::device_manager::DeviceMessage::DeviceRemoved;
-//use crate::integrations::pipeweaver::perform_test_render;
-use crate::device_manager::ControlMessage::SendImage;
-use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
-use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
+use crate::{ManagerMessages, ToMainMessages};
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
 use anyhow::anyhow;
@@ -40,7 +34,7 @@ use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
 
-const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
+//const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
 pub fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,
