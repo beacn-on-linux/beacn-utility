@@ -2,8 +2,12 @@ use crate::ui::SVG;
 use crate::ui::numbers::NumericType;
 use egui::emath::Numeric;
 use egui::{
-    Align, Color32, DragValue, ImageButton, Layout, Response, RichText, Slider, Ui, Visuals, vec2,
+    Align, Color32, DragValue, Layout, Response, RichText, Slider, Ui, Visuals, vec2,
 };
+
+#[allow(deprecated)]
+use egui::ImageButton;
+
 use std::fmt::Debug;
 use std::ops::RangeInclusive;
 
@@ -21,6 +25,8 @@ pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
         ui.style_mut().spacing.button_padding = vec2(10.0, 10.0);
         ui.add_sized(
             [40.0, 40.0],
+
+            #[allow(deprecated)]
             ImageButton::new(image)
                 .corner_radius(5.0)
                 .tint(tint_colour)

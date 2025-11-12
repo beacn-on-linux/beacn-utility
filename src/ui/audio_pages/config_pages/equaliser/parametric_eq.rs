@@ -10,9 +10,13 @@ use beacn_lib::audio::messages::equaliser::{
     EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
 };
 use egui::{
-    Align, Button, Color32, CornerRadius, FontId, ImageButton, Layout, Mesh, Pos2, Rect, Response,
-    Sense, Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
+    Align, Button, Color32, CornerRadius, FontId, Layout, Mesh, Pos2, Rect, Response, Sense, Shape,
+    Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
+
+#[allow(deprecated)]
+use egui::ImageButton;
+
 use enum_map::EnumMap;
 use log::{debug, warn};
 use std::sync::{Arc, LazyLock};
@@ -260,16 +264,16 @@ impl ParametricEq {
                         bands = state.equaliser.bands[state.equaliser.mode];
 
                         // Ok, first we need to check whether this band is enabled
-                        if let Some(node) = self.active_band {
-                            if bands[node].enabled == false {
-                                self.active_band = None;
+                        if let Some(node) = self.active_band
+                            && !bands[node].enabled
+                        {
+                            self.active_band = None;
 
-                                // Try and find an active band
-                                for band in EQBand::iter() {
-                                    if bands[band].enabled {
-                                        self.active_band = Some(band);
-                                        break;
-                                    }
+                            // Try and find an active band
+                            for band in EQBand::iter() {
+                                if bands[band].enabled {
+                                    self.active_band = Some(band);
+                                    break;
                                 }
                             }
                         }
@@ -517,7 +521,7 @@ impl ParametricEq {
                 }
             }
 
-            if source.len() == 0 {
+            if source.is_empty() {
                 // EQ Doesn't have active bands, just draw a straight line at 0dB
                 let start = pos2(plot_rect.min.x, Self::db_to_y(0.0, plot_rect));
                 let end = pos2(plot_rect.max.x, Self::db_to_y(0.0, plot_rect));
@@ -1044,6 +1048,7 @@ pub fn eq_mode(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Res
 
     ui.scope(|ui| {
         ui.add(
+            #[allow(deprecated)]
             ImageButton::new(image)
                 .corner_radius(corner_radius)
                 .tint(tint_colour)

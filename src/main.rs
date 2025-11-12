@@ -15,9 +15,7 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
-use simplelog::{
-    ColorChoice, CombinedLogger, Config, SharedLogger, TermLogger, TerminalMode, WriteLogger,
-};
+use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::{env, thread};
@@ -48,10 +46,17 @@ fn main() -> Result<()> {
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
 
+    let mut config = ConfigBuilder::new();
+    // The tracing package, when used, will output to INFO from zbus every second..
+    config.add_filter_ignore_str("tracing");
+    config.add_filter_ignore_str("winit::event_loop");
+    config.add_filter_ignore_str("winit::window");
+    config.add_filter_ignore_str("zbus");
+
     // Setup Console Logging
     log_targets.push(TermLogger::new(
         LevelFilter::Debug,
-        Config::default(),
+        config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     ));
@@ -73,10 +78,11 @@ fn main() -> Result<()> {
         );
         log_targets.push(WriteLogger::new(
             LevelFilter::Debug,
-            Config::default(),
+            config.build(),
             file_rotate,
         ));
     }
+
 
     CombinedLogger::init(log_targets)?;
     info!("Logger initialized");
