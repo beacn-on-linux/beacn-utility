@@ -112,6 +112,45 @@ impl ParametricEq {
         self.active_band_drag = None;
     }
 
+    fn load_default_state(&self, state: &mut BeacnAudioState) {
+        // This can be used later as a 'Default' button
+        let mode = state.equaliser.mode;
+        if mode == EQMode::Simple {
+            warn!("Should not be called in Simple Mode!");
+        }
+
+        let eq_freq_1 = EQFrequency(36.0);
+        let eq_freq_2 = EQFrequency(500.0);
+        let eq_freq_3 = EQFrequency(2000.0);
+
+        let gain = EQGain(0.0);
+        let q = EQQ(0.7);
+
+        // This is basically the default setup for the 'Simple' Mode
+        let messages = vec![
+            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
+            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
+            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
+            Message::Equaliser(Equaliser::Type(mode, EQBand::Band1, HighPassFilter)),
+            Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, BellBand)),
+            Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, HighShelf)),
+            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
+            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
+            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
+            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
+            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
+            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
+            Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
+            Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
+            Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
+        ];
+
+        for message in messages {
+            let _ = state.handle_message(message);
+            state.set_local_value(message);
+        }
+    }
+
     /// Shows the parametric equalizer in the UI
     pub fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) -> Response {
         // Are we rendering this for the current serial?
@@ -131,43 +170,6 @@ impl ParametricEq {
             self.serial = Some(state.device_definition.device_info.serial.clone());
         }
         let mode = state.equaliser.mode;
-
-
-        // This can be used later as a 'Default' button
-        // warn!("All bands are disabled or not set, creating a default.");
-        // let mode = state.equaliser.mode;
-        //
-        // let eq_freq_1 = EQFrequency(36.0);
-        // let eq_freq_2 = EQFrequency(500.0);
-        // let eq_freq_3 = EQFrequency(2000.0);
-        //
-        // let gain = EQGain(0.0);
-        // let q = EQQ(0.7);
-        //
-        // // This is basically the default setup for the 'Simple' Mode
-        // let messages = vec![
-        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
-        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
-        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
-        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band1, HighPassFilter)),
-        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, BellBand)),
-        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, HighShelf)),
-        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
-        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
-        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
-        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
-        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
-        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
-        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
-        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
-        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
-        // ];
-        //
-        // for message in messages {
-        //     let _ = state.handle_message(message);
-        //     state.set_local_value(message);
-        // }
-
 
         // Reborrow the bands, we may have made changes.
         let mut bands = state.equaliser.bands[state.equaliser.mode];
@@ -416,6 +418,13 @@ impl ParametricEq {
                                 break;
                             }
                         }
+                    }
+                }
+
+                if self.active_band.is_none() {
+                    let button = Button::new("Load Default");
+                    if ui.add_enabled(true, button).clicked() {
+                        self.load_default_state(state);
                     }
                 }
             }
@@ -1000,6 +1009,8 @@ impl ParametricEq {
     fn band_type_has_gain(band_type: EQBandType) -> bool {
         !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
     }
+
+
 }
 
 pub enum ButtonPosition {
