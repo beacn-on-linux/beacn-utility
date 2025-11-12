@@ -277,8 +277,6 @@ impl ParametricEq {
                 },
             );
 
-
-
             if let Some(active) = self.active_band {
                 let active_band = &mut bands[active];
 
@@ -521,8 +519,10 @@ impl ParametricEq {
 
             if source.len() == 0 {
                 // EQ Doesn't have active bands, just draw a straight line at 0dB
-                self.curve_points.push(pos2(plot_rect.min.x, Self::db_to_y(0.0, plot_rect)));
-                self.curve_points.push(pos2(plot_rect.max.x, Self::db_to_y(0.0, plot_rect)));
+                let start = pos2(plot_rect.min.x, Self::db_to_y(0.0, plot_rect));
+                let end = pos2(plot_rect.max.x, Self::db_to_y(0.0, plot_rect));
+                self.curve_points.push(start);
+                self.curve_points.push(end);
                 painter.add(Shape::line(self.curve_points.clone(), curve_stroke));
                 return;
             }
@@ -1009,8 +1009,6 @@ impl ParametricEq {
     fn band_type_has_gain(band_type: EQBandType) -> bool {
         !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
     }
-
-
 }
 
 pub enum ButtonPosition {
