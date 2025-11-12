@@ -15,7 +15,9 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
-use simplelog::{ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger};
+use simplelog::{
+    ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
+};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::{env, thread};
@@ -82,7 +84,6 @@ fn main() -> Result<()> {
             file_rotate,
         ));
     }
-
 
     CombinedLogger::init(log_targets)?;
     info!("Logger initialized");
