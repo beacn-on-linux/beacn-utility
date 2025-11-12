@@ -28,17 +28,17 @@ enum-map = "2.7.3"
 oneshot = "0.1.11"
 
 # Used for SIMD EQ calculations
-wide = "0.7.33"
+wide = "0.8.2"
 
 # UI Framework and Window Management
-egui = "0.32.3"
-egui_extras = { version = "0.32.3", features = ["svg"] }
-egui-winit = "0.32.3"
-egui_glow = "0.32.3"
+egui = "0.33.0"
+egui_extras = { version = "0.33.0", features = ["svg"] }
+egui-winit = "0.33.0"
+egui_glow = "0.33.0"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.0" }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.2" }
 #beacn-lib = { path = "../beacn-lib" }
 
 # Used for Lazy Initialisation
