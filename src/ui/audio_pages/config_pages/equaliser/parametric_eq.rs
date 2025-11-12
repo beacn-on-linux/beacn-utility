@@ -79,7 +79,7 @@ pub struct ParametricEq {
     rect: Rect,
 
     // Active bands for interactions
-    active_band: EQBand,
+    active_band: Option<EQBand>,
     active_band_drag: Option<EQBand>,
 }
 
@@ -96,7 +96,7 @@ impl ParametricEq {
             curve_points: vec![],
             rect: Rect::NOTHING,
 
-            active_band: EQBand::Band1,
+            active_band: None,
             active_band_drag: None,
         }
     }
@@ -108,7 +108,7 @@ impl ParametricEq {
         self.band_mesh = Default::default();
         self.curve_points.clear();
         self.rect = Rect::NOTHING;
-        self.active_band = EQBand::Band1;
+        self.active_band = None;
         self.active_band_drag = None;
     }
 
@@ -130,66 +130,58 @@ impl ParametricEq {
             );
             self.serial = Some(state.device_definition.device_info.serial.clone());
         }
-
         let mode = state.equaliser.mode;
-        let mut bands = state.equaliser.bands[state.equaliser.mode];
 
-        // Firstly, make sure there's at least one active band
-        if bands.values().filter(|b| b.enabled).count() == 0 {
-            warn!("No Active EQ Bands, Finding Band to Enable..");
-            if let Some(band) = bands.values_mut().find(|t| t.band_type != NotSet) {
-                band.enabled = true;
-            } else {
-                warn!("All bands are disabled or not set, creating a default.");
-                let mode = state.equaliser.mode;
 
-                let eq_freq_1 = EQFrequency(36.0);
-                let eq_freq_2 = EQFrequency(500.0);
-                let eq_freq_3 = EQFrequency(2000.0);
+        // This can be used later as a 'Default' button
+        // warn!("All bands are disabled or not set, creating a default.");
+        // let mode = state.equaliser.mode;
+        //
+        // let eq_freq_1 = EQFrequency(36.0);
+        // let eq_freq_2 = EQFrequency(500.0);
+        // let eq_freq_3 = EQFrequency(2000.0);
+        //
+        // let gain = EQGain(0.0);
+        // let q = EQQ(0.7);
+        //
+        // // This is basically the default setup for the 'Simple' Mode
+        // let messages = vec![
+        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
+        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
+        //     Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
+        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band1, HighPassFilter)),
+        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, BellBand)),
+        //     Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, HighShelf)),
+        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
+        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
+        //     Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
+        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
+        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
+        //     Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
+        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
+        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
+        //     Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
+        // ];
+        //
+        // for message in messages {
+        //     let _ = state.handle_message(message);
+        //     state.set_local_value(message);
+        // }
 
-                let gain = EQGain(0.0);
-                let q = EQQ(0.7);
-
-                // This is basically the default setup for the 'Simple' Mode
-                let messages = vec![
-                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
-                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
-                    Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
-                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band1, HighPassFilter)),
-                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, BellBand)),
-                    Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, HighShelf)),
-                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
-                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
-                    Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
-                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
-                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
-                    Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
-                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
-                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
-                    Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
-                ];
-
-                for message in messages {
-                    let _ = state.handle_message(message);
-                    state.set_local_value(message);
-                }
-            }
-        }
 
         // Reborrow the bands, we may have made changes.
         let mut bands = state.equaliser.bands[state.equaliser.mode];
 
-        // We'll do a quick check here to make sure our 'Active' band is actually enabled.
-        if !bands[self.active_band].enabled {
+        // Look for an active band to select if we don't have one
+        if self.active_band.is_none() {
             for band in EQBand::iter() {
                 if bands[band].enabled {
-                    self.active_band = band;
+                    self.active_band = Some(band);
                     break;
                 }
             }
         }
 
-        let active = self.active_band;
         let (rect, response) = ui.allocate_exact_size(
             vec2(ui.available_width(), ui.available_height() - 20.0),
             Sense::click_and_drag(),
@@ -261,101 +253,128 @@ impl ParametricEq {
                         };
                         state.equaliser.mode = new_mode;
                         let _ = state.handle_message(Message::Equaliser(Equaliser::Mode(new_mode)));
+
+                        // Update the bands
+                        bands = state.equaliser.bands[state.equaliser.mode];
+
+                        // Ok, first we need to check whether this band is enabled
+                        if let Some(node) = self.active_band {
+                            if bands[node].enabled == false {
+                                self.active_band = None;
+
+                                // Try and find an active band
+                                for band in EQBand::iter() {
+                                    if bands[band].enabled {
+                                        self.active_band = Some(band);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
             );
 
-            let active_band = &mut bands[active];
-            if is_advanced {
-                ui.separator();
 
-                ui.allocate_ui_with_layout(
-                    vec2(f32::INFINITY, 26.0),
-                    Layout::left_to_right(Align::Center),
-                    |ui| {
-                        ui.horizontal_centered(|ui| {
-                            ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
 
-                            for band in EQBandType::iter() {
-                                if band == NotSet {
-                                    continue;
+            if let Some(active) = self.active_band {
+                let active_band = &mut bands[active];
+
+                if is_advanced {
+                    ui.separator();
+
+                    ui.allocate_ui_with_layout(
+                        vec2(f32::INFINITY, 26.0),
+                        Layout::left_to_right(Align::Center),
+                        |ui| {
+                            ui.horizontal_centered(|ui| {
+                                ui.style_mut().spacing.item_spacing = vec2(1.0, 0.0);
+
+                                for band in EQBandType::iter() {
+                                    if band == NotSet {
+                                        continue;
+                                    }
+
+                                    let is_active = active_band.band_type == band;
+                                    let icon = match band {
+                                        LowPassFilter => "eq_low_pass",
+                                        HighPassFilter => "eq_high_pass",
+                                        NotchFilter => "eq_notch",
+                                        BellBand => "eq_bell",
+                                        LowShelf => "eq_low_shelf",
+                                        HighShelf => "eq_high_shelf",
+                                        _ => "",
+                                    };
+                                    let position = match band {
+                                        LowPassFilter => ButtonPosition::First,
+                                        HighShelf => ButtonPosition::Last,
+                                        _ => ButtonPosition::Middle,
+                                    };
+                                    if eq_mode(ui, icon, is_active, position).clicked() {
+                                        let msg = Equaliser::Type(mode, active, band);
+                                        let _ = state.handle_message(Message::Equaliser(msg));
+
+                                        active_band.band_type = band;
+                                        self.invalidate_band(active);
+                                    }
                                 }
+                            });
+                        },
+                    );
+                    ui.separator();
 
-                                let is_active = active_band.band_type == band;
-                                let icon = match band {
-                                    LowPassFilter => "eq_low_pass",
-                                    HighPassFilter => "eq_high_pass",
-                                    NotchFilter => "eq_notch",
-                                    BellBand => "eq_bell",
-                                    LowShelf => "eq_low_shelf",
-                                    HighShelf => "eq_high_shelf",
-                                    _ => "",
-                                };
-                                let position = match band {
-                                    LowPassFilter => ButtonPosition::First,
-                                    HighShelf => ButtonPosition::Last,
-                                    _ => ButtonPosition::Middle,
-                                };
-                                if eq_mode(ui, icon, is_active, position).clicked() {
-                                    let msg = Equaliser::Type(mode, active, band);
-                                    let _ = state.handle_message(Message::Equaliser(msg));
+                    ui.label("Frequency: ");
+                    let drag = draw_draggable(&mut active_band.frequency, 20..=20000, "Hz");
+                    if ui.add_sized([75.0, 20.0], drag).changed() {
+                        let value = EQFrequency(active_band.frequency as f32);
+                        let msg = Equaliser::Frequency(mode, active, value);
+                        let _ = state.handle_message(Message::Equaliser(msg));
 
-                                    active_band.band_type = band;
-                                    self.invalidate_band(active);
-                                }
-                            }
-                        });
-                    },
-                );
-                ui.separator();
-
-                ui.label("Frequency: ");
-                let drag = draw_draggable(&mut active_band.frequency, 20..=20000, "Hz");
-                if ui.add_sized([75.0, 20.0], drag).changed() {
-                    let value = EQFrequency(active_band.frequency as f32);
-                    let msg = Equaliser::Frequency(mode, active, value);
-                    let _ = state.handle_message(Message::Equaliser(msg));
-
-                    self.invalidate_band(active);
+                        self.invalidate_band(active);
+                    }
                 }
-            }
 
-            ui.separator();
-            ui.label("Gain: ");
-            let enabled = Self::band_type_has_gain(active_band.band_type);
-            let mut zero = 0.0;
-            let value = if enabled {
-                &mut active_band.gain
-            } else {
-                &mut zero
-            };
-
-            let drag = draw_draggable(value, -12.0..=12.0, "dB");
-            if ui
-                .add_enabled(enabled, |ui: &mut Ui| ui.add_sized([75.0, 20.0], drag))
-                .changed()
-            {
-                let value = EQGain(active_band.gain);
-                let msg = Equaliser::Gain(mode, active, value);
-                let _ = state.handle_message(Message::Equaliser(msg));
-
-                self.invalidate_band(active);
-            }
-
-            if is_advanced {
                 ui.separator();
+                ui.label("Gain: ");
+                let enabled = Self::band_type_has_gain(active_band.band_type);
+                let mut zero = 0.0;
+                let value = if enabled {
+                    &mut active_band.gain
+                } else {
+                    &mut zero
+                };
 
-                ui.label("Q: ");
-                let drag = draw_draggable(&mut active_band.q, 0.1..=10.0, "");
-                if ui.add_sized([75.0, 20.0], drag).changed() {
-                    let value = EQQ(active_band.q);
-                    let msg = Equaliser::Q(mode, active, value);
+                let drag = draw_draggable(value, -12.0..=12.0, "dB");
+                if ui
+                    .add_enabled(enabled, |ui: &mut Ui| ui.add_sized([75.0, 20.0], drag))
+                    .changed()
+                {
+                    let value = EQGain(active_band.gain);
+                    let msg = Equaliser::Gain(mode, active, value);
                     let _ = state.handle_message(Message::Equaliser(msg));
 
                     self.invalidate_band(active);
                 }
 
+                if is_advanced {
+                    ui.separator();
+
+                    ui.label("Q: ");
+                    let drag = draw_draggable(&mut active_band.q, 0.1..=10.0, "");
+                    if ui.add_sized([75.0, 20.0], drag).changed() {
+                        let value = EQQ(active_band.q);
+                        let msg = Equaliser::Q(mode, active, value);
+                        let _ = state.handle_message(Message::Equaliser(msg));
+
+                        self.invalidate_band(active);
+                    }
+                }
+            }
+
+            // Render the Add/Remove Band buttons regardless of what's there
+            if is_advanced {
                 ui.separator();
+
                 let enabled = bands.values_mut().any(|b| !b.enabled);
                 let button = Button::new("Add Band");
                 #[allow(clippy::collapsible_if)]
@@ -377,14 +396,27 @@ impl ParametricEq {
                     }
                 }
 
-                let enabled = bands.values().filter(|b| b.enabled).count() > 1;
-                let button = Button::new("-");
-                if ui.add_enabled(enabled, button).clicked() {
-                    let msg = Equaliser::Enabled(mode, active, false);
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                if let Some(active) = self.active_band {
+                    let enabled = bands.values().filter(|b| b.enabled).count() > 0;
+                    let button = Button::new("-");
+                    if ui.add_enabled(enabled, button).clicked() {
+                        let msg = Equaliser::Enabled(mode, active, false);
+                        let _ = state.handle_message(Message::Equaliser(msg));
 
-                    bands[active].enabled = false;
-                    self.invalidate_band(active);
+                        bands[active].enabled = false;
+                        self.invalidate_band(active);
+
+                        // Try and find a new band to set active
+                        self.active_band = None;
+
+                        // Try and find an active band
+                        for band in EQBand::iter() {
+                            if bands[band].enabled {
+                                self.active_band = Some(band);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -476,6 +508,14 @@ impl ParametricEq {
                 if bands[band].enabled {
                     source.push(self.get_eq_frequency_response(plot_rect, band, bands));
                 }
+            }
+
+            if source.len() == 0 {
+                // EQ Doesn't have active bands, just draw a straight line at 0dB
+                self.curve_points.push(pos2(plot_rect.min.x, Self::db_to_y(0.0, plot_rect)));
+                self.curve_points.push(pos2(plot_rect.max.x, Self::db_to_y(0.0, plot_rect)));
+                painter.add(Shape::line(self.curve_points.clone(), curve_stroke));
+                return;
             }
 
             let len = source[0].len();
@@ -740,7 +780,7 @@ impl ParametricEq {
             };
             painter.circle_filled(Pos2::new(x, y), EQ_POINT_RADIUS, colour);
 
-            if band == self.active_band {
+            if Some(band) == self.active_band {
                 painter.circle_stroke(
                     Pos2::new(x, y),
                     EQ_SELECTED_RADIUS,
@@ -788,14 +828,14 @@ impl ParametricEq {
 
     fn handle_click(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
         if let Some(index) = self.get_point_near_cursor(rect, pointer, bands) {
-            self.active_band = index;
+            self.active_band = Some(index);
         }
     }
 
     fn handle_drag_start(&mut self, rect: Rect, pointer: Pos2, bands: &Bands) {
         let active = self.get_point_near_cursor(rect, pointer, bands);
         if let Some(active) = active {
-            self.active_band = active;
+            self.active_band = Some(active);
         }
         self.active_band_drag = active;
     }
@@ -859,13 +899,13 @@ impl ParametricEq {
         }
 
         if let Some(band) = self.get_point_near_cursor(rect, pointer_position, bands) {
-            self.active_band = band;
+            self.active_band = Some(band);
 
-            let q = bands[self.active_band].q;
+            let q = bands[band].q;
             let new_q = if scroll_up { q + 0.2 } else { q - 0.2 };
             let new = new_q.clamp(0.1, 10.0);
             let rounded = (new * 10.0).round() / 10.0;
-            bands[self.active_band].q = rounded;
+            bands[band].q = rounded;
 
             let msg = Equaliser::Q(self.eq_mode, band, EQQ(rounded));
             let _ = state.handle_message(Message::Equaliser(msg));
