@@ -11,9 +11,9 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
-use crate::{ManagerMessages, ToMainMessages};
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
+use crate::{ManagerMessages, ToMainMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};

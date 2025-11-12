@@ -1,6 +1,7 @@
 use crate::device_manager::DeviceMessage;
 use crate::{
-    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context, run_async_blocking,
+    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context,
+    run_async_blocking,
 };
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
