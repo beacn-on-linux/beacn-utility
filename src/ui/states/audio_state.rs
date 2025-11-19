@@ -14,7 +14,9 @@ use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
 use enum_map::EnumMap;
 
-use crate::device_manager::{AudioMessage, DefinitionState, DeviceDefinition, LinkedCommands};
+use crate::device_manager::{
+    AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
+};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
@@ -267,12 +269,26 @@ impl BeacnAudioState {
 
         // Before we do anything else, is this definition in an error state?
         if let DefinitionState::Error(error) = &state.device_definition.state {
-            state.device_state.state = LoadState::Error;
-            state.device_state.errors.push(ErrorMessage {
-                error_text: Some(format!("Failed to Open Device: {error}")),
-                failed_message: None,
-            });
-
+            match error {
+                ErrorType::PermissionDenied => {
+                    state.device_state.state = LoadState::PermissionDenied
+                }
+                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::Other(s) => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some(format!("Device Definition Error: {s}")),
+                        failed_message: None,
+                    });
+                }
+                ErrorType::Unknown => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some("Unknown Error".to_string()),
+                        failed_message: None,
+                    });
+                }
+            }
             return state;
         }
 

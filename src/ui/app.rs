@@ -283,8 +283,13 @@ impl BeacnMicApp {
                 }
                 let settings = settings.unwrap();
 
+                let error = matches!(
+                    settings.device_state.state,
+                    LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
+                );
+
                 // Are we in an error state, if so, show the error
-                if settings.device_state.state == LoadState::Error {
+                if error {
                     let position = self.audio_pages.iter().position(|p| p.show_on_error());
                     if let Some(page) = position {
                         self.active_page = page;
