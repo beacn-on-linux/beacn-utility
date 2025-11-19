@@ -80,10 +80,8 @@ impl AudioPage for About {
                 let message = Message::Headphones(Headphones::MicClassCompliant(inner));
                 state.handle_message(message).expect("Failed!");
             }
-            if !inner {
-                ui.add_space(5.0);
-                ui.label("Under Linux, you should have this enabled for best compatibility.");
-            }
+            ui.add_space(5.0);
+            ui.label("Note: When changing this value, the Beacn Mic will reboot.");
         }
     }
 }
