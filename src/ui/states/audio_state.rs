@@ -64,7 +64,10 @@ pub struct Headphones {
     pub output_gain: f32, // f32[0.0..=12.0]
     pub headphone_type: HeadphoneTypes,
     pub fx_enabled: bool,
-    pub studio_driverless: bool, // This is backwards at the moment, need to fix that
+
+    // NOTE: The following values should *NOT* be persisted, or saved / loaded from profiles
+    pub studio_driverless: Option<bool>, // This is backwards at the moment, need to fix that
+    pub mic_class_compliant: Option<bool>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -276,6 +279,11 @@ impl BeacnAudioState {
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type);
         for message in messages {
+            // Skip this message if it's not valid for this version
+            if message.get_message_minimum_version() > state.device_definition.device_info.version {
+                continue;
+            }
+
             let value = state.handle_message(message);
             match value {
                 Ok(value) => state.set_local_value(value),
@@ -390,7 +398,10 @@ impl BeacnAudioState {
                 MicHeadphones::MicOutputGain(v) => self.headphones.output_gain = v.to_inner(),
                 MicHeadphones::HeadphoneType(t) => self.headphones.headphone_type = t,
                 MicHeadphones::FXEnabled(t) => self.headphones.fx_enabled = t,
-                MicHeadphones::StudioDriverless(t) => self.headphones.studio_driverless = t,
+                MicHeadphones::StudioDriverless(t) => self.headphones.studio_driverless = Some(t),
+                MicHeadphones::MicClassCompliant(t) => {
+                    self.headphones.mic_class_compliant = Some(t)
+                }
                 _ => {}
             },
             Message::Lighting(l) => match l {

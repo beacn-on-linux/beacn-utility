@@ -135,7 +135,7 @@ pub fn spawn_device_manager(
 
                                 let (serial, version) = match &device {
                                     Some(d) => (d.get_serial(), d.get_version()),
-                                    None => ("Unknown".to_string(), "Unknown".to_string()),
+                                    None => ("Unknown".to_string(), VersionNumber(0, 0, 0, 0)),
                                 };
 
                                 // Firstly, build the device definition
@@ -143,10 +143,7 @@ pub fn spawn_device_manager(
                                     state,
                                     location,
                                     device_type,
-                                    device_info: DeviceInfo {
-                                        serial,
-                                        version: VersionNumber::from(version),
-                                    },
+                                    device_info: DeviceInfo { serial, version },
                                 };
 
                                 // Create a Message Bus for it

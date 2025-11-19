@@ -56,21 +56,33 @@ impl AudioPage for About {
             ui.label(version_value)
         });
 
-        if device_type == DeviceType::BeacnStudio {
-            ui.add_space(20.0);
+        ui.add_space(10.0);
+        ui.separator();
+        ui.add_space(10.0);
 
-            if ui
-                .checkbox(
-                    &mut state.headphones.studio_driverless,
-                    "Enable PC2 4 Link Mode",
-                )
-                .changed()
-            {
-                // Send the command that we're at least aware of
-                let message = Message::Headphones(Headphones::StudioDriverless(
-                    state.headphones.studio_driverless,
-                ));
+        if let Some(inner) = &state.headphones.studio_driverless {
+            let mut inner = *inner;
+            const LABEL: &str = "Enable PC2 Compliancy Mode";
+            if ui.checkbox(&mut inner, LABEL).changed() {
+                state.headphones.studio_driverless = Some(inner);
+
+                let message = Message::Headphones(Headphones::StudioDriverless(inner));
                 state.handle_message(message).expect("Failed!");
+            }
+        }
+
+        if let Some(inner) = &state.headphones.mic_class_compliant {
+            let mut inner = *inner;
+            const LABEL: &str = "Enable Mic Compliancy Mode";
+            if ui.checkbox(&mut inner, LABEL).changed() {
+                state.headphones.mic_class_compliant = Some(inner);
+
+                let message = Message::Headphones(Headphones::MicClassCompliant(inner));
+                state.handle_message(message).expect("Failed!");
+            }
+            if !inner {
+                ui.add_space(5.0);
+                ui.label("Under Linux, you should have this enabled for best compatibility.");
             }
         }
     }

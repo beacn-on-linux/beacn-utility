@@ -4,6 +4,7 @@
 
 # Beacn Mic
 SUBSYSTEM=="usb", ATTR{idVendor}=="33ae", ATTR{idProduct}=="0001", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTR{idVendor}=="33ae", ATTR{idProduct}=="8001", TAG+="uaccess"
 
 # Beacn Studio
 SUBSYSTEM=="usb", ATTR{idVendor}=="33ae", ATTR{idProduct}=="0003", TAG+="uaccess"
