@@ -1,4 +1,3 @@
-use crate::device_manager::DefinitionState::Error;
 use crate::device_manager::ControlMessage;
 use crate::device_manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{
@@ -8,7 +7,7 @@ use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, JPEG_QUALITY,
     POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
-use crate::{integrations, runtime};
+use crate::runtime;
 use anyhow::{Context, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
@@ -153,12 +152,12 @@ impl PipeweaverHandler {
             }
             self.displaying_error = true;
 
-            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref() {
-                if e.kind() == ErrorKind::ConnectionRefused {
-                    // No point dumping a warning here, Pipeweaver isn't running.
-                    sleep(Duration::from_secs(5)).await;
-                    continue;
-                }
+            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref()
+                && e.kind() == ErrorKind::ConnectionRefused
+            {
+                // No point dumping a warning here, Pipeweaver isn't running.
+                sleep(Duration::from_secs(5)).await;
+                continue;
             }
 
             warn!("Pipeweaver Error: {}", e);
