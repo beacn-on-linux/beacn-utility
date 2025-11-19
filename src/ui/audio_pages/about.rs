@@ -22,10 +22,9 @@ impl AudioPage for About {
         let device_type = state.device_definition.device_type;
         let serial_text = state.device_definition.device_info.serial.clone();
         let version_text = state.device_definition.device_info.version.to_string();
-        let location_text = format!(
-            "{}:{}",
-            state.device_definition.location.bus_number, state.device_definition.location.address
-        );
+
+        let location = &state.device_definition.location;
+        let location_text = format!("{}:{}", location.bus_number, location.address);
 
         match device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
