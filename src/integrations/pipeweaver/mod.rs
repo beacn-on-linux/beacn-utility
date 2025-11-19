@@ -1,3 +1,4 @@
+use crate::device_manager::DefinitionState::Error;
 use crate::device_manager::ControlMessage;
 use crate::device_manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{
@@ -7,7 +8,7 @@ use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, JPEG_QUALITY,
     POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
-use crate::runtime;
+use crate::{integrations, runtime};
 use anyhow::{Context, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
@@ -25,6 +26,7 @@ use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevic
 use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::io::ErrorKind;
 use std::time::Duration;
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
@@ -32,7 +34,7 @@ use tokio::sync::mpsc::channel;
 use tokio::time::sleep;
 use tokio::{select, time};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 use ulid::Ulid;
 
 const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
@@ -150,6 +152,14 @@ impl PipeweaverHandler {
                 }
             }
             self.displaying_error = true;
+
+            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref() {
+                if e.kind() == ErrorKind::ConnectionRefused {
+                    // No point dumping a warning here, Pipeweaver isn't running.
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            }
 
             warn!("Pipeweaver Error: {}", e);
             sleep(Duration::from_secs(5)).await;
