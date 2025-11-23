@@ -135,8 +135,6 @@ impl AudioPage for LightingPage {
                     ui.vertical(|ui| {
                         let suspend_mode = &mut state.lighting.suspend_mode;
 
-                        // The easiest way to handle this is to monitor the previous and see if it's
-                        // changed, rather than having .click or .change on each radio
                         let previous = *suspend_mode;
 
                         ui.label(RichText::new("When USB is Suspended").strong());
@@ -146,7 +144,7 @@ impl AudioPage for LightingPage {
                         ui.radio_value(
                             suspend_mode,
                             LightingSuspendMode::Brightness,
-                            "Change the brightness:",
+                            "Change the brightness",
                         );
                         if *suspend_mode != previous {
                             let message = Message::Lighting(Lighting::SuspendMode(*suspend_mode));
@@ -155,30 +153,22 @@ impl AudioPage for LightingPage {
                                 .expect("Failed to Send Message");
                         }
 
-                        if ui
-                            .add(egui::Slider::new(
-                                &mut state.lighting.suspend_brightness,
-                                0..=100,
-                            ))
-                            .changed()
-                        {
-                            // We need to change the suspend mode if this is interacted with
-                            if state.lighting.suspend_mode != LightingSuspendMode::Brightness {
-                                let message = Message::Lighting(Lighting::SuspendMode(
-                                    LightingSuspendMode::Brightness,
+                        if state.lighting.suspend_mode == LightingSuspendMode::Brightness {
+                            if ui
+                                .add(egui::Slider::new(
+                                    &mut state.lighting.suspend_brightness,
+                                    0..=100,
+                                ))
+                                .changed()
+                            {
+                                let value = Lighting::SuspendBrightness(LightingSuspendBrightness(
+                                    state.lighting.suspend_brightness,
                                 ));
+                                let message = Message::Lighting(value);
                                 state
                                     .handle_message(message)
                                     .expect("Failed to Send Message");
                             }
-
-                            let value = Lighting::SuspendBrightness(LightingSuspendBrightness(
-                                state.lighting.suspend_brightness,
-                            ));
-                            let message = Message::Lighting(value);
-                            state
-                                .handle_message(message)
-                                .expect("Failed to Send Message");
                         }
                     })
                     .response
