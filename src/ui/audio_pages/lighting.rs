@@ -427,18 +427,9 @@ impl LightingPage {
         config: &mut BeacnAudioState,
         colour: &mut [u8; 3],
     ) {
-        ui.label("Primary Colour");
-        if ui.color_edit_button_srgb(colour).changed() {
-            let message = RGBA {
-                red: colour[0],
-                green: colour[1],
-                blue: colour[2],
-                alpha: 0,
-            };
-            let message = Message::Lighting(Lighting::Colour1(message));
-            let _ = config.handle_message(message);
-        }
-        ui.add_space(4.);
+        self.draw_colour_picker(ui, config, colour, "Primary Colour", |rgba| {
+            Message::Lighting(Lighting::Colour1(rgba))
+        });
     }
 
     fn draw_secondary_colour(
@@ -447,17 +438,34 @@ impl LightingPage {
         config: &mut BeacnAudioState,
         colour: &mut [u8; 3],
     ) {
-        ui.label("Secondary Colour");
-        if ui.color_edit_button_srgb(colour).changed() {
-            let message = RGBA {
-                red: colour[0],
-                green: colour[1],
-                blue: colour[2],
-                alpha: 0,
-            };
-            let message = Message::Lighting(Lighting::Colour2(message));
-            let _ = config.handle_message(message);
-        }
+        self.draw_colour_picker(ui, config, colour, "Secondary Colour", |rgba| {
+            Message::Lighting(Lighting::Colour2(rgba))
+        });
+    }
+
+    fn draw_colour_picker(
+        &mut self,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        colour: &mut [u8; 3],
+        label: &str,
+        message_fn: impl FnOnce(RGBA) -> Message,
+    ) {
+        ui.horizontal(|ui| {
+            if ui.color_edit_button_srgb(colour).changed() {
+                let rgba = RGBA {
+                    red: colour[0],
+                    green: colour[1],
+                    blue: colour[2],
+                    alpha: 0,
+                };
+                let message = message_fn(rgba);
+                let _ = config.handle_message(message);
+            }
+            ui.add_space(2.);
+            ui.label(label);
+        });
+
         ui.add_space(4.);
     }
 
