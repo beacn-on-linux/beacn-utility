@@ -485,7 +485,7 @@ impl LightingPage {
         sensitivity: &mut f32,
     ) {
         ui.label("Meter Sensitivity");
-        if ui.add(egui::Slider::new(sensitivity, 0.0..=10.0)).changed() {
+        if ui.add(egui::Slider::new(sensitivity, 1.0..=10.0)).changed() {
             let value = Lighting::MeterSensitivity(LightingMeterSensitivty(*sensitivity));
             let message = Message::Lighting(value);
             let _ = config.handle_message(message);
