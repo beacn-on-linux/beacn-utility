@@ -760,9 +760,10 @@ impl PipeweaverHandler {
         if let Some(device) = self.devices_shown.get(device_index) {
             let error = anyhow!("Failed to get Renderer");
             let current = self.renderers.get(device).ok_or(error)?;
-            let volume = current.volumes[self.active_mix];
 
-            let new_volume = (volume as i8 + change).clamp(0, 100);
+            let volume = current.volumes[self.active_mix] as i16;
+            let new_volume = (volume + change as i16).clamp(0, 100) as u8;
+
             let command = serde_json::to_string(&WebsocketRequest {
                 id: command_index,
                 data: DaemonRequest::Pipewire(SetSourceVolume(
