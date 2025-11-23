@@ -14,6 +14,10 @@ use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use egui::{Align, Layout, Response, RichText, Ui};
 
+const TYPE_WIDTH: f32 = 120.0;
+const LABEL_WIDTH: f32 = 125.0;
+const CONTROL_WIDTH: f32 = 180.0;
+
 pub struct LightingPage {}
 
 impl LightingPage {
@@ -40,7 +44,7 @@ impl AudioPage for LightingPage {
                         ui.add_sized([120.0, ui.available_height()], |ui: &mut Ui| {
                             ui.with_layout(Layout::top_down_justified(Align::Min), |ui| {
                                 ui.label(RichText::new("Lighting Style").strong());
-                                ui.add_space(15.0);
+                                ui.add_space(10.0);
                                 ui.horizontal(|ui| {
                                     ui.add_space(15.);
                                     ui.vertical(|ui| match device_type {
@@ -99,12 +103,12 @@ impl AudioPage for LightingPage {
                         ui.label(RichText::new("When Muted").strong());
                         ui.add_space(10.);
                         ui.radio_value(mute_mode, LightingMuteMode::Nothing, "Do Nothing");
+                        ui.radio_value(mute_mode, LightingMuteMode::Off, "Turn off LED ring");
                         ui.radio_value(
                             mute_mode,
                             LightingMuteMode::Solid,
                             "Turn LED ring to a solid colour",
                         );
-                        ui.radio_value(mute_mode, LightingMuteMode::Off, "Turn off LED ring");
 
                         if *mute_mode != previous {
                             let message = Message::Lighting(Lighting::MuteMode(*mute_mode));
@@ -113,20 +117,15 @@ impl AudioPage for LightingPage {
                                 .expect("Failed to Send Message");
                         }
 
-                        ui.add_space(15.);
-                        let mute_colour = &mut state.lighting.mute_colour;
-                        ui.label(RichText::new("Colour").strong());
-                        if ui.color_edit_button_srgb(mute_colour).changed() {
-                            let message = RGBA {
-                                red: mute_colour[0],
-                                green: mute_colour[1],
-                                blue: mute_colour[2],
-                                alpha: 0,
-                            };
-                            let message = Message::Lighting(Lighting::MuteColour(message));
-                            state
-                                .handle_message(message)
-                                .expect("Failed to Send Message");
+                        if state.lighting.mute_mode == LightingMuteMode::Solid {
+                            ui.add_space(15.);
+                            self.draw_colour_picker(
+                                ui,
+                                state,
+                                &mut lighting.mute_colour,
+                                "Mute Colour",
+                                |rgba| Message::Lighting(Lighting::MuteColour(rgba)),
+                            );
                         }
                     })
                     .response
@@ -187,13 +186,6 @@ impl AudioPage for LightingPage {
             })
             .response
         });
-
-        // let width = ui.available_width() / 2.;
-        // ui.separator();
-
-        //ui.add_sized(ui.available_size(), Label::new("Bottom Section"));
-
-        //ui.heading("Lighting Section");
     }
 }
 
@@ -207,41 +199,25 @@ impl LightingPage {
         let sparkle = mode == SparkleMeter || mode == SparkleRandom;
         let spectrum = mode == Spectrum;
 
-        if ui.selectable_label(solid, "Solid Colour").clicked() {
-            state.mic_mode = Solid;
-            let message = Message::Lighting(Lighting::Mode(Solid));
-            let _ = config.handle_message(message);
-        };
-        ui.add_space(10.0);
-        if ui.selectable_label(gradient, "Gradient").clicked() {
-            state.mic_mode = Gradient;
-            let message = Message::Lighting(Lighting::Mode(Gradient));
-            let _ = config.handle_message(message);
-        };
-        ui.add_space(10.0);
-        if ui.selectable_label(reactive, "Reactive Meter").clicked() {
-            // Only change this if we're not already set to a reactive mode.
-            if !reactive {
-                let message = Message::Lighting(Lighting::Mode(ReactiveRing));
-                let _ = config.handle_message(message);
-                state.mic_mode = ReactiveRing;
-            }
-        };
-        ui.add_space(10.0);
-        if ui.selectable_label(sparkle, "Sparkle").clicked() {
-            // Only change this if we're not already set to a sparkle mode.
-            if !sparkle {
-                state.mic_mode = SparkleMeter;
-                let message = Message::Lighting(Lighting::Mode(SparkleMeter));
-                let _ = config.handle_message(message);
-            }
-        };
-        ui.add_space(10.0);
-        if ui.selectable_label(spectrum, "Spectrum Cycle").clicked() {
-            let message = Message::Lighting(Lighting::Mode(Spectrum));
-            let _ = config.handle_message(message);
-            state.mic_mode = Spectrum;
-        };
+        // Change the padding on the Selectable Labels
+        let style = ui.style_mut();
+        style.spacing.button_padding = egui::vec2(8.0, 4.0);
+
+        self.draw_lighting_style(ui, config, "Solid Colour", solid, || {
+            Some(Message::Lighting(Lighting::Mode(Solid)))
+        });
+        self.draw_lighting_style(ui, config, "Gradient", gradient, || {
+            Some(Message::Lighting(Lighting::Mode(Gradient)))
+        });
+        self.draw_lighting_style(ui, config, "Reactive Meter", reactive, || {
+            (!reactive).then_some(Message::Lighting(Lighting::Mode(ReactiveRing)))
+        });
+        self.draw_lighting_style(ui, config, "Sparkle", sparkle, || {
+            (!sparkle).then_some(Message::Lighting(Lighting::Mode(SparkleRandom)))
+        });
+        self.draw_lighting_style(ui, config, "Spectrum Cycle", spectrum, || {
+            Some(Message::Lighting(Lighting::Mode(Spectrum)))
+        });
     }
 
     fn draw_types_studio(
@@ -256,26 +232,24 @@ impl LightingPage {
         let peak_meter = mode == StudioLightingMode::PeakMeter;
         let spectrum = mode == StudioLightingMode::SolidSpectrum;
 
-        if ui.selectable_label(solid, "Solid Colour").clicked() {
-            state.studio_mode = StudioLightingMode::Solid;
-            let message = Message::Lighting(Lighting::StudioMode(StudioLightingMode::Solid));
-            let _ = config.handle_message(message);
-        };
+        let style = ui.style_mut();
+        style.spacing.button_padding = egui::vec2(8.0, 4.0);
 
-        ui.add_space(10.0);
-        if ui.selectable_label(peak_meter, "Peak Meter").clicked() {
-            state.studio_mode = StudioLightingMode::PeakMeter;
-            let message = Message::Lighting(Lighting::StudioMode(StudioLightingMode::PeakMeter));
-            let _ = config.handle_message(message);
-        };
-
-        ui.add_space(10.0);
-        if ui.selectable_label(spectrum, "Solid Spectrum").clicked() {
-            state.studio_mode = StudioLightingMode::SolidSpectrum;
-            let message =
-                Message::Lighting(Lighting::StudioMode(StudioLightingMode::SolidSpectrum));
-            let _ = config.handle_message(message);
-        };
+        self.draw_lighting_style(ui, config, "Solid Colour", solid, || {
+            Some(Message::Lighting(Lighting::StudioMode(
+                StudioLightingMode::Solid,
+            )))
+        });
+        self.draw_lighting_style(ui, config, "Peak Meter", peak_meter, || {
+            Some(Message::Lighting(Lighting::StudioMode(
+                StudioLightingMode::PeakMeter,
+            )))
+        });
+        self.draw_lighting_style(ui, config, "Solid Spectrum", spectrum, || {
+            Some(Message::Lighting(Lighting::StudioMode(
+                StudioLightingMode::SolidSpectrum,
+            )))
+        });
     }
 
     fn draw_area(
@@ -310,7 +284,9 @@ impl LightingPage {
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
+            ui.add_space(4.);
             self.draw_primary_colour(ui, config, &mut state.colour1);
+            ui.add_space(15.);
             self.draw_ring_brightness(ui, config, &mut state.brightness);
         })
         .response
@@ -322,8 +298,10 @@ impl LightingPage {
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
+            ui.add_space(4.);
             self.draw_primary_colour(ui, config, &mut state.colour1);
             self.draw_secondary_colour(ui, config, &mut state.colour2);
+            ui.add_space(15.0);
             self.draw_speed_direction(ui, config, &mut state.speed);
             self.draw_ring_brightness(ui, config, &mut state.brightness);
         })
@@ -336,9 +314,8 @@ impl LightingPage {
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
-            ui.label("Behaviour");
-
             if config.device_definition.device_type == DeviceType::BeacnMic {
+                ui.label("Behaviour");
                 ui.vertical(|ui| {
                     if ui
                         .radio_value(&mut state.mic_mode, ReactiveRing, "Whole Ring Meter")
@@ -362,12 +339,15 @@ impl LightingPage {
                         let _ = config.handle_message(message);
                     }
                 });
-                ui.add_space(4.);
+                ui.add_space(15.);
             }
+            ui.add_space(4.);
             self.draw_primary_colour(ui, config, &mut state.colour1);
             self.draw_secondary_colour(ui, config, &mut state.colour2);
+            ui.add_space(15.);
             self.draw_meter_sensitivity(ui, config, &mut state.sensitivity);
             self.draw_ring_brightness(ui, config, &mut state.brightness);
+            ui.add_space(15.);
             self.draw_meter_source(ui, config, &mut state.source);
         })
         .response
@@ -381,29 +361,32 @@ impl LightingPage {
         ui.vertical(|ui| {
             ui.label("Behaviour");
 
-            ui.horizontal(|ui| {
-                if ui
-                    .radio_value(&mut state.mic_mode, SparkleRandom, "Sparkle Random")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.handle_message(message);
-                }
-                if ui
-                    .radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::Mode(state.mic_mode));
-                    let _ = config.handle_message(message);
-                }
-            });
-            ui.add_space(4.);
+            if ui
+                .radio_value(&mut state.mic_mode, SparkleRandom, "Sparkle Random")
+                .changed()
+            {
+                let message = Message::Lighting(Lighting::Mode(state.mic_mode));
+                let _ = config.handle_message(message);
+            }
+            if ui
+                .radio_value(&mut state.mic_mode, SparkleMeter, "Sparkle Meter")
+                .changed()
+            {
+                let message = Message::Lighting(Lighting::Mode(state.mic_mode));
+                let _ = config.handle_message(message);
+            }
+
+            ui.add_space(15.);
 
             self.draw_primary_colour(ui, config, &mut state.colour1);
             self.draw_secondary_colour(ui, config, &mut state.colour2);
+            ui.add_space(15.);
+
             self.draw_meter_sensitivity(ui, config, &mut state.sensitivity);
             self.draw_speed_direction(ui, config, &mut state.speed);
             self.draw_ring_brightness(ui, config, &mut state.brightness);
+            ui.add_space(15.);
+
             self.draw_meter_source(ui, config, &mut state.source);
         })
         .response
@@ -415,6 +398,7 @@ impl LightingPage {
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
+            ui.add_space(4.);
             self.draw_speed_direction(ui, config, &mut state.speed);
             self.draw_ring_brightness(ui, config, &mut state.brightness);
         })
@@ -440,6 +424,105 @@ impl LightingPage {
     ) {
         self.draw_colour_picker(ui, config, colour, "Secondary Colour", |rgba| {
             Message::Lighting(Lighting::Colour2(rgba))
+        });
+    }
+
+    fn draw_speed_direction(&mut self, ui: &mut Ui, config: &mut BeacnAudioState, speed: &mut i32) {
+        self.draw_slider(ui, config, speed, -10..=10, "Speed and Direction:", |val| {
+            let value = Lighting::Speed(LightingSpeed(val));
+            Message::Lighting(value)
+        });
+    }
+
+    fn draw_meter_sensitivity(
+        &mut self,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        sense: &mut f32,
+    ) {
+        self.draw_slider(ui, config, sense, 1.0..=10.0, "Meter Sensitivity:", |val| {
+            let value = Lighting::MeterSensitivity(LightingMeterSensitivty(val));
+            Message::Lighting(value)
+        });
+    }
+
+    fn draw_meter_source(
+        &mut self,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        source: &mut LightingMeterSource,
+    ) {
+        ui.horizontal(|ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(LABEL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_width(LABEL_WIDTH);
+                    ui.label("Meter Source: ");
+                },
+            );
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(CONTROL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    let entries = [
+                        (LightingMeterSource::Microphone, "Microphone"),
+                        (LightingMeterSource::Headphones, "Headphones"),
+                    ];
+
+                    ui.spacing_mut().combo_width = CONTROL_WIDTH;
+                    egui::ComboBox::from_label("")
+                        .selected_text(match source {
+                            LightingMeterSource::Microphone => "Microphone",
+                            LightingMeterSource::Headphones => "Headphones",
+                        })
+                        .show_ui(ui, |ui| {
+                            for (variant, label) in entries {
+                                if ui.selectable_value(source, variant, label).changed() {
+                                    let message = Message::Lighting(Lighting::MeterSource(*source));
+                                    let _ = config.handle_message(message);
+                                }
+                            }
+                        });
+                },
+            );
+        });
+        ui.add_space(4.);
+    }
+
+    fn draw_ring_brightness(
+        &mut self,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        brightness: &mut i32,
+    ) {
+        self.draw_slider(ui, config, brightness, 0..=100, "Ring Brightness:", |val| {
+            let value = Lighting::Brightness(LightingBrightness(val));
+            Message::Lighting(value)
+        });
+    }
+
+    fn draw_lighting_style(
+        &self,
+        ui: &mut Ui,
+        config: &mut BeacnAudioState,
+        label: &str,
+        checked: bool,
+        message_fn: impl FnOnce() -> Option<Message>,
+    ) {
+        ui.add_sized([TYPE_WIDTH, 0.0], |ui: &mut Ui| {
+            ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
+                let label = ui.selectable_label(checked, label);
+                if label.clicked()
+                    && let Some(message) = message_fn()
+                {
+                    let _ = config.handle_message(message);
+                }
+
+                label
+            })
+            .inner
         });
     }
 
@@ -469,74 +552,39 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_speed_direction(&mut self, ui: &mut Ui, config: &mut BeacnAudioState, speed: &mut i32) {
-        ui.label("Speed and Direction");
-        if ui.add(egui::Slider::new(speed, -10..=10)).changed() {
-            let message = Message::Lighting(Lighting::Speed(LightingSpeed(*speed)));
-            let _ = config.handle_message(message);
-        };
-        ui.add_space(4.);
-    }
-
-    fn draw_meter_sensitivity(
+    fn draw_slider<T>(
         &mut self,
         ui: &mut Ui,
         config: &mut BeacnAudioState,
-        sensitivity: &mut f32,
-    ) {
-        ui.label("Meter Sensitivity");
-        if ui.add(egui::Slider::new(sensitivity, 1.0..=10.0)).changed() {
-            let value = Lighting::MeterSensitivity(LightingMeterSensitivty(*sensitivity));
-            let message = Message::Lighting(value);
-            let _ = config.handle_message(message);
-        }
-        ui.add_space(4.);
-    }
+        value: &mut T,
+        range: std::ops::RangeInclusive<T>,
+        label: &str,
+        message_fn: impl FnOnce(T) -> Message,
+    ) where
+        T: egui::emath::Numeric + Copy,
+    {
+        ui.horizontal(|ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(LABEL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_width(LABEL_WIDTH);
+                    ui.label(label);
+                },
+            );
 
-    fn draw_meter_source(
-        &mut self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        source: &mut LightingMeterSource,
-    ) {
-        ui.label("Meter Source");
-        egui::ComboBox::from_label("")
-            .selected_text(match source {
-                LightingMeterSource::Microphone => "Microphone",
-                LightingMeterSource::Headphones => "Headphones",
-            })
-            .show_ui(ui, |ui| {
-                // TODO: There are better ways to do this
-                if ui
-                    .selectable_value(source, LightingMeterSource::Microphone, "Microphone")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::MeterSource(*source));
-                    let _ = config.handle_message(message);
-                }
-                if ui
-                    .selectable_value(source, LightingMeterSource::Headphones, "Headphones")
-                    .changed()
-                {
-                    let message = Message::Lighting(Lighting::MeterSource(*source));
-                    let _ = config.handle_message(message);
-                }
-            });
+            ui.allocate_ui_with_layout(
+                egui::vec2(CONTROL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.spacing_mut().slider_width = CONTROL_WIDTH;
+                    if ui.add(egui::Slider::new(value, range)).changed() {
+                        let message = message_fn(*value);
+                        let _ = config.handle_message(message);
+                    }
+                },
+            );
+        });
         ui.add_space(4.);
-    }
-
-    fn draw_ring_brightness(
-        &mut self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        brightness: &mut i32,
-    ) {
-        ui.label("Ring Brightness");
-        if ui.add(egui::Slider::new(brightness, 0..=100)).changed() {
-            let value = Lighting::Brightness(LightingBrightness(*brightness));
-            let message = Message::Lighting(value);
-            let _ = config.handle_message(message);
-        }
-        ui.add_space(4.)
     }
 }
