@@ -80,7 +80,7 @@ impl AudioPage for LightingPage {
         ui.separator();
         ui.add_space(5.0);
         ui.label(
-            RichText::new("Other Lighting Options (note, this do not work cleanly under Linux)")
+            RichText::new("Other Lighting Options (note, this does not work cleanly under Linux)")
                 .strong(),
         );
         ui.add_space(5.0);
