@@ -31,11 +31,7 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
         "error",
         include_image!("../../resources/ui/icons/error.svg"),
     );
-    map.insert(
-        "info",
-        include_image!("../../resources/ui/icons/info.svg"),
-    );
-
+    map.insert("info", include_image!("../../resources/ui/icons/info.svg"));
 
     // EQ Modes
     map.insert("eq_bell", include_image!("../../resources/ui/eq/bell.svg"));
