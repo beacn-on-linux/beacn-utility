@@ -118,7 +118,7 @@ impl AudioPage for LightingPage {
                         }
 
                         if state.lighting.mute_mode == LightingMuteMode::Solid {
-                            ui.add_space(15.);
+                            ui.add_space(4.);
                             self.draw_colour_picker(
                                 ui,
                                 state,
@@ -153,7 +153,10 @@ impl AudioPage for LightingPage {
                                 .expect("Failed to Send Message");
                         }
 
+
                         if state.lighting.suspend_mode == LightingSuspendMode::Brightness {
+                            ui.spacing_mut().slider_width = CONTROL_WIDTH;
+                            ui.add_space(4.);
                             if ui
                                 .add(egui::Slider::new(
                                     &mut state.lighting.suspend_brightness,
