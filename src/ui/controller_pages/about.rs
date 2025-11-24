@@ -1,10 +1,12 @@
 use crate::ui::controller_pages::ControllerPage;
 use crate::ui::states::controller_state::BeacnControllerState;
 use beacn_lib::manager::DeviceType;
-use egui::{RichText, Slider, Ui};
+use egui::{Align, Layout, RichText, Slider, Ui};
 use std::time::Duration;
 
-#[allow(unused)]
+const LABEL_WIDTH: f32 = 120.0;
+const CONTROL_WIDTH: f32 = 260.0;
+
 pub struct About {}
 
 impl About {
@@ -62,40 +64,55 @@ impl ControllerPage for About {
         ui.separator();
         ui.add_space(5.0);
 
-        ui.horizontal(|ui| {
-            ui.label("Display Brightness: ");
-
-            let mut display_brightness = state.saved_settings.display_brightness;
-            let slider = Slider::new(&mut display_brightness, 1..=100)
-                .suffix("%")
-                .trailing_fill(true);
-            if ui.add(slider).changed() {
-                let _ = state.set_display_brightness(display_brightness, true);
-            }
-        });
-
-        // Button Brightness isn't a thing on the Beacn Mix, only the create
-        if state.device_definition.device_type != DeviceType::BeacnMix {
-            ui.horizontal(|ui| {
-                ui.label("Button Brightness: ");
-                let mut button_brightness = state.saved_settings.button_brightness;
-                let slider = Slider::new(&mut button_brightness, 0..=10).trailing_fill(true);
-                if ui.add(slider).changed() {
-                    let _ = state.set_button_brightness(button_brightness, true);
-                }
-            });
+        let mut display_brightness = state.saved_settings.display_brightness;
+        let slider = Slider::new(&mut display_brightness, 1..=100)
+            .suffix("%")
+            .trailing_fill(true);
+        if self.draw_slider(ui, "Display Brightness:", slider) {
+            let _ = state.set_display_brightness(display_brightness, true);
         }
 
-        ui.horizontal(|ui| {
-            ui.label("Display Timeout: ");
-
-            let mut display_timeout = state.saved_settings.display_dim.as_secs();
-            let slider = Slider::new(&mut display_timeout, 30..=300)
-                .suffix("s")
-                .trailing_fill(true);
-            if ui.add(slider).changed() {
-                let _ = state.set_display_dim(Duration::from_secs(display_timeout), true);
+        if state.device_definition.device_type != DeviceType::BeacnMix {
+            let mut button_brightness = state.saved_settings.button_brightness;
+            let slider = Slider::new(&mut button_brightness, 0..=10).trailing_fill(true);
+            if self.draw_slider(ui, "Button Brightness:", slider) {
+                let _ = state.set_button_brightness(button_brightness, true);
             }
+        }
+
+        let mut display_timeout = state.saved_settings.display_dim.as_secs();
+        let slider = Slider::new(&mut display_timeout, 30..=300)
+            .suffix("s")
+            .trailing_fill(true);
+        if self.draw_slider(ui, "Display Timeout:", slider) {
+            let _ = state.set_display_dim(Duration::from_secs(display_timeout), true);
+        }
+    }
+}
+
+impl About {
+    fn draw_slider(&mut self, ui: &mut Ui, label: &str, slider: Slider) -> bool {
+        let mut changed = false;
+        ui.horizontal(|ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(LABEL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_width(LABEL_WIDTH);
+                    ui.label(label);
+                },
+            );
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(CONTROL_WIDTH, ui.spacing().interact_size.y),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.spacing_mut().slider_width = CONTROL_WIDTH;
+                    changed = ui.add(slider).changed();
+                },
+            );
         });
+        ui.add_space(4.);
+        changed
     }
 }
