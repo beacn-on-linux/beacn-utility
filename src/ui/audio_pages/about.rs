@@ -4,6 +4,7 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
 use egui::{RichText, Ui};
+use crate::ui::SVG;
 
 pub struct About {}
 
@@ -73,12 +74,35 @@ impl AudioPage for About {
         if let Some(inner) = &state.headphones.mic_class_compliant {
             let mut inner = *inner;
             const LABEL: &str = "Enable Mic Compliancy Mode";
-            if ui.checkbox(&mut inner, LABEL).changed() {
-                state.headphones.mic_class_compliant = Some(inner);
+            ui.horizontal(|ui| {
+                if ui.checkbox(&mut inner, LABEL).changed() {
+                    state.headphones.mic_class_compliant = Some(inner);
 
-                let message = Message::Headphones(Headphones::MicClassCompliant(inner));
-                state.handle_message(message).expect("Failed!");
-            }
+                    let message = Message::Headphones(Headphones::MicClassCompliant(inner));
+                    state.handle_message(message).expect("Failed!");
+                }
+
+                // Add clickable info icon
+                if let Some(info_icon) = SVG.get("info") {
+                    let info_button = ui.add(
+                        egui::ImageButton::new(egui::Image::new(info_icon.clone())
+                            .fit_to_exact_size(egui::vec2(16.0, 16.0)))
+                            .frame(false)
+                    );
+
+                    if info_button.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+
+                    if info_button.clicked() {
+                        ui.ctx().open_url(egui::OpenUrl::new_tab(
+                            "https://github.com/beacn-on-linux/beacn-utility/wiki/Beacn-Mic-Compliancy-Mode"
+                        ));
+                    }
+
+                    info_button.on_hover_text("Learn more about Mic Compliancy Mode");
+                }
+            });
             ui.add_space(5.0);
             ui.label("Note: When changing this value, the Beacn Mic will reboot.");
         }
