@@ -153,7 +153,6 @@ impl AudioPage for LightingPage {
                                 .expect("Failed to Send Message");
                         }
 
-
                         if state.lighting.suspend_mode == LightingSuspendMode::Brightness {
                             ui.spacing_mut().slider_width = CONTROL_WIDTH;
                             ui.add_space(4.);
