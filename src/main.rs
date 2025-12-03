@@ -257,7 +257,7 @@ pub fn get_autostart_file() -> Result<PathBuf> {
         bail!("Unable to obtain XDG Config Directory")
     };
     Ok(PathBuf::from(format!(
-        "{config_dir}/autostart/{APP_TLD}.desktop"
+        "{config_dir}/autostart/{APP_TLD}.{APP_NAME}.desktop"
     )))
 }
 
