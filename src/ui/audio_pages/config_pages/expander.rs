@@ -95,7 +95,7 @@ impl ConfigPage for ExpanderPage {
                     let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 1.0..=10.0);
                     if s.changed() {
                         let value = ExpanderRatio(values.ratio);
-                        let message = Message::Expander(Expander::Ratio(Simple, value));
+                        let message = Message::Expander(Expander::Ratio(Advanced, value));
                         state.handle_message(message).expect("Failed");
                     }
 
