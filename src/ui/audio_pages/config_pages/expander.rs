@@ -92,7 +92,7 @@ impl ConfigPage for ExpanderPage {
                         }
                     });
                 } else if expander.mode == Advanced {
-                    let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 0.0..=10.0);
+                    let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 1.0..=10.0);
                     if s.changed() {
                         let value = ExpanderRatio(values.ratio);
                         let message = Message::Expander(Expander::Ratio(Simple, value));
