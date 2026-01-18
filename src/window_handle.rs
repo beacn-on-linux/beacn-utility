@@ -1,8 +1,5 @@
 use crate::device_manager::DeviceMessage;
-use crate::{
-    APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context,
-    run_async_blocking,
-};
+use crate::{APP_NAME, AUTO_START_KEY, ToMainMessages, get_autostart_file, prepare_context, run_async_blocking, BACKGROUND_PARAM};
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
@@ -267,7 +264,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                 .dbus_activatable(false)
                                 .command::<Vec<_>, String>(vec![
                                     String::from(APP_NAME),
-                                    String::from("--startup"),
+                                    String::from(BACKGROUND_PARAM),
                                 ]);
 
                             debug!("Requesting Background Access");
@@ -303,7 +300,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                             .set("Type", "Application")
                                             .set("Name", "Beacn Utility")
                                             .set("Comment", "A Tool for Configuring Beacn Devices")
-                                            .set("Exec", format!("{exe:?} --startup"))
+                                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
                                             .set("Terminal", "false");
 
                                         match conf.write_to_file(path) {

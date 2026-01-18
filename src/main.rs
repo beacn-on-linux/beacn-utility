@@ -30,6 +30,9 @@ mod managers;
 mod ui;
 mod window_handle;
 
+const BACKGROUND_PARAM: &str = "--background";
+const LEGACY_BACKGROUND_PARAM: &str = "--startup";
+
 const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
 const APP_TITLE: &str = "Beacn Utility";
@@ -92,7 +95,7 @@ fn main() -> Result<()> {
     log_panics::init();
 
     let args: Vec<String> = env::args().collect();
-    let hide_initial = args.contains(&"--startup".to_string());
+    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string()) || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
 
     // Firstly, create a message bus which allows threads to message back to here
     let (main_tx, main_rx) = channel::unbounded();
