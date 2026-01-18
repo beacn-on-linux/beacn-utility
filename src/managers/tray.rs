@@ -38,7 +38,10 @@ pub fn handle_tray(
 
     let (icon_tx, icon_rx) = channel::bounded(20);
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
-    let handle = icon.spawn_without_dbus_name()?;
+    let handle = icon
+        .disable_dbus_name(true)
+        .assume_sni_available(true)
+        .spawn()?;
 
     loop {
         select! {

@@ -11,7 +11,7 @@ categories = ["hardware-support"]
 
 [dependencies]
 # Logging
-log = "0.4.28"
+log = "0.4.29"
 simplelog = "0.12.2"
 file-rotate = "0.8.0"
 log-panics = { version = "2.1.0", features = ["with-backtrace"]}
@@ -28,13 +28,13 @@ enum-map = "2.7.3"
 oneshot = "0.1.11"
 
 # Used for SIMD EQ calculations
-wide = "0.8.2"
+wide = "1.1.1"
 
 # UI Framework and Window Management
-egui = "0.33.0"
-egui_extras = { version = "0.33.0", features = ["svg"] }
-egui-winit = "0.33.0"
-egui_glow = "0.33.0"
+egui = "0.33.3"
+egui_extras = { version = "0.33.3", features = ["svg"] }
+egui-winit = "0.33.3"
+egui_glow = "0.33.3"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
@@ -45,17 +45,15 @@ beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0
 once_cell = "1.21.3"
 
 # Tray Handler
-# Upstream ksni doesn't handle cases where the tray service spawns after the icon has
-# been created. My branch fixes that.
-ksni = { git = "https://github.com/FrostyCoolSlug/ksni.git", features = ["blocking"] }
+ksni = { version = "0.3.3", features = ["blocking"] }
 
 # Image Handling
-image = "0.25.8"
+image = "0.25.9"
 fontdue = "0.9.3"
 
 # Apature Science Handheld Portal Device (autostart / background)
-tokio = { version = "1.47.1", features = ["rt-multi-thread"] }
-ashpd = { version = "0.12.0", features = ["raw_handle"] }
+tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
+ashpd = { version = "0.12.1", features = ["raw_handle"] }
 
 # For Creating .desktop files outside the flatpak runtime
 rust-ini = "0.21.3"
@@ -63,10 +61,10 @@ xdg = "3.0.0"
 
 # Profile Loading / Saving
 serde = "1.0.228"
-serde_json = "1.0.145"
+serde_json = "1.0.149"
 
 # Sleep Management
-zbus = "5.11.0"
+zbus = "5.13.1"
 
 # Pipeweaver Stuff
 pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver" }
