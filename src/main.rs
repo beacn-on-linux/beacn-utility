@@ -256,9 +256,27 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     } else {
         bail!("Unable to obtain XDG Config Directory")
     };
-    Ok(PathBuf::from(format!(
+
+    let path = PathBuf::from(format!(
         "{config_dir}/autostart/{APP_TLD}.{APP_NAME}.desktop"
-    )))
+    ));
+
+    let legacy_path = PathBuf::from(format!("{config_dir}/autostart/{APP_TLD}.desktop"));
+    if legacy_path.exists() {
+        if !path.exists() {
+            debug!(
+                "Migrating Legacy Autostart File from {legacy_path:?} to {path:?}"
+            );
+            std::fs::rename(&legacy_path, &path)?;
+        } else {
+            debug!(
+                "Removing Legacy Autostart File at {legacy_path:?} as new file exists",
+            );
+            std::fs::remove_file(&legacy_path)?;
+        }
+    }
+
+    Ok(path)
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the
