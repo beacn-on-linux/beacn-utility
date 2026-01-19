@@ -95,7 +95,8 @@ fn main() -> Result<()> {
     log_panics::init();
 
     let args: Vec<String> = env::args().collect();
-    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string()) || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
+    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string())
+        || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
 
     // Firstly, create a message bus which allows threads to message back to here
     let (main_tx, main_rx) = channel::unbounded();
@@ -267,14 +268,10 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     let legacy_path = PathBuf::from(format!("{config_dir}/autostart/{APP_TLD}.desktop"));
     if legacy_path.exists() {
         if !path.exists() {
-            debug!(
-                "Migrating Legacy Autostart File from {legacy_path:?} to {path:?}"
-            );
+            debug!("Migrating Legacy Autostart File from {legacy_path:?} to {path:?}");
             std::fs::rename(&legacy_path, &path)?;
         } else {
-            debug!(
-                "Removing Legacy Autostart File at {legacy_path:?} as new file exists",
-            );
+            debug!("Removing Legacy Autostart File at {legacy_path:?} as new file exists",);
             std::fs::remove_file(&legacy_path)?;
         }
     }
