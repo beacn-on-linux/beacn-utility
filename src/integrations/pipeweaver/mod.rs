@@ -4,8 +4,8 @@ use crate::integrations::pipeweaver::channel::{
     ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };
 use crate::integrations::pipeweaver::layout::{
-    BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, JPEG_QUALITY,
-    POSITION_ROOT, TEXT_COLOUR, TextAlign,
+    BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
+    JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
 use crate::runtime;
 use anyhow::{Context, Result, anyhow, bail};
@@ -14,7 +14,7 @@ use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use futures_util::{SinkExt, StreamExt};
-use image::{ImageBuffer, Rgba, RgbaImage};
+use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use log::{debug, info, warn};
 use pipeweaver_ipc::commands::APICommand::SetSourceVolume;
 use pipeweaver_ipc::commands::DaemonRequest::GetStatus;
@@ -455,6 +455,8 @@ impl PipeweaverHandler {
         let (width, height) = DISPLAY_DIMENSIONS;
         let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
 
+        DrawingUtils::composite_from_pos(&mut base, &jpeg_as_img(HEADER)?, (0, 0));
+
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
             let renderer = self.renderers.get(item).ok_or(error)?;
@@ -791,6 +793,13 @@ pub fn spawn_pipeweaver_handler(
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
     DrawingUtils::image_as_jpeg(image, background, JPEG_QUALITY)
+}
+
+fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
+    if let Ok(img) = load_from_memory(image) {
+        return Ok(img.into_rgba8());
+    }
+    bail!("Failed to load image");
 }
 
 fn sync_to_async(

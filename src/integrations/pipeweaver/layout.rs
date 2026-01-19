@@ -27,6 +27,8 @@ pub(crate) static FONT: &[u8] =
 pub(crate) static FONT_BOLD: &[u8] =
     include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
 
+pub(crate) static HEADER: &[u8] = include_bytes!("../../../resources/screens/header.jpg");
+
 pub(crate) static JPEG_QUALITY: u8 = 70;
 
 // Now, for sanity's sake, we're going to define some basic types
@@ -45,7 +47,7 @@ type DialVolumeJPEG = Lazy<EnumMap<Mix, HashMap<u8, Vec<u8>>>>;
 pub(crate) static DISPLAY_DIMENSIONS: Dimension = (800, 480);
 pub(crate) static CHANNEL_COUNT: u32 = 4;
 
-pub(crate) static POSITION_ROOT: Position = (0, 60);
+pub(crate) static POSITION_ROOT: Position = (0, 80);
 
 // Ok, so these statics are all self referencing, retrieving a jpeg for a dial will cause it
 // to generate the angle map for the circles, the text, the Mix A / B images for each percentage
