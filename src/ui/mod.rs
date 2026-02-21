@@ -3,10 +3,10 @@ use egui::{ImageSource, include_image};
 use once_cell::sync::Lazy;
 
 pub(crate) mod app;
-mod app_settings;
 mod audio_pages;
 mod controller_pages;
 mod numbers;
+mod pages;
 mod shared_pages;
 mod states;
 mod widgets;
@@ -54,6 +54,12 @@ pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
     map.insert(
         "eq_notch",
         include_image!("../../resources/ui/eq/notch.svg"),
+    );
+
+    // Pipeweaver Logo
+    map.insert(
+        "pipeweaver",
+        include_image!("../../resources/ui/pipeweaver.svg"),
     );
     map
 });

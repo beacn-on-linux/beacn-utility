@@ -1,11 +1,11 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
-use crate::ui::app_settings::settings_ui;
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
+use crate::ui::pages::{pipeweaver_ui, settings_ui};
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::states::controller_state::BeacnControllerState;
-use crate::ui::widgets::round_nav_button;
+use crate::ui::widgets::{round_nav_button, round_pipeweaver_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
@@ -27,6 +27,8 @@ pub struct BeacnMicApp {
     device_recv: channel::Receiver<DeviceMessage>,
     active_page: usize,
 
+    // We can probably do better here
+    mixer_active: bool,
     settings_active: bool,
 }
 
@@ -54,6 +56,8 @@ impl BeacnMicApp {
 
             device_recv,
             active_page: 0,
+
+            mixer_active: false,
             settings_active: false,
         }
     }
@@ -86,6 +90,14 @@ impl App for BeacnMicApp {
             .default_width(80.0)
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
+                    ui.add_space(5.0);
+                    if round_pipeweaver_button(ui, "pipeweaver", self.mixer_active).clicked() {
+                        self.settings_active = false;
+                        self.mixer_active = true;
+                    }
+                    ui.add_space(5.0);
+                    ui.separator();
+
                     // Grab the device list, and reorder it based on type
                     let mut devices = self.device_list.clone();
                     devices.sort_by_key(|d| d.device_type);
@@ -95,6 +107,7 @@ impl App for BeacnMicApp {
                     ui.add_space(ui.available_height() - 55.0);
                     ui.separator();
                     if round_nav_button(ui, "gear", self.settings_active).clicked() {
+                        self.mixer_active = false;
                         self.settings_active = true;
                     }
                 });
@@ -208,7 +221,8 @@ impl BeacnMicApp {
                 for (index, page) in audio_pages {
                     let selected = *active_device == device
                         && self.active_page == index
-                        && !self.settings_active;
+                        && !self.settings_active
+                        && !self.mixer_active;
                     let error = matches!(
                         device_state.device_state.state,
                         LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
@@ -219,6 +233,7 @@ impl BeacnMicApp {
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
                         self.settings_active = false;
+                        self.mixer_active = false;
                         self.active_device = Some(device.clone());
                         self.active_page = index;
                     }
@@ -242,7 +257,8 @@ impl BeacnMicApp {
                 for (index, page) in control_pages {
                     let selected = *active_device == device
                         && self.active_page == index
-                        && !self.settings_active;
+                        && !self.settings_active
+                        && !self.mixer_active;
 
                     let error = matches!(
                         device_state.device_state.state,
@@ -251,6 +267,7 @@ impl BeacnMicApp {
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
+                        self.mixer_active = false;
                         self.settings_active = false;
                         self.active_device = Some(device.clone());
                         self.active_page = index;
@@ -262,7 +279,14 @@ impl BeacnMicApp {
         }
     }
     fn render_content(&mut self, ctx: &Context) {
-        if self.active_device.is_none() && !self.settings_active {
+        if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
+            return;
+        }
+
+        if self.mixer_active {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                pipeweaver_ui(ui);
+            });
             return;
         }
 

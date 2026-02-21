@@ -33,6 +33,23 @@ pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     .inner
 }
 
+// So the pipeweaver button is the same as a basic button, but because it's already coloured
+// we don't need to add a tint to it, and also because of it's size we need far less padding
+pub fn round_pipeweaver_button(ui: &mut Ui, img: &str, active: bool) -> Response {
+    // We might need to do caching here..
+    let image = SVG.get(img).unwrap().clone();
+
+    ui.scope(|ui| {
+        ui.style_mut().spacing.button_padding = vec2(2.0, 2.0);
+        ui.add_sized(
+            [40.0, 40.0],
+            #[allow(deprecated)]
+            ImageButton::new(image).corner_radius(5.0).selected(active),
+        )
+    })
+    .inner
+}
+
 pub fn draw_range<T>(
     ui: &mut Ui,
     value: &mut T,
