@@ -1,10 +1,19 @@
 use crate::ui::states::{ErrorMessage, LoadState};
+use beacn_lib::manager::DeviceLocation;
 use egui::Ui;
 
-pub fn display_errors(ui: &mut Ui, load_state: &LoadState, errors: &Vec<ErrorMessage>) {
+pub fn display_errors(
+    ui: &mut Ui,
+    load_state: &LoadState,
+    device_location: &DeviceLocation,
+    errors: &Vec<ErrorMessage>,
+) {
     ui.add_sized(
         [ui.available_width(), ui.available_height()],
         |ui: &mut Ui| {
+            ui.heading("An error occurred while loading the device.");
+            ui.label(format!("USB Location: {}{}", device_location.bus_number, device_location.address));
+            ui.add_space(10.);
             match load_state {
                 LoadState::PermissionDenied => {
                     ui.vertical(|ui| {
@@ -13,14 +22,14 @@ pub fn display_errors(ui: &mut Ui, load_state: &LoadState, errors: &Vec<ErrorMes
                         ui.add_space(5.0);
                         ui.hyperlink_to("Please visit this wiki page for help.", "https://github.com/beacn-on-linux/beacn-permissions/wiki/Installing-Device-Permission");
                     })
-                    .response
+                        .response
                 }
                 LoadState::ResourceBusy => {
                     ui.vertical(|ui| {
                         ui.label("Resource Busy");
                         ui.label("The connected device is currently in use by another application. Please close any other applications that may be using the device and try again.");
                     })
-                    .response
+                        .response
                 }
                 LoadState::Error => {
                     ui.vertical(|ui| {
@@ -35,7 +44,7 @@ pub fn display_errors(ui: &mut Ui, load_state: &LoadState, errors: &Vec<ErrorMes
                             }
                         }
                     })
-                    .response
+                        .response
                 }
                 _ => {
                     ui.vertical(|ui| ui.label("WHAT THE HELL IS THIS?!"))

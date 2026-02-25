@@ -21,6 +21,11 @@ impl AudioPage for ErrorPage {
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
-        display_errors(ui, &state.device_state.state, &state.device_state.errors);
+        display_errors(
+            ui,
+            &state.device_state.state,
+            &state.device_definition.location,
+            &state.device_state.errors,
+        );
     }
 }
