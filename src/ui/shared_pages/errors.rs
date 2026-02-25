@@ -11,28 +11,22 @@ pub fn display_errors(
     ui.add_sized(
         [ui.available_width(), ui.available_height()],
         |ui: &mut Ui| {
-            ui.heading("An error occurred while loading the device.");
-            ui.label(format!("USB Location: {}{}", device_location.bus_number, device_location.address));
-            ui.add_space(10.);
-            match load_state {
-                LoadState::PermissionDenied => {
-                    ui.vertical(|ui| {
+            ui.vertical(|ui| {
+                ui.heading("An error occurred while loading the device.");
+                ui.label(format!("USB Location: {}:{}", device_location.bus_number, device_location.address));
+                ui.add_space(10.);
+                match load_state {
+                    LoadState::PermissionDenied => {
                         ui.label("Permission Denied");
                         ui.label("The application does not have permission to access the connected device.");
                         ui.add_space(5.0);
                         ui.hyperlink_to("Please visit this wiki page for help.", "https://github.com/beacn-on-linux/beacn-permissions/wiki/Installing-Device-Permission");
-                    })
-                        .response
-                }
-                LoadState::ResourceBusy => {
-                    ui.vertical(|ui| {
+                    }
+                    LoadState::ResourceBusy => {
                         ui.label("Resource Busy");
                         ui.label("The connected device is currently in use by another application. Please close any other applications that may be using the device and try again.");
-                    })
-                        .response
-                }
-                LoadState::Error => {
-                    ui.vertical(|ui| {
+                    }
+                    LoadState::Error => {
                         ui.label("Device in Error State");
                         for message in errors {
                             ui.add_space(15.0);
@@ -43,14 +37,11 @@ pub fn display_errors(
                                 ui.label(format!("Message: {message:?}"));
                             }
                         }
-                    })
-                        .response
+                    }
+                    _ => {
+                        ui.label("Shouldn't Happen?");
+                    }
                 }
-                _ => {
-                    ui.vertical(|ui| ui.label("WHAT THE HELL IS THIS?!"))
-                        .response
-                }
-            }
-        },
-    );
+            }).response
+        });
 }
