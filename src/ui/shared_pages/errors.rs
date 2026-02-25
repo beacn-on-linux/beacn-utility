@@ -1,6 +1,6 @@
 use crate::ui::states::{ErrorMessage, LoadState};
 use beacn_lib::manager::DeviceLocation;
-use egui::Ui;
+use egui::{RichText, Ui};
 
 pub fn display_errors(
     ui: &mut Ui,
@@ -25,6 +25,11 @@ pub fn display_errors(
                     LoadState::ResourceBusy => {
                         ui.label("Resource Busy");
                         ui.label("The connected device is currently in use by another application. Please close any other applications that may be using the device and try again.");
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Note:").strong());
+                            ui.label("This problem may be caused by older firmware, please ensure your device is up-to-date");
+                        });
                     }
                     LoadState::Error => {
                         ui.label("Device in Error State");
