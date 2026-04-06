@@ -27,7 +27,7 @@ use beacn_lib::manager::{
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use log::debug;
+use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
@@ -49,8 +49,17 @@ pub fn spawn_device_manager(
     // We need a hashmap that'll map a receiver to an object
     let mut receiver_map: Vec<DeviceMap> = vec![];
 
-    spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
-    thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
+    if let Err(e) = spawn_hotplug_handler(plug_tx, manage_rx) {
+        error!("Failed to spawn HotPlug Handler: {e}");
+        let _ = self_tx.send(ToMainMessages::Quit);
+        return;
+    }
+
+    thread::spawn(move || {
+        if let Err(e) = spawn_login_handler(login_tx, login_stop_rx) {
+            error!("Login handler exited with error: {e}");
+        }
+    });
 
     loop {
         let mut selector = Select::new();
