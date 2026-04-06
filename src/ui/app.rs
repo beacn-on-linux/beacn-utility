@@ -12,7 +12,7 @@ use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
-use log::debug;
+use log::{debug, warn};
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -208,7 +208,10 @@ impl BeacnMicApp {
             // These are probably going to eventually need to be separated, when
             // Studio Link support is added, a new page will be needed
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                let device_state = self.audio_device_list.get(&device).unwrap();
+                let Some(device_state) = self.audio_device_list.get(&device) else {
+                    warn!("Missing audio device state for {:?}", device.location);
+                    return;
+                };
                 ui.add_space(5.0);
 
                 match device.device_type {
@@ -244,7 +247,10 @@ impl BeacnMicApp {
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                 // This is identical to the above, except with a BeacnControllerState and ControllerPages
                 // There's probably a way we can simplify this :p
-                let device_state = self.control_device_list.get(&device).unwrap();
+                let Some(device_state) = self.control_device_list.get(&device) else {
+                    warn!("Missing control device state for {:?}", device.location);
+                    return;
+                };
                 ui.add_space(5.0);
 
                 match device.device_type {

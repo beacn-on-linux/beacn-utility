@@ -198,10 +198,14 @@ impl WindowRunner {
     }
 }
 
+fn desktop_entry_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 // This is a helper function which lets the app send a UserEvent into the context
 pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
     ctx.data(|data| {
-        if let Some(proxy) = data.get_temp::<EventProxy>(Id::new(EVENT_PROXY)) {
+        if let Some(proxy) = data.get_persisted::<EventProxy>(Id::new(EVENT_PROXY)) {
             let _ = proxy.0.send_event(event);
         }
     });
@@ -297,13 +301,13 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                 } else if create {
                                     if let Ok(exe) = env::current_exe() {
                                         let mut conf = Ini::new();
-                                        let exe = exe.to_string_lossy().to_string();
+                                        let exe = desktop_entry_escape(&exe.to_string_lossy());
 
                                         conf.with_section(Some("Desktop Entry"))
                                             .set("Type", "Application")
                                             .set("Name", "Beacn Utility")
                                             .set("Comment", "A Tool for Configuring Beacn Devices")
-                                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
+                                            .set("Exec", format!("\"{exe}\" {BACKGROUND_PARAM}"))
                                             .set("Terminal", "false");
 
                                         match conf.write_to_file(path) {
