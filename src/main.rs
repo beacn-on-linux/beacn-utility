@@ -13,7 +13,7 @@ use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{LevelFilter, debug, error, info};
+use log::{LevelFilter, debug, error, info, warn};
 use managers::tray::handle_tray;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
@@ -131,7 +131,7 @@ fn main() -> Result<()> {
 
     let window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
-        .with_window_icon(Some(load_icon(ICON)))
+        .with_window_icon(load_icon(ICON))
         .with_inner_size(LogicalSize::new(1024, 500))
         .with_name(resource_class, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
@@ -232,14 +232,25 @@ fn prepare_context(ctx: &mut Context) {
     })
 }
 
-fn load_icon(bytes: &[u8]) -> Icon {
-    let (icon_rgba, icon_width, icon_height) = {
-        let image = image::load_from_memory(bytes).unwrap().into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        (rgba, width, height)
+fn load_icon(bytes: &[u8]) -> Option<Icon> {
+    let image = match image::load_from_memory(bytes) {
+        Ok(image) => image.into_rgba8(),
+        Err(e) => {
+            warn!("Failed to decode application icon: {e}");
+            return None;
+        }
     };
-    Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+
+    let (width, height) = image.dimensions();
+    let rgba = image.into_raw();
+
+    match Icon::from_rgba(rgba, width, height) {
+        Ok(icon) => Some(icon),
+        Err(e) => {
+            warn!("Failed to build application icon: {e}");
+            None
+        }
+    }
 }
 
 fn has_autostart() -> Result<bool> {
