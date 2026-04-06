@@ -137,19 +137,28 @@ fn main() -> Result<()> {
         .with_min_inner_size(LogicalSize::new(1024, 500));
 
     // Ok, spawn up the thread responsible for the UI
-    let device_rx_inner = device_rx.clone();
     let window_main_tx = main_tx.clone();
     let window = thread::spawn(move || {
-        let app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
+        let app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx));
 
-        // Create the event loop, an egui context, and the initial app state
-        let mut event_loop = EventLoop::<UserEvent>::with_user_event()
+        let event_loop = EventLoop::<UserEvent>::with_user_event()
             // This is a Linux tool, so we're safe to run the UI in a separate thread
             .with_any_thread(true)
-            .build()
-            .expect("Failed to create event loop");
-        let runner = WindowRunner::new(app, window_main_tx, window_attributes.clone());
-        runner.run(&mut event_loop, hide_initial).expect("UI Crash");
+            .build();
+
+        match event_loop {
+            Ok(mut event_loop) => {
+                let runner = WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
+                if let Err(e) = runner.run(&mut event_loop, hide_initial) {
+                    error!("UI thread exited with error: {e}");
+                    let _ = window_main_tx.send(ToMainMessages::Quit);
+                }
+            }
+            Err(e) => {
+                error!("Failed to create event loop: {e}");
+                let _ = window_main_tx.send(ToMainMessages::Quit);
+            }
+        }
     });
 
     // Wait for a message to do stuff
@@ -182,18 +191,6 @@ fn main() -> Result<()> {
                     }
                     Err(e) => {
                         error!("Main Loop Broken, bailing: {e}");
-                        break;
-                    }
-                }
-            }
-            recv(device_rx) -> msg => {
-                match msg {
-                    Ok(msg) => {
-                        // Pump this to the UI
-                        send_user_event(&context, UserEvent::DeviceMessage(msg))
-                    }
-                    Err(e) => {
-                        error!("Device Handler Broken, bailing: {e}");
                         break;
                     }
                 }
