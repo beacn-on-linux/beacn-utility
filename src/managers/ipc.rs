@@ -71,17 +71,17 @@ pub fn handle_ipc(
                         let mut msg = String::new();
                         if let Err(e) = stream.read_to_string(&mut msg) {
                             warn!("Failed to read from message from stream: {e}");
-                            break;
-                        } else {
-                            match msg.as_str() {
-                                "TRIGGER" => {
-                                    let _ = main_tx.send(ToMainMessages::SpawnWindow);
-                                },
-                                _ => {
-                                    debug!("Unknown Message, aborting: {msg}");
-                                    break;
-                                },
-                            }
+                            continue;
+                        }
+
+                        match msg.trim() {
+                            "TRIGGER" => {
+                                let _ = main_tx.send(ToMainMessages::SpawnWindow);
+                            },
+                            _ => {
+                                debug!("Unknown IPC message ignored: {msg:?}");
+                                continue;
+                            },
                         }
                     }
                     Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
@@ -89,7 +89,7 @@ pub fn handle_ipc(
                     }
                     Err(e) => {
                         warn!("Unexpected socket error: {e}");
-                        break;
+                        continue;
                     }
                 }
             }
@@ -128,6 +128,17 @@ pub fn handle_active_instance() -> bool {
     false
 }
 
+#[cfg(unix)]
+fn get_socket_file_path() -> PathBuf {
+    let base_dir = env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(env::temp_dir);
+
+    base_dir.join(APP_NAME).join(get_socket_file_name())
+}
+
+#[cfg(windows)]
 fn get_socket_file_path() -> PathBuf {
     env::temp_dir().join(APP_NAME).join(get_socket_file_name())
 }
