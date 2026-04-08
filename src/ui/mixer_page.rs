@@ -1,3 +1,4 @@
+
 //! Mixer UI page for Pipeweaver audio routing.
 //!
 //! Renders source channel strips, channel management, application routing,
@@ -8,88 +9,34 @@ use egui::{Color32, ComboBox, Grid, RichText, ScrollArea, Ui, Vec2};
 use pipeweaver_ipc::commands::{APICommand, Application, PhysicalDevice};
 use pipeweaver_shared::{AppDefinition, AppTarget, DeviceType, Mix, MuteTarget, NodeType};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use ulid::Ulid;
-
-fn pipeweaver_autostart_path() -> Option<PathBuf> {
-    let config_dir = std::env::var("XDG_CONFIG_HOME")
-        .or_else(|_| std::env::var("HOME").map(|h| format!("{h}/.config")))
-        .ok()?;
-    Some(PathBuf::from(format!(
-        "{config_dir}/autostart/io.github.pipeweaver.pipeweaver.desktop"
-    )))
-}
-
-pub fn pipeweaver_autostart_enabled() -> bool {
-    pipeweaver_autostart_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
-}
-
-fn set_pipeweaver_autostart(enabled: bool) {
-    let Some(path) = pipeweaver_autostart_path() else {
-        return;
-    };
-
-    if !enabled {
-        let _ = std::fs::remove_file(&path);
-        return;
-    }
-
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    let exe = which_pipeweaver_daemon();
-    let content = format!(
-        "[Desktop Entry]\nType=Application\nName=Pipeweaver\n\
-         Comment=Audio Control and Routing\nExec={exe} --background\nTerminal=false\n"
-    );
-    let _ = std::fs::write(&path, content);
-}
-
-fn which_pipeweaver_daemon() -> String {
-    if let Ok(output) = std::process::Command::new("which").arg("pipeweaver").output() {
-        if output.status.success() {
-            if let Ok(s) = String::from_utf8(output.stdout) {
-                let trimmed = s.trim().to_string();
-                if !trimmed.is_empty() {
-                    return trimmed;
-                }
-            }
-        }
-    }
-    "pipeweaver".to_string()
-}
 
 pub struct MixerPageState {
     pub active_mix: Mix,
-    pub autostart_enabled: bool,
     pub new_channel_name: String,
     pub selected_new_channel_input: Option<u32>,
     pub selected_manage_channel: Option<Ulid>,
     pub selected_manage_input: Option<u32>,
+    pending_attach_channel_name: Option<String>,
+    pending_attach_input: Option<u32>,
 }
 
 impl Default for MixerPageState {
     fn default() -> Self {
         Self {
             active_mix: Mix::default(),
-            autostart_enabled: pipeweaver_autostart_enabled(),
             new_channel_name: String::new(),
             selected_new_channel_input: None,
             selected_manage_channel: None,
             selected_manage_input: None,
+            pending_attach_channel_name: None,
+            pending_attach_input: None,
         }
     }
 }
 
 pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut MixerPageState) {
     let snap = state.snapshot();
-
-    draw_header(ui, state, page_state, snap.connected);
-
-    ui.separator();
 
     if let Some(ref status) = snap.status {
         let profile = &status.audio.profile;
@@ -98,9 +45,12 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
         let routes = &profile.routes;
         let apps = &status.audio.applications;
         let physical_source_devices = &status.audio.devices[DeviceType::Source];
-
         let source_channels = build_source_channels(sources, apps);
 
+        process_pending_attach(state, page_state, &source_channels);
+        draw_header(ui, state, page_state, snap.connected, status.config.auto_start);
+
+        ui.separator();
         draw_channel_management(
             ui,
             state,
@@ -121,6 +71,8 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
         ui.separator();
         draw_footer(ui);
     } else {
+        draw_header(ui, state, page_state, snap.connected, false);
+        ui.separator();
         ui.centered_and_justified(|ui| {
             ui.label(
                 RichText::new("Waiting for Pipeweaver status…")
@@ -130,11 +82,39 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
     }
 }
 
+fn process_pending_attach(
+    state: &SharedPipeweaverState,
+    page_state: &mut MixerPageState,
+    channels: &[SourceChannel],
+) {
+    let Some(channel_name) = page_state.pending_attach_channel_name.clone() else {
+        return;
+    };
+    let Some(input_node_id) = page_state.pending_attach_input else {
+        return;
+    };
+
+    let exists = channels
+        .iter()
+        .any(|channel| channel.is_virtual && channel.name == channel_name);
+
+    if exists {
+        state.send_command(APICommand::AttachPhysicalNodeByName(
+            channel_name,
+            input_node_id,
+        ));
+        page_state.pending_attach_channel_name = None;
+        page_state.pending_attach_input = None;
+        page_state.selected_new_channel_input = None;
+    }
+}
+
 fn draw_header(
     ui: &mut Ui,
     state: &SharedPipeweaverState,
     page_state: &mut MixerPageState,
     connected: bool,
+    autostart_enabled: bool,
 ) {
     ui.horizontal(|ui| {
         let (dot_colour, status_text) = if connected {
@@ -200,10 +180,9 @@ fn draw_header(
 
         ui.add_space(16.0);
 
-        let mut auto = page_state.autostart_enabled;
+        let mut auto = autostart_enabled;
         if ui.checkbox(&mut auto, "Autostart Pipeweaver").changed() {
-            page_state.autostart_enabled = auto;
-            set_pipeweaver_autostart(auto);
+            state.send_daemon_command(pipeweaver_ipc::commands::DaemonCommand::SetAutoStart(auto));
         }
     });
 }
@@ -298,15 +277,9 @@ fn draw_channel_management(
                     trimmed.clone(),
                 ));
 
-                if let Some(node_id) = page_state.selected_new_channel_input {
-                    state.send_command(APICommand::AttachPhysicalNodeByName(
-                        trimmed.clone(),
-                        node_id,
-                    ));
-                }
-
+                page_state.pending_attach_channel_name = Some(trimmed);
+                page_state.pending_attach_input = page_state.selected_new_channel_input;
                 page_state.new_channel_name.clear();
-                page_state.selected_new_channel_input = None;
             }
         });
     });
@@ -381,10 +354,7 @@ fn draw_channel_management(
                 if let (Some(channel), Some(node_id)) =
                     (selected_virtual_channel, page_state.selected_manage_input)
                 {
-                    state.send_command(APICommand::AttachPhysicalNodeByName(
-                        channel.name.clone(),
-                        node_id,
-                    ));
+                    state.send_command(APICommand::AttachPhysicalNode(channel.id, node_id));
                 }
             }
 
@@ -408,7 +378,8 @@ struct SourceChannel {
     colour: Color32,
     volume_a: u8,
     volume_b: u8,
-    muted: bool,
+    muted_a: bool,
+    muted_b: bool,
     app_count: usize,
     is_virtual: bool,
 }
@@ -438,8 +409,8 @@ fn build_source_channels(
             colour: colour32(&dev.description.colour),
             volume_a: dev.volumes.volume[Mix::A],
             volume_b: dev.volumes.volume[Mix::B],
-            muted: dev.mute_states.mute_state.contains(&MuteTarget::TargetA)
-                || dev.mute_states.mute_state.contains(&MuteTarget::TargetB),
+            muted_a: dev.mute_states.mute_state.contains(&MuteTarget::TargetA),
+            muted_b: dev.mute_states.mute_state.contains(&MuteTarget::TargetB),
             app_count: app_counts.get(&dev.description.id).copied().unwrap_or(0),
             is_virtual: false,
         });
@@ -452,8 +423,8 @@ fn build_source_channels(
             colour: colour32(&dev.description.colour),
             volume_a: dev.volumes.volume[Mix::A],
             volume_b: dev.volumes.volume[Mix::B],
-            muted: dev.mute_states.mute_state.contains(&MuteTarget::TargetA)
-                || dev.mute_states.mute_state.contains(&MuteTarget::TargetB),
+            muted_a: dev.mute_states.mute_state.contains(&MuteTarget::TargetA),
+            muted_b: dev.mute_states.mute_state.contains(&MuteTarget::TargetB),
             app_count: app_counts.get(&dev.description.id).copied().unwrap_or(0),
             is_virtual: true,
         });
@@ -515,9 +486,9 @@ fn draw_single_strip(
 
             ui.add_space(4.0);
 
-            let current_volume = match page_state.active_mix {
-                Mix::A => ch.volume_a,
-                Mix::B => ch.volume_b,
+            let (current_volume, current_muted, mute_target) = match page_state.active_mix {
+                Mix::A => (ch.volume_a, ch.muted_a, MuteTarget::TargetA),
+                Mix::B => (ch.volume_b, ch.muted_b, MuteTarget::TargetB),
             };
             let mut vol = current_volume as f32;
 
@@ -540,14 +511,14 @@ fn draw_single_strip(
 
             ui.add_space(4.0);
 
-            let mute_colour = if ch.muted {
+            let mute_colour = if current_muted {
                 Color32::from_rgb(200, 60, 60)
             } else {
                 Color32::from_rgb(60, 60, 60)
             };
-            let mute_label = RichText::new(if ch.muted { "MUTED" } else { "MUTE" })
+            let mute_label = RichText::new(if current_muted { "MUTED" } else { "MUTE" })
                 .size(10.0)
-                .color(if ch.muted {
+                .color(if current_muted {
                     Color32::WHITE
                 } else {
                     Color32::from_rgb(160, 160, 160)
@@ -560,10 +531,10 @@ fn draw_single_strip(
                 )
                 .clicked()
             {
-                if ch.muted {
-                    state.send_command(APICommand::DelSourceMuteTarget(ch.id, MuteTarget::TargetA));
+                if current_muted {
+                    state.send_command(APICommand::DelSourceMuteTarget(ch.id, mute_target));
                 } else {
-                    state.send_command(APICommand::AddSourceMuteTarget(ch.id, MuteTarget::TargetA));
+                    state.send_command(APICommand::AddSourceMuteTarget(ch.id, mute_target));
                 }
             }
 

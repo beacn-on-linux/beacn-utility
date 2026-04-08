@@ -1,3 +1,4 @@
+
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
@@ -29,11 +30,9 @@ pub struct BeacnMicApp {
     device_recv: channel::Receiver<DeviceMessage>,
     active_page: usize,
 
-    // We can probably do better here
     mixer_active: bool,
     settings_active: bool,
 
-    // Pipeweaver mixer state (shared with the async handler)
     pipeweaver_state: Option<SharedPipeweaverState>,
     mixer_page_state: MixerPageState,
 }
@@ -78,13 +77,11 @@ impl App for BeacnMicApp {
     }
 
     fn update(&mut self, ctx: &Context) {
-        // Grab any device information that's been sent since the last update
         let messages: Vec<DeviceMessage> = self.device_recv.try_iter().collect();
         for message in messages {
             self.handle_device_message(message);
         }
 
-        // Is our Device List empty?
         if self.device_list.is_empty() {
             egui::CentralPanel::default().show(ctx, |ui: &mut Ui| {
                 ui.add_sized(ui.available_size(), |ui: &mut Ui| {
@@ -107,7 +104,6 @@ impl App for BeacnMicApp {
                     ui.add_space(5.0);
                     ui.separator();
 
-                    // Grab the device list, and reorder it based on type
                     let mut devices = self.device_list.clone();
                     devices.sort_by_key(|d| d.device_type);
                     for device in devices {
@@ -122,12 +118,10 @@ impl App for BeacnMicApp {
                 });
             });
 
-        // Render the main page
         self.render_content(ctx);
     }
 
     fn should_close(&mut self) -> bool {
-        // TODO: This should prompt the user, and / or check the settings
         true
     }
 
@@ -145,10 +139,7 @@ impl App for BeacnMicApp {
         match message {
             DeviceMessage::DeviceArrived(device) => match device {
                 DeviceArriveMessage::Audio(definition, sender) => {
-                    // Load the Device State
                     let state = BeacnAudioState::load_settings(definition.clone(), sender);
-
-                    // Store the Device, and the device state
                     self.device_list.push(definition.clone());
                     self.audio_device_list.insert(definition.clone(), state);
 
@@ -161,7 +152,6 @@ impl App for BeacnMicApp {
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
 
-                    // Store the Pipeweaver shared state for the mixer UI
                     if let Some(pw) = pw_state {
                         self.pipeweaver_state = Some(pw);
                     }
@@ -172,15 +162,11 @@ impl App for BeacnMicApp {
                 }
             },
             DeviceMessage::DeviceRemoved(location) => {
-                // Find the index of this device in the device list
                 let position = self.device_list.iter().position(|d| d.location == location);
                 if let Some(position) = position {
-                    // This is a little complicated, first get the device definition, and
-                    // remove it from the relevant device list.
                     let definition = &self.device_list[position].clone();
                     match definition.device_type {
                         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                            // Remove this device from the audio device list
                             self.audio_device_list.remove(definition);
                         }
                         DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
@@ -188,17 +174,21 @@ impl App for BeacnMicApp {
                         }
                     }
 
-                    // Now remove it from the main device list
                     self.device_list.retain(|d| d != definition);
 
-                    // Make sure we're not referencing this device as active
+                    let has_mixer_device = self.device_list.iter().any(|d| {
+                        matches!(d.device_type, DeviceType::BeacnMix | DeviceType::BeacnMixCreate)
+                    });
+                    if !has_mixer_device {
+                        self.pipeweaver_state = None;
+                    }
+
                     if let Some(active_device) = &self.active_device
                         && active_device == definition
                     {
                         if self.device_list.is_empty() {
                             self.active_device = None;
                         } else {
-                            // Reset the State, set the active device as the first device
                             let first = self.device_list.first().unwrap();
                             self.active_device = Some(first.clone());
                             self.active_page = 0;
@@ -219,8 +209,6 @@ impl BeacnMicApp {
 
         let active_device = &self.active_device.clone().unwrap();
         match device.device_type {
-            // These are probably going to eventually need to be separated, when
-            // Studio Link support is added, a new page will be needed
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                 let device_state = self.audio_device_list.get(&device).unwrap();
                 ui.add_space(5.0);
@@ -256,8 +244,6 @@ impl BeacnMicApp {
                 ui.separator();
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                // This is identical to the above, except with a BeacnControllerState and ControllerPages
-                // There's probably a way we can simplify this :p
                 let device_state = self.control_device_list.get(&device).unwrap();
                 ui.add_space(5.0);
 
@@ -292,6 +278,7 @@ impl BeacnMicApp {
             }
         }
     }
+
     fn render_content(&mut self, ctx: &Context) {
         if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
             return;
@@ -318,7 +305,6 @@ impl BeacnMicApp {
         let definition = &self.active_device.clone().unwrap();
         match definition.device_type {
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                // Get the Settings from the definition
                 let settings = self.audio_device_list.get_mut(definition);
                 if settings.is_none() {
                     return;
@@ -330,7 +316,6 @@ impl BeacnMicApp {
                     LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
                 );
 
-                // Are we in an error state, if so, show the error
                 if error {
                     let position = self.audio_pages.iter().position(|p| p.show_on_error());
                     if let Some(page) = position {
