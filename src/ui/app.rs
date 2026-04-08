@@ -68,7 +68,7 @@ impl App for BeacnMicApp {
         egui_extras::install_image_loaders(ctx);
     }
 
-    fn update(&mut self, ctx: &Context) {
+    fn update(&mut self, ui: &mut Ui) {
         // Grab any device information that's been sent since the last update
         let messages: Vec<DeviceMessage> = self.device_recv.try_iter().collect();
         for message in messages {
@@ -77,7 +77,7 @@ impl App for BeacnMicApp {
 
         // Is our Device List empty?
         if self.device_list.is_empty() {
-            egui::CentralPanel::default().show(ctx, |ui: &mut Ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui: &mut Ui| {
                 ui.add_sized(ui.available_size(), |ui: &mut Ui| {
                     ui.label("No Devices Detected")
                 });
@@ -85,10 +85,10 @@ impl App for BeacnMicApp {
             return;
         }
 
-        egui::SidePanel::left("left_panel")
+        egui::Panel::left("left_panel")
             .resizable(false)
-            .default_width(80.0)
-            .show(ctx, |ui| {
+            .default_size(80.0)
+            .show_inside(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(5.0);
                     if round_pipeweaver_button(ui, "pipeweaver", self.mixer_active).clicked() {
@@ -114,7 +114,7 @@ impl App for BeacnMicApp {
             });
 
         // Render the main page
-        self.render_content(ctx);
+        self.render_content(ui);
     }
 
     fn should_close(&mut self) -> bool {
@@ -278,21 +278,21 @@ impl BeacnMicApp {
             }
         }
     }
-    fn render_content(&mut self, ctx: &Context) {
+    fn render_content(&mut self, ui: &mut Ui) {
         if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
             return;
         }
 
         if self.mixer_active {
-            egui::CentralPanel::default().show(ctx, |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
                 pipeweaver_ui(ui);
             });
             return;
         }
 
         if self.settings_active {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                settings_ui(ui, ctx);
+            egui::CentralPanel::default().show_inside(ui, |ui| {
+                settings_ui(ui);
             });
             return;
         }
@@ -320,7 +320,7 @@ impl BeacnMicApp {
                     }
                 }
 
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     self.audio_pages[self.active_page].ui(ui, settings);
                 });
             }
@@ -331,7 +331,7 @@ impl BeacnMicApp {
                 }
 
                 let settings = settings.unwrap();
-                egui::CentralPanel::default().show(ctx, |ui| {
+                egui::CentralPanel::default().show_inside(ui, |ui| {
                     self.control_pages[self.active_page].ui(ui, settings);
                 });
             }

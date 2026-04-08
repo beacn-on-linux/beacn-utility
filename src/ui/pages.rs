@@ -1,18 +1,18 @@
 use crate::AUTO_START_KEY;
 use crate::window_handle::{UserEvent, send_user_event};
-use egui::{Color32, Context, Id, RichText, Ui};
+use egui::{Color32, Id, RichText, Ui};
 
-pub(crate) fn settings_ui(ui: &mut Ui, context: &Context) {
+pub(crate) fn settings_ui(ui: &mut Ui) {
     // Get the Auto-start state from the context
     let id = Id::new(AUTO_START_KEY);
-    let value: Option<Option<bool>> = context.memory(|mem| mem.data.get_temp::<Option<bool>>(id));
+    let value: Option<Option<bool>> = ui.ctx().memory(|mem| mem.data.get_temp::<Option<bool>>(id));
     if let Some(lookup) = value {
         if let Some(value) = lookup {
             let mut current = value;
 
             // Change AutoStart settings
             if ui.checkbox(&mut current, "Auto Start").changed() {
-                send_user_event(context, UserEvent::SetAutoStart(current));
+                send_user_event(ui.ctx(), UserEvent::SetAutoStart(current));
             }
         }
     } else {

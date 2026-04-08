@@ -31,10 +31,10 @@ oneshot = { version = "0.2.1", features = ["std"] }
 wide = "1.1.1"
 
 # UI Framework and Window Management
-egui = "0.33.3"
-egui_extras = { version = "0.33.3", features = ["svg"] }
-egui-winit = "0.33.3"
-egui_glow = "0.33.3"
+egui = "0.34.0"
+egui_extras = { version = "0.34.0", features = ["svg"] }
+egui-winit = "0.34.0"
+egui_glow = "0.34.0"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
