@@ -1,7 +1,7 @@
 use crate::APP_NAME;
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use beacn_lib::crossbeam::channel::Sender;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -101,8 +101,10 @@ impl BeacnControllerState {
     fn send_control(&self, message: ControlMessage) -> Result<()> {
         if let Some(tx) = &self.device_sender {
             tx.send(message)?;
+            Ok(())
+        } else {
+            Err(anyhow!("Device control channel unavailable"))
         }
-        Ok(())
     }
 
     pub fn load_from_file(&mut self) {
@@ -185,7 +187,7 @@ where
 {
     let brightness = u8::deserialize(deserializer)?;
     if brightness > 100 {
-        Err(serde::de::Error::custom("Brightness should be below 10"))
+        Err(serde::de::Error::custom("Brightness should be below 100"))
     } else {
         Ok(brightness)
     }

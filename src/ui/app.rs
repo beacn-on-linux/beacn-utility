@@ -1,4 +1,3 @@
-
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
@@ -15,7 +14,7 @@ use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
-use log::debug;
+use log::{debug, warn};
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -210,7 +209,10 @@ impl BeacnMicApp {
         let active_device = &self.active_device.clone().unwrap();
         match device.device_type {
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                let device_state = self.audio_device_list.get(&device).unwrap();
+                let Some(device_state) = self.audio_device_list.get(&device) else {
+                    warn!("Missing audio device state for {:?}", device.location);
+                    return;
+                };
                 ui.add_space(5.0);
 
                 match device.device_type {
@@ -244,7 +246,12 @@ impl BeacnMicApp {
                 ui.separator();
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                let device_state = self.control_device_list.get(&device).unwrap();
+                // This is identical to the above, except with a BeacnControllerState and ControllerPages
+                // There's probably a way we can simplify this :p
+                let Some(device_state) = self.control_device_list.get(&device) else {
+                    warn!("Missing control device state for {:?}", device.location);
+                    return;
+                };
                 ui.add_space(5.0);
 
                 match device.device_type {
