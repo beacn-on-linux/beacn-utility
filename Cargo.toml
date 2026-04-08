@@ -14,18 +14,18 @@ categories = ["hardware-support"]
 log = "0.4.29"
 simplelog = "0.12.2"
 file-rotate = "0.8.0"
-log-panics = { version = "2.1.0", features = ["with-backtrace"]}
+log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 
 # Error Handling
-anyhow = "1.0.100"
+anyhow = "1.0.102"
 
 # Enum Helpers
-strum = "0.27.2"
-strum_macros = "0.27.2"
+strum = "0.28.0"
+strum_macros = "0.28.0"
 enum-map = "2.7.3"
 
 # Used for Sending and Receiving Messages
-oneshot = "0.1.11"
+oneshot = { version = "0.2.1", features = ["std"] }
 
 # Used for SIMD EQ calculations
 wide = "1.1.1"
@@ -38,7 +38,7 @@ egui_glow = "0.33.3"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.4" }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.5" }
 #beacn-lib = { path = "../beacn-lib" }
 
 # Used for Lazy Initialisation
@@ -53,7 +53,7 @@ fontdue = "0.9.3"
 
 # Apature Science Handheld Portal Device (autostart / background)
 tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
-ashpd = { version = "0.12.1", features = ["raw_handle"] }
+ashpd = { version = "0.13.9", features = ["raw_handle", "background"] }
 
 # For Creating .desktop files outside the flatpak runtime
 rust-ini = "0.21.3"
@@ -70,8 +70,8 @@ zbus = "5.13.1"
 pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver" }
-tokio-tungstenite = "0.28.0"
-futures-util = "0.3.31"
+tokio-tungstenite = "0.29.0"
+futures-util = "0.3.32"
 json-patch = "4.1.0"
 ulid = "1.2.1"
 
