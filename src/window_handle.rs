@@ -383,6 +383,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                             | WindowEvent::CursorEntered { .. }
                             | WindowEvent::AxisMotion { .. }
                             | WindowEvent::CursorLeft { .. }
+                            | WindowEvent::MouseWheel { .. }
                     ) {
                         debug!("Unhandled Window Event: {event:?}")
                     }
