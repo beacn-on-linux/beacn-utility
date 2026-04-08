@@ -9,10 +9,7 @@ use egui::{Color32, ComboBox, Grid, RichText, ScrollArea, Ui, Vec2};
 use pipeweaver_ipc::commands::{APICommand, Application, PhysicalDevice};
 use pipeweaver_shared::{AppDefinition, AppTarget, DeviceType, Mix, MuteTarget, NodeType};
 use std::collections::{HashMap, HashSet};
-<<<<<<< feature/pipeweaver-preflight-setup
 use std::process::Command;
-=======
->>>>>>> main
 use ulid::Ulid;
 
 pub struct MixerPageState {
@@ -23,10 +20,7 @@ pub struct MixerPageState {
     pub selected_manage_input: Option<u32>,
     pending_attach_channel_name: Option<String>,
     pending_attach_input: Option<u32>,
-<<<<<<< feature/pipeweaver-preflight-setup
     setup_feedback: Option<String>,
-=======
->>>>>>> main
 }
 
 impl Default for MixerPageState {
@@ -39,10 +33,7 @@ impl Default for MixerPageState {
             selected_manage_input: None,
             pending_attach_channel_name: None,
             pending_attach_input: None,
-<<<<<<< feature/pipeweaver-preflight-setup
             setup_feedback: None,
-=======
->>>>>>> main
         }
     }
 }
@@ -85,16 +76,7 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
     } else {
         draw_header(ui, state, page_state, snap.connected, false);
         ui.separator();
-<<<<<<< feature/pipeweaver-preflight-setup
         draw_pipeweaver_preflight(ui, page_state, snap.connected);
-=======
-        ui.centered_and_justified(|ui| {
-            ui.label(
-                RichText::new("Waiting for Pipeweaver status…")
-                    .color(Color32::from_rgb(180, 180, 180)),
-            );
-        });
->>>>>>> main
     }
 }
 
@@ -203,7 +185,6 @@ fn draw_header(
     });
 }
 
-<<<<<<< feature/pipeweaver-preflight-setup
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PipeweaverRuntime {
     Running,
@@ -314,8 +295,6 @@ fn draw_pipeweaver_preflight(ui: &mut Ui, page_state: &mut MixerPageState, conne
     });
 }
 
-=======
->>>>>>> main
 #[derive(Clone)]
 struct PhysicalSourceOption {
     node_id: u32,

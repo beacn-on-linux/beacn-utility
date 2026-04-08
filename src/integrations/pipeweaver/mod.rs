@@ -1,6 +1,8 @@
 use crate::device_manager::ControlMessage;
 use crate::device_manager::ControlMessage::{ButtonColour, SendImage};
-use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer, UpdateFrom};
+use crate::integrations::pipeweaver::channel::{
+    ChannelChangedProperty, ChannelRenderer, UpdateFrom,
+};
 use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
@@ -39,10 +41,32 @@ const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipewe
 mod channel;
 mod layout;
 
-const COLOUR_MIX_A: RGBA = RGBA { red: 89, green: 177, blue: 182, alpha: 255 };
-const COLOUR_MIX_B: RGBA = RGBA { red: 244, green: 124, blue: 36, alpha: 255 };
-const COLOUR_WHITE: RGBA = RGBA { red: 255, green: 255, blue: 255, alpha: 255 };
-const COLOUR_BLACK: RGBA = RGBA { red: 0, green: 0, blue: 0, alpha: 0 };
+const COLOUR_MIX_A: RGBA = RGBA {
+    red: 89,
+    green: 177,
+    blue: 182,
+    alpha: 255,
+};
+const COLOUR_MIX_B: RGBA = RGBA {
+    red: 244,
+    green: 124,
+    blue: 36,
+    alpha: 255,
+};
+
+const COLOUR_WHITE: RGBA = RGBA {
+    red: 255,
+    green: 255,
+    blue: 255,
+    alpha: 255,
+};
+
+const COLOUR_BLACK: RGBA = RGBA {
+    red: 0,
+    green: 0,
+    blue: 0,
+    alpha: 0,
+};
 
 #[derive(Debug)]
 enum DeviceRef<'a> {
@@ -57,11 +81,14 @@ struct PipeweaverHandler {
     device_type: DeviceType,
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
+
     has_connected: bool,
     displaying_error: bool,
+
     command_index: u64,
     raw_status: Value,
     status: DaemonStatus,
+
     active_page: u8,
     active_mix: Mix,
     devices_shown: Vec<Ulid>,
@@ -72,7 +99,11 @@ struct PipeweaverHandler {
 }
 
 impl PipeweaverHandler {
-    pub fn new(device_type: DeviceType, sender: Sender<ControlMessage>, input_rx: Receiver<Interactions>) -> Self {
+    pub fn new(
+        device_type: DeviceType,
+        sender: Sender<ControlMessage>,
+        input_rx: Receiver<Interactions>,
+    ) -> Self {
         Self {
             device_type,
             sender,
@@ -104,6 +135,7 @@ impl PipeweaverHandler {
                 warn!("Interaction Handler Terminated, Bailing!");
                 break;
             }
+
             if !self.displaying_error {
                 if !self.has_connected {
                     self.draw_status("Failed to connect to Pipeweaver");
@@ -128,6 +160,7 @@ impl PipeweaverHandler {
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
+
             warn!("Pipeweaver Error: {}", e);
             sleep(Duration::from_secs(5)).await;
         }
@@ -140,7 +173,16 @@ impl PipeweaverHandler {
     }
 
     fn draw_status(&self, text: &str) {
-        let text = DrawingUtils::draw_text(text.into(), 800, 30, FONT_BOLD, 28., TEXT_COLOUR, TextAlign::Center);
+        let text = DrawingUtils::draw_text(
+            text.into(),
+            800,
+            30,
+            FONT_BOLD,
+            28.,
+            TEXT_COLOUR,
+            TextAlign::Center,
+        );
+
         if let Ok(img) = img_as_jpeg(text, Rgba([0, 0, 0, 255])) {
             let (tx, rx) = oneshot::channel();
             let _ = self.sender.send(SendImage(img, 0, 330, tx));
@@ -159,6 +201,7 @@ impl PipeweaverHandler {
     async fn handle_connection(&mut self, url: &str) -> Result<()> {
         let (mut stream, _) = connect_async(url).await?;
         info!("Successfully connected to Pipeweaver");
+
         self.has_connected = true;
         self.displaying_error = false;
 
@@ -173,6 +216,7 @@ impl PipeweaverHandler {
 
         self.load_initial_state().await?;
         self.run_message_loop(&mut stream).await?;
+
         Ok(())
     }
 
@@ -219,9 +263,12 @@ impl PipeweaverHandler {
     }
 
     async fn run_message_loop(&mut self, stream: &mut WebSocket) -> Result<()> {
+        debug!("Spawning Sync <-> Async Loop");
+
         let sync_receiver = self.input_rx.clone();
         let (interaction_tx, mut interaction_rx) = channel(10);
         runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx));
+
         let mut keep_alive = time::interval(Duration::from_secs(10));
         let (tx, rx) = oneshot::channel();
         self.sender.send(ControlMessage::Enabled(true, tx))?;
@@ -253,6 +300,7 @@ impl PipeweaverHandler {
 
                             let sources = &self.status.audio.profile.devices.sources;
                             let devices = self.get_channels_on_page();
+
                             if devices != self.devices_shown {
                                 self.devices_shown = devices.clone();
                                 self.update_renderers()?;
@@ -263,10 +311,12 @@ impl PipeweaverHandler {
                                     let mut refresh_button_colour = false;
                                     let dev_ref = self.get_device_ref(device, sources)?;
                                     let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+
                                     let update = match dev_ref {
                                         DeviceRef::Physical(d) => render.update_from(d.clone()),
                                         DeviceRef::Virtual(d) => render.update_from(d.clone()),
                                     };
+
                                     for part in update {
                                         let (img, x, y) = match part {
                                             ChannelChangedProperty::Title => {
@@ -310,7 +360,6 @@ impl PipeweaverHandler {
                                     if refresh_button_colour {
                                         self.load_dial_button_colour(index)?;
                                     }
-                                    if refresh_button_colour { self.load_dial_button_colour(index)?; }
                                 }
                             }
                         }
@@ -377,6 +426,7 @@ impl PipeweaverHandler {
         let (width, height) = DISPLAY_DIMENSIONS;
         let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
         DrawingUtils::composite_from_pos(&mut base, &jpeg_as_img(HEADER)?, (0, 0));
+
         for (index, item) in self.devices_shown.iter().enumerate() {
             let renderer = self.renderers.get(item).ok_or(anyhow!("No Such Render Object"))?;
             let drawing = renderer.full_render(self.active_mix);
@@ -385,6 +435,7 @@ impl PipeweaverHandler {
             let y = POSITION_ROOT.1;
             DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
         }
+
         let (tx, rx) = oneshot::channel();
         self.sender.send(SendImage(img_as_jpeg(base, BG_COLOUR)?, 0, 0, tx))?;
         rx.recv()??;
@@ -409,7 +460,9 @@ impl PipeweaverHandler {
     }
 
     fn load_all_dial_button_colours(&self) -> Result<()> {
-        for index in 0..self.devices_shown.len() { self.load_dial_button_colour(index)?; }
+        for index in 0..self.devices_shown.len() {
+            self.load_dial_button_colour(index)?;
+        }
         Ok(())
     }
 
@@ -504,6 +557,7 @@ impl PipeweaverHandler {
             for other in others { channels.push(*other); }
             return channels;
         }
+
         let channel_start = (channels_per_page * self.active_page) + channels_per_page;
         let start = if channel_start as usize > others.len() {
             others.len().saturating_sub(channels_per_page as usize)
@@ -512,7 +566,9 @@ impl PipeweaverHandler {
         };
 
         for channel in others.iter().skip(start) {
-            if channels.len() != channels.capacity() { channels.push(*channel); }
+            if channels.len() != channels.capacity() {
+                channels.push(*channel);
+            }
         }
         channels
     }
@@ -521,7 +577,10 @@ impl PipeweaverHandler {
         sources
             .physical_devices.iter().map(DeviceRef::Physical)
             .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
-            .find(|dev| match dev { DeviceRef::Physical(d) => d.description.id == *device, DeviceRef::Virtual(d) => d.description.id == *device })
+            .find(|dev| match dev {
+                DeviceRef::Physical(d) => d.description.id == *device,
+                DeviceRef::Virtual(d) => d.description.id == *device,
+            })
             .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
     }
 
@@ -563,6 +622,7 @@ impl PipeweaverHandler {
                     Buttons::Audience4 => (3, MuteTarget::TargetB),
                     _ => bail!("This shouldn't happen."),
                 };
+
                 if let Some(device) = self.devices_shown.get(index) {
                     let current = self.renderers.get_mut(device).ok_or(anyhow!("Failed to get Renderer"))?;
                     let message = if current.mute_states[target].is_active {
@@ -582,7 +642,13 @@ impl PipeweaverHandler {
     }
 
     async fn handle_dial(&mut self, dial: Dials, change: i8, stream: &mut WebSocket) -> Result<()> {
-        let device_index = match dial { Dials::Dial1 => 0, Dials::Dial2 => 1, Dials::Dial3 => 2, Dials::Dial4 => 3 };
+        let device_index = match dial {
+            Dials::Dial1 => 0,
+            Dials::Dial2 => 1,
+            Dials::Dial3 => 2,
+            Dials::Dial4 => 3,
+        };
+
         let command_index = self.get_command_index();
         if let Some(device) = self.devices_shown.get(device_index) {
             let current = self.renderers.get(device).ok_or(anyhow!("Failed to get Renderer"))?;
@@ -616,7 +682,9 @@ fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
 }
 
 fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
-    if let Ok(img) = load_from_memory(image) { return Ok(img.into_rgba8()); }
+    if let Ok(img) = load_from_memory(image) {
+        return Ok(img.into_rgba8());
+    }
     bail!("Failed to load image");
 }
 

@@ -156,22 +156,7 @@ pub fn spawn_device_manager(
                                     spawn_pipeweaver_handler(tx.clone(), device_type, input_rx, shared_state.clone(), cmd_rx);
                                     pipeweaver_state = Some(shared_state);
                                 }
-<<<<<<< feature/pipeweaver-preflight-setup
                                 let _ = event_tx.send(DeviceMessage::DeviceArrived(DeviceArriveMessage::Control(data, tx, pipeweaver_state)));
-=======
-
-                                // Create shared Pipeweaver state for UI ↔ handler bridge
-                                let (pw_shared, pw_cmd_rx) = SharedPipeweaverState::new();
-
-                                // Use the async runtime for this
-                                debug!("Starting PipeWeaver Handler");
-                                let img_tx = tx.clone();
-                                spawn_pipeweaver_handler(img_tx, device_type, input_rx, pw_shared.clone(), pw_cmd_rx);
-
-                                let arrived = DeviceArriveMessage::Control(data, tx, Some(pw_shared));
-                                let message = DeviceMessage::DeviceArrived(arrived);
-                                let _ = event_tx.send(message);
->>>>>>> main
                             }
                         }
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
