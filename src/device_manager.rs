@@ -13,6 +13,7 @@
 */
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
+use crate::ui::states::pipeweaver_state::SharedPipeweaverState;
 use crate::{ManagerMessages, ToMainMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
@@ -215,12 +216,15 @@ pub fn spawn_device_manager(
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                 }
 
+                                // Create shared Pipeweaver state for UI ↔ handler bridge
+                                let (pw_shared, pw_cmd_rx) = SharedPipeweaverState::new();
+
                                 // Use the async runtime for this
                                 debug!("Starting PipeWeaver Handler");
                                 let img_tx = tx.clone();
-                                spawn_pipeweaver_handler(img_tx, device_type, input_rx);
+                                spawn_pipeweaver_handler(img_tx, device_type, input_rx, pw_shared.clone(), pw_cmd_rx);
 
-                                let arrived = DeviceArriveMessage::Control(data, tx);
+                                let arrived = DeviceArriveMessage::Control(data, tx, Some(pw_shared));
                                 let message = DeviceMessage::DeviceArrived(arrived);
                                 let _ = event_tx.send(message);
                             }
@@ -356,7 +360,7 @@ pub enum DeviceMessage {
 #[derive(Debug, Clone)]
 pub enum DeviceArriveMessage {
     Audio(DeviceDefinition, Sender<AudioMessage>),
-    Control(DeviceDefinition, Sender<ControlMessage>),
+    Control(DeviceDefinition, Sender<ControlMessage>, Option<SharedPipeweaverState>),
 }
 
 pub enum AudioMessage {

@@ -2,6 +2,7 @@ use beacn_lib::audio::messages::Message;
 
 pub(crate) mod audio_state;
 pub(crate) mod controller_state;
+pub mod pipeweaver_state;
 
 #[derive(Debug, Default, Clone)]
 pub struct DeviceState {
