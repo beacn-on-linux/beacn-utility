@@ -53,6 +53,25 @@ a way to adjust the DSP values of the Mic or Studio. Outside of rendering a test
 mostly absent. This app is still quite new, so may also might be slightly buggy, expect issues.
 ***
 
+## Quick Start
+
+### Prerequisites
+
+| Requirement | Devices | Notes |
+|---|---|---|
+| **udev rules** | All | Required on `systemd` < 257.7 — see [Setting Up Beacn Devices](#setting-up-beacn-devices-on-linux) below |
+| **ALSA UCM profiles** | Mic, Studio | Required on `alsa-ucm-conf` < 1.2.15 — see [Setting Up Beacn Devices](#setting-up-beacn-devices-on-linux) below |
+| **[PipeWeaver](https://github.com/pipeweaver/pipeweaver)** | Mix, Mix Create | Required for the desktop mixer UI (volume, routing, app assignment). The mixer page will show a disconnected state if PipeWeaver is not running. |
+
+### Steps
+
+1. Install the Beacn Utility ([automatic](#automatic-installation) or [manual](#manual-installation))
+2. If your `systemd` or `alsa-ucm-conf` version requires it, complete the [device setup steps](#setting-up-beacn-devices-on-linux) below
+3. *(Mix / Mix Create only)* Install and start [PipeWeaver](https://github.com/pipeweaver/pipeweaver) — the mixer UI will connect automatically once it's running
+4. Plug in your device and launch Beacn Utility
+
+---
+
 ## Getting Started
 
 ### Setting Up Beacn Devices on Linux
@@ -96,8 +115,10 @@ repository.
 ## Current Project Status
 
 Not Yet Implemented:
-* Beacn Mix and Mix Create support (Need to make a mixer)
 * Probably a button or two, let me know if you spot one.
+
+Implemented:
+* Beacn Mix and Mix Create mixer UI (via PipeWeaver)
 
 Not (currently) Planned:
 * Profiles
