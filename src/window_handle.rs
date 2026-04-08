@@ -25,7 +25,7 @@ use egui_winit::winit::{
 use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
 use ini::Ini;
-use log::{debug, warn};
+use log::{debug, error, warn};
 use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
@@ -135,14 +135,14 @@ impl WindowRunner {
             renderer.render_egui(&full_output, &self.context);
 
             // Swap buffers
-            renderer
-                .gl_surface
-                .swap_buffers(&renderer.gl_context)
-                .unwrap();
+            if let Err(e) = renderer.gl_surface.swap_buffers(&renderer.gl_context) {
+                error!("Failed to swap buffers: {e}");
+                self.destroy_window();
+            }
         }
     }
 
-    fn create_window(&mut self, event_loop: &ActiveEventLoop) {
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         if self.window.is_none() {
             debug!("Creating Window");
 
@@ -151,19 +151,14 @@ impl WindowRunner {
 
             // Now try creating the Window
             let attributes = self.window_attributes.clone();
-            match event_loop.create_window(attributes) {
-                Err(e) => {
-                    panic!("Failed to Create Event Loop Window: {}", e);
-                }
-                Ok(window) => {
-                    let window = Arc::new(window);
-                    let renderer = GlowRenderer::new(Arc::clone(&window), &self.context);
+            let window = Arc::new(event_loop.create_window(attributes)?);
+            let renderer = GlowRenderer::new(Arc::clone(&window), &self.context)?;
 
-                    self.window = Some(window);
-                    self.renderer = Some(renderer);
-                }
-            }
+            self.window = Some(window);
+            self.renderer = Some(renderer);
         }
+
+        Ok(())
     }
 
     fn create_new_context(&mut self) {
@@ -177,13 +172,15 @@ impl WindowRunner {
             self.context.data_mut(|data| {
                 data.insert_persisted(Id::new(EVENT_PROXY), EventProxy(Arc::new(proxy.clone())));
             });
-        }
 
-        // Set up the Redraw Handler
-        let proxy = self.event_loop_proxy.as_ref().unwrap().clone();
-        self.context.set_request_repaint_callback(move |_info| {
-            let _ = proxy.send_event(UserEvent::RequestRedraw);
-        });
+            // Set up the Redraw Handler
+            let proxy = proxy.clone();
+            self.context.set_request_repaint_callback(move |_info| {
+                let _ = proxy.send_event(UserEvent::RequestRedraw);
+            });
+        } else {
+            warn!("Event loop proxy unavailable while creating egui context");
+        }
 
         // Update the main thread with the new context
         let _ = self
@@ -192,16 +189,23 @@ impl WindowRunner {
     }
 
     fn destroy_window(&mut self) {
+        let had_window = self.window.is_some() || self.renderer.is_some();
         self.window = None;
         self.renderer = None;
-        self.app.on_close();
+        if had_window {
+            self.app.on_close();
+        }
     }
+}
+
+fn desktop_entry_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 // This is a helper function which lets the app send a UserEvent into the context
 pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
     ctx.data(|data| {
-        if let Some(proxy) = data.get_temp::<EventProxy>(Id::new(EVENT_PROXY)) {
+        if let Some(proxy) = data.get_persisted::<EventProxy>(Id::new(EVENT_PROXY)) {
             let _ = proxy.0.send_event(event);
         }
     });
@@ -210,7 +214,11 @@ pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
 impl ApplicationHandler<UserEvent> for WindowRunner {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if !self.initial_hide {
-            self.create_window(event_loop);
+            if let Err(e) = self.create_window(event_loop) {
+                error!("Failed to create window on resume: {e}");
+                let _ = self.sender.send(ToMainMessages::Quit);
+                event_loop.exit();
+            }
         } else {
             self.initial_hide = false;
         }
@@ -225,7 +233,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
             }
             UserEvent::FocusWindow => {
                 // Create a window if it doesn't exist
-                self.create_window(event_loop);
+                if let Err(e) = self.create_window(event_loop) {
+                    error!("Failed to create window while focusing: {e}");
+                    let _ = self.sender.send(ToMainMessages::Quit);
+                    event_loop.exit();
+                    return;
+                }
 
                 if let Some(window) = &self.window {
                     if let Some(true) = window.is_minimized() {
@@ -297,13 +310,13 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                 } else if create {
                                     if let Ok(exe) = env::current_exe() {
                                         let mut conf = Ini::new();
-                                        let exe = exe.to_string_lossy().to_string();
+                                        let exe = desktop_entry_escape(&exe.to_string_lossy());
 
                                         conf.with_section(Some("Desktop Entry"))
                                             .set("Type", "Application")
                                             .set("Name", "Beacn Utility")
                                             .set("Comment", "A Tool for Configuring Beacn Devices")
-                                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
+                                            .set("Exec", format!("\"{exe}\" {BACKGROUND_PARAM}"))
                                             .set("Terminal", "false");
 
                                         match conf.write_to_file(path) {
@@ -395,14 +408,18 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
 impl GlowRenderer {
     #[allow(deprecated)]
-    fn new(window: Arc<Window>, egui_ctx: &egui::Context) -> Self {
+    fn new(window: Arc<Window>, egui_ctx: &egui::Context) -> Result<Self> {
         use glutin::config::ConfigTemplateBuilder;
         use glutin::context::{ContextApi, ContextAttributesBuilder};
         use glutin::prelude::*;
         use glutin::surface::SurfaceAttributesBuilder;
 
-        let raw_window_handle = window.raw_window_handle().unwrap();
-        let raw_display_handle = window.raw_display_handle().unwrap();
+        let raw_window_handle = window
+            .raw_window_handle()
+            .map_err(|e| anyhow!("Failed to get raw window handle: {e}"))?;
+        let raw_display_handle = window
+            .raw_display_handle()
+            .map_err(|e| anyhow!("Failed to get raw display handle: {e}"))?;
 
         // Create OpenGL config
         let config_template = ConfigTemplateBuilder::new()
@@ -412,15 +429,16 @@ impl GlowRenderer {
         debug!("Creating glutin Display with Config: {:?}", config_template);
 
         let gl_display = unsafe {
-            glutin::display::Display::new(raw_display_handle, DisplayApiPreference::Egl).unwrap()
+            glutin::display::Display::new(raw_display_handle, DisplayApiPreference::Egl)
+                .map_err(|e| anyhow!("Failed to create GL display: {e}"))?
         };
 
         let config = unsafe {
             gl_display
                 .find_configs(config_template)
-                .unwrap()
+                .map_err(|e| anyhow!("Failed to enumerate GL configs: {e}"))?
                 .max_by_key(|config| config.num_samples())
-                .expect("No compatible OpenGL config found")
+                .ok_or_else(|| anyhow!("No compatible OpenGL config found"))?
         };
 
         // Create OpenGL context, we won't specify an API version, glow will pick the best.
@@ -439,7 +457,7 @@ impl GlowRenderer {
                     warn!("Failed to Create OpenGL Context, trying OpenGL ES: {}", e);
                     gl_display
                         .create_context(&config, &fallback_context_attributes)
-                        .expect("Failed to Create OpenGL ES Context")
+                        .map_err(|e| anyhow!("Failed to create OpenGL ES context: {e}"))?
                 }
             }
         };
@@ -449,18 +467,20 @@ impl GlowRenderer {
         let surface_attributes = SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
             .build(
                 raw_window_handle,
-                size.width.try_into().unwrap(),
-                size.height.try_into().unwrap(),
+                size.width.try_into().map_err(|_| anyhow!("Invalid window width"))?,
+                size.height.try_into().map_err(|_| anyhow!("Invalid window height"))?,
             );
 
         let gl_surface = unsafe {
             gl_display
                 .create_window_surface(&config, &surface_attributes)
-                .unwrap()
+                .map_err(|e| anyhow!("Failed to create GL window surface: {e}"))?
         };
 
         // Make context current
-        let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+        let gl_context = not_current_gl_context
+            .make_current(&gl_surface)
+            .map_err(|e| anyhow!("Failed to make GL context current: {e}"))?;
 
         // Create glow context
         let gl = Arc::new(unsafe {
@@ -485,24 +505,35 @@ impl GlowRenderer {
 
         // Create egui glow painter
         let painter = egui_glow::Painter::new(Arc::clone(&gl), "", None, false)
-            .expect("Failed to create egui_glow painter");
+            .map_err(|e| anyhow!("Failed to create egui glow painter: {e}"))?;
 
-        Self {
+        Ok(Self {
             gl_context,
             gl_surface,
             winit_state: egui_winit,
             painter,
             gl,
-        }
+        })
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
-            self.gl_surface.resize(
-                &self.gl_context,
-                new_size.width.try_into().unwrap(),
-                new_size.height.try_into().unwrap(),
-            );
+            let width = match new_size.width.try_into() {
+                Ok(width) => width,
+                Err(_) => {
+                    warn!("Invalid resize width: {}", new_size.width);
+                    return;
+                }
+            };
+            let height = match new_size.height.try_into() {
+                Ok(height) => height,
+                Err(_) => {
+                    warn!("Invalid resize height: {}", new_size.height);
+                    return;
+                }
+            };
+
+            self.gl_surface.resize(&self.gl_context, width, height);
 
             unsafe {
                 self.gl
@@ -515,10 +546,15 @@ impl GlowRenderer {
         let clipped_primitives =
             egui_ctx.tessellate(full_output.shapes.clone(), full_output.pixels_per_point);
 
-        let dimensions = [
-            self.gl_surface.width().unwrap(),
-            self.gl_surface.height().unwrap(),
-        ];
+        let Some(width) = self.gl_surface.width() else {
+            warn!("GL surface width unavailable, skipping frame");
+            return;
+        };
+        let Some(height) = self.gl_surface.height() else {
+            warn!("GL surface height unavailable, skipping frame");
+            return;
+        };
+        let dimensions = [width, height];
 
         unsafe {
             self.gl.clear_color(0.1, 0.2, 0.3, 1.0);

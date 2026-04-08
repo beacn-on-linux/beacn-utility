@@ -67,11 +67,19 @@ serde_json = "1.0.149"
 zbus = "5.13.1"
 
 # Pipeweaver Stuff
+<<<<<<< feature/pipeweaver-preflight-setup
 pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver" }
 tokio-tungstenite = "0.29.0"
 futures-util = "0.3.32"
+=======
+pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
+pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
+pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
+tokio-tungstenite = "0.28.0"
+futures-util = "0.3.31"
+>>>>>>> main
 json-patch = "4.1.0"
 ulid = "1.2.1"
 

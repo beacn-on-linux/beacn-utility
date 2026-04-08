@@ -242,6 +242,7 @@ impl BeacnAudioState {
                 let message = rx.recv()?;
 
                 debug!("Result: {message:?}");
+                message?;
             }
             None => bail!("Device Sender not Ready"),
         }
@@ -261,11 +262,6 @@ impl BeacnAudioState {
             device_sender: Some(sender),
             ..Default::default()
         };
-
-        // let mut state = Self::default();
-        // state.device_definition = definition;
-        // state.device_sender = Some(sender);
-        // state.device_state.state = LoadState::LOADING;
 
         // Before we do anything else, is this definition in an error state?
         if let DefinitionState::Error(error) = &state.device_definition.state {
@@ -317,7 +313,10 @@ impl BeacnAudioState {
         if state.device_definition.device_type == DeviceType::BeacnStudio {
             let _ = state.get_linked();
         }
-        state.device_state.state = LoadState::Running;
+
+        if matches!(state.device_state.state, LoadState::Loading) {
+            state.device_state.state = LoadState::Running;
+        }
         state
     }
 

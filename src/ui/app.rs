@@ -1,7 +1,11 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
+<<<<<<< feature/pipeweaver-preflight-setup
 use crate::ui::mixer_page::{MixerPageState, mixer_ui};
+=======
+use crate::ui::mixer_page::{mixer_ui, MixerPageState};
+>>>>>>> main
 use crate::ui::pages::settings_ui;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
@@ -58,6 +62,10 @@ impl BeacnMicApp {
             active_page: 0,
             mixer_active: false,
             settings_active: false,
+<<<<<<< feature/pipeweaver-preflight-setup
+=======
+
+>>>>>>> main
             pipeweaver_state: None,
             mixer_page_state: MixerPageState::default(),
         }
@@ -69,7 +77,11 @@ impl App for BeacnMicApp {
         egui_extras::install_image_loaders(ctx);
     }
 
+<<<<<<< feature/pipeweaver-preflight-setup
     fn update(&mut self, ui: &mut Ui) {
+=======
+    fn update(&mut self, ctx: &Context) {
+>>>>>>> main
         let messages: Vec<DeviceMessage> = self.device_recv.try_iter().collect();
         for message in messages {
             self.handle_device_message(message);
@@ -111,7 +123,11 @@ impl App for BeacnMicApp {
                 });
             });
 
+<<<<<<< feature/pipeweaver-preflight-setup
         self.render_content(ui);
+=======
+        self.render_content(ctx);
+>>>>>>> main
     }
 
     fn should_close(&mut self) -> bool {
@@ -142,9 +158,17 @@ impl App for BeacnMicApp {
                     let state = BeacnControllerState::load_settings(definition.clone(), sender);
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
+<<<<<<< feature/pipeweaver-preflight-setup
                     if let Some(pw) = pw_state {
                         self.pipeweaver_state = Some(pw);
                     }
+=======
+
+                    if let Some(pw) = pw_state {
+                        self.pipeweaver_state = Some(pw);
+                    }
+
+>>>>>>> main
                     if self.active_device.is_none() {
                         self.active_device = Some(definition);
                     }
@@ -236,6 +260,11 @@ impl BeacnMicApp {
                 ui.separator();
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+<<<<<<< feature/pipeweaver-preflight-setup
+=======
+                // This is identical to the above, except with a BeacnControllerState and ControllerPages
+                // There's probably a way we can simplify this :p
+>>>>>>> main
                 let Some(device_state) = self.control_device_list.get(&device) else {
                     warn!("Missing control device state for {:?}", device.location);
                     return;
@@ -274,13 +303,21 @@ impl BeacnMicApp {
         }
     }
 
+<<<<<<< feature/pipeweaver-preflight-setup
     fn render_content(&mut self, ui: &mut Ui) {
+=======
+    fn render_content(&mut self, ctx: &Context) {
+>>>>>>> main
         if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
             return;
         }
 
         if self.mixer_active {
+<<<<<<< feature/pipeweaver-preflight-setup
             egui::CentralPanel::default().show_inside(ui, |ui| {
+=======
+            egui::CentralPanel::default().show(ctx, |ui| {
+>>>>>>> main
                 if let Some(ref pw_state) = self.pipeweaver_state {
                     mixer_ui(ui, pw_state, &mut self.mixer_page_state);
                 } else {

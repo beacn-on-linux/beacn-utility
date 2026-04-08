@@ -66,6 +66,7 @@ struct PipeweaverHandler {
     active_mix: Mix,
     devices_shown: Vec<Ulid>,
     renderers: Renderers,
+
     shared_state: Option<crate::ui::states::pipeweaver_state::SharedPipeweaverState>,
     ui_cmd_rx: Option<tokio::sync::mpsc::Receiver<pipeweaver_ipc::commands::DaemonRequest>>,
 }
@@ -93,6 +94,7 @@ impl PipeweaverHandler {
     pub async fn run_handler(&mut self) {
         info!("Starting Pipeweaver Manager");
         let url = "ws://localhost:14565/api/websocket";
+
         self.draw_splash();
         self.draw_status("Loading...");
         self.disable_buttons();
@@ -106,16 +108,23 @@ impl PipeweaverHandler {
                 if !self.has_connected {
                     self.draw_status("Failed to connect to Pipeweaver");
                     self.disable_buttons();
-                    if let Some(ref ss) = self.shared_state { ss.set_disconnected(Some("Failed to connect".to_string())); }
+                    if let Some(ref ss) = self.shared_state {
+                        ss.set_disconnected(Some("Failed to connect".to_string()));
+                    }
                 } else {
                     self.draw_splash();
                     self.draw_status("Connection to Pipeweaver lost");
                     self.disable_buttons();
-                    if let Some(ref ss) = self.shared_state { ss.set_disconnected(Some("Connection lost".to_string())); }
+                    if let Some(ref ss) = self.shared_state {
+                        ss.set_disconnected(Some("Connection lost".to_string()));
+                    }
                 }
             }
             self.displaying_error = true;
-            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref() && e.kind() == ErrorKind::ConnectionRefused {
+
+            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref()
+                && e.kind() == ErrorKind::ConnectionRefused
+            {
                 sleep(Duration::from_secs(5)).await;
                 continue;
             }
@@ -152,9 +161,16 @@ impl PipeweaverHandler {
         info!("Successfully connected to Pipeweaver");
         self.has_connected = true;
         self.displaying_error = false;
-        if let Some(ref ss) = self.shared_state { ss.set_connected(); }
+
+        if let Some(ref ss) = self.shared_state {
+            ss.set_connected();
+        }
+
         self.load_status(&mut stream).await?;
-        if let Some(ref ss) = self.shared_state { ss.update_status(self.status.clone()); }
+        if let Some(ref ss) = self.shared_state {
+            ss.update_status(self.status.clone());
+        }
+
         self.load_initial_state().await?;
         self.run_message_loop(&mut stream).await?;
         Ok(())
@@ -162,9 +178,16 @@ impl PipeweaverHandler {
 
     async fn load_status(&mut self, stream: &mut WebSocket) -> Result<()> {
         let status_id = self.get_command_index();
-        let status_request = serde_json::to_string(&WebsocketRequest { id: status_id, data: GetStatus })?;
+        let status_request = serde_json::to_string(&WebsocketRequest {
+            id: status_id,
+            data: GetStatus,
+        })?;
+
         let message = Message::Text(Utf8Bytes::from(status_request));
-        if let Err(e) = stream.send(message).await { bail!("Failed to fetch Status: {}", e) }
+        if let Err(e) = stream.send(message).await {
+            bail!("Failed to fetch Status: {}", e)
+        }
+
         loop {
             let message = stream.next().await;
             if let Some(message) = message {
@@ -173,9 +196,12 @@ impl PipeweaverHandler {
                     let value = serde_json::from_str::<Value>(msg.as_str())?;
                     let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
                     let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
+
                     if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
-                        let data = object.get("data").ok_or(anyhow!("Failed to Read Data"))?.clone();
-                        self.raw_status = data.get("Status").ok_or(anyhow!("Failed to Read Status"))?.clone();
+                        let error = anyhow!("Failed to Read Data");
+                        let data = object.get("data").ok_or(error)?.clone();
+                        let error = anyhow!("Failed to Read Status");
+                        self.raw_status = data.get("Status").ok_or(error)?.clone();
                         self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
                         break;
                     }
@@ -200,7 +226,10 @@ impl PipeweaverHandler {
         let (tx, rx) = oneshot::channel();
         self.sender.send(ControlMessage::Enabled(true, tx))?;
         rx.recv()??;
+
         let mut ui_cmd_rx = self.ui_cmd_rx.take();
+
+        debug!("Starting Pipeweaver Message Loop");
         loop {
             let ui_cmd_fut = async {
                 match ui_cmd_rx.as_mut() {
@@ -208,6 +237,7 @@ impl PipeweaverHandler {
                     None => std::future::pending().await,
                 }
             };
+
             select! {
                 Some(message) = stream.next() => {
                     let message = message?;
@@ -216,7 +246,11 @@ impl PipeweaverHandler {
                         if let DaemonResponse::Patch(patch) = result.data {
                             json_patch::patch(&mut self.raw_status, &patch)?;
                             self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
-                            if let Some(ref ss) = self.shared_state { ss.update_status(self.status.clone()); }
+
+                            if let Some(ref ss) = self.shared_state {
+                                ss.update_status(self.status.clone());
+                            }
+
                             let sources = &self.status.audio.profile.devices.sources;
                             let devices = self.get_channels_on_page();
                             if devices != self.devices_shown {
@@ -253,20 +287,28 @@ impl PipeweaverHandler {
                                                 (img.image, x, y)
                                             }
                                             ChannelChangedProperty::MuteState(target) => {
-                                                if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix { continue; }
+                                                if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix {
+                                                    continue;
+                                                }
                                                 let img = render.draw_mute_box(target);
                                                 let (x, y) = img.position;
                                                 (img_as_jpeg(img.image, BG_COLOUR)?, x, y)
                                             }
                                         };
+
                                         let (ch_w, _) = CHANNEL_DIMENSIONS;
                                         let base_x = ch_w * index as u32;
                                         let (root_x, root_y) = POSITION_ROOT;
                                         let x = base_x + x + root_x;
                                         let y = y + root_y;
+
                                         let (tx,rx) = oneshot::channel();
                                         self.sender.send(SendImage(img, x, y, tx))?;
                                         rx.recv()??;
+                                    }
+
+                                    if refresh_button_colour {
+                                        self.load_dial_button_colour(index)?;
                                     }
                                     if refresh_button_colour { self.load_dial_button_colour(index)?; }
                                 }
@@ -280,8 +322,14 @@ impl PipeweaverHandler {
                     match maybe_msg {
                         Some(msg) => match self.device_type {
                             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => match msg {
-                                Interactions::ButtonPress(button, state) => if state == ButtonState::Release { self.handle_button(button, stream).await?; },
-                                Interactions::DialChanged(dial, change) => { self.handle_dial(dial, change, stream).await?; }
+                                Interactions::ButtonPress(button, state) => {
+                                    if state == ButtonState::Release {
+                                        self.handle_button(button, stream).await?;
+                                    }
+                                }
+                                Interactions::DialChanged(dial, change) => {
+                                    self.handle_dial(dial, change, stream).await?;
+                                }
                             },
                             t => bail!("WTF is this doing here?! {:?}", t)
                         },
@@ -295,8 +343,12 @@ impl PipeweaverHandler {
                 }
                 Some(ui_request) = ui_cmd_fut => {
                     let cmd_id = self.get_command_index();
-                    let request = serde_json::to_string(&WebsocketRequest { id: cmd_id, data: ui_request })?;
+                    let request = serde_json::to_string(&WebsocketRequest {
+                        id: cmd_id,
+                        data: ui_request,
+                    })?;
                     stream.send(Message::Text(Utf8Bytes::from(request))).await?;
+                    debug!("Forwarded UI command to Pipeweaver (id: {})", cmd_id);
                 }
             }
         }
@@ -363,21 +415,33 @@ impl PipeweaverHandler {
 
     fn load_page_button_colours(&self) -> Result<()> {
         let left_colour = if self.active_page == 0 { COLOUR_BLACK } else { COLOUR_WHITE };
-        let right_colour = match self.get_page_count() { 1 => COLOUR_BLACK, c => if self.active_page == c - 1 { COLOUR_BLACK } else { COLOUR_WHITE } };
+        let right_colour = match self.get_page_count() {
+            1 => COLOUR_BLACK,
+            c => if self.active_page == c - 1 { COLOUR_BLACK } else { COLOUR_WHITE },
+        };
         self.set_button_colour(ButtonLighting::Left, left_colour)?;
         self.set_button_colour(ButtonLighting::Right, right_colour)?;
         Ok(())
     }
 
     fn load_mix_button_colours(&self) -> Result<()> {
-        let colour = match self.active_mix { Mix::A => COLOUR_MIX_B, Mix::B => COLOUR_MIX_A };
+        let colour = match self.active_mix {
+            Mix::A => COLOUR_MIX_B,
+            Mix::B => COLOUR_MIX_A,
+        };
         self.set_button_colour(ButtonLighting::Mix, colour)
     }
 
     fn load_dial_button_colour(&self, index: usize) -> Result<()> {
         let device_id = self.devices_shown.get(index).ok_or(anyhow!("No Such Index"))?;
         let render = self.renderers.get(device_id).ok_or(anyhow!("Failed to Fetch Renderer"))?;
-        let dial_button = match index { 0 => ButtonLighting::Dial1, 1 => ButtonLighting::Dial2, 2 => ButtonLighting::Dial3, 3 => ButtonLighting::Dial4, _ => bail!("Invalid Dial Index") };
+        let dial_button = match index {
+            0 => ButtonLighting::Dial1,
+            1 => ButtonLighting::Dial2,
+            2 => ButtonLighting::Dial3,
+            3 => ButtonLighting::Dial4,
+            _ => bail!("Invalid Dial Index"),
+        };
         let colour = render.colour;
         let beacn_colour = RGBA { red: colour[0], green: colour[1], blue: colour[2], alpha: colour[3] };
         self.set_button_colour(dial_button, beacn_colour)
@@ -409,7 +473,9 @@ impl PipeweaverHandler {
 
     fn get_page_count(&self) -> u8 {
         let order = &self.status.audio.profile.devices.sources.device_order;
-        if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() { return 1; }
+        if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() {
+            return 1;
+        }
         let channels_per_page = 4 - order[OrderGroup::Pinned].len() as u8;
         let channel_count = order[OrderGroup::Default].len() as u8;
         (channels_per_page + channel_count - 1) / channels_per_page
@@ -420,16 +486,31 @@ impl PipeweaverHandler {
         let mut channels = Vec::with_capacity(4);
         let pinned = &order[OrderGroup::Pinned];
         let others = &order[OrderGroup::Default];
-        if pinned.is_empty() && others.is_empty() { return channels; }
-        for channel in pinned.iter().take(channels.capacity() - channels.len()) { channels.push(*channel); }
-        if channels.len() == channels.capacity() { return channels; }
+
+        if pinned.is_empty() && others.is_empty() {
+            warn!("No channels are defined!");
+            return channels;
+        }
+
+        for channel in pinned.iter().take(channels.capacity() - channels.len()) {
+            channels.push(*channel);
+        }
+        if channels.len() == channels.capacity() {
+            return channels;
+        }
+
         let channels_per_page = 4 - pinned.len() as u8;
         if others.len() < channels_per_page as usize {
             for other in others { channels.push(*other); }
             return channels;
         }
         let channel_start = (channels_per_page * self.active_page) + channels_per_page;
-        let start = if channel_start as usize > others.len() { others.len().saturating_sub(channels_per_page as usize) } else { (channels_per_page * self.active_page) as usize };
+        let start = if channel_start as usize > others.len() {
+            others.len().saturating_sub(channels_per_page as usize)
+        } else {
+            (channels_per_page * self.active_page) as usize
+        };
+
         for channel in others.iter().skip(start) {
             if channels.len() != channels.capacity() { channels.push(*channel); }
         }
@@ -437,7 +518,8 @@ impl PipeweaverHandler {
     }
 
     fn get_device_ref<'a>(&self, device: &Ulid, sources: &'a SourceDevices) -> Result<DeviceRef<'a>> {
-        sources.physical_devices.iter().map(DeviceRef::Physical)
+        sources
+            .physical_devices.iter().map(DeviceRef::Physical)
             .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
             .find(|dev| match dev { DeviceRef::Physical(d) => d.description.id == *device, DeviceRef::Virtual(d) => d.description.id == *device })
             .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
@@ -458,13 +540,18 @@ impl PipeweaverHandler {
                 self.load_mix_button_colours()?;
             }
             Buttons::PageLeft | Buttons::PageRight => {
-                let change: i8 = match button { Buttons::PageLeft => -1, Buttons::PageRight => 1, _ => bail!("Invalid button") };
+                let change: i8 = match button {
+                    Buttons::PageLeft => -1,
+                    Buttons::PageRight => 1,
+                    _ => bail!("Invalid button"),
+                };
                 if self.active_page == 0 && change == -1 { return Ok(()); }
                 if self.active_page == self.get_page_count() - 1 && change == 1 { return Ok(()); }
                 self.active_page = self.active_page.wrapping_add_signed(change);
                 self.refresh_page()?;
             }
-            Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 | Buttons::Audience1 | Buttons::Audience2 | Buttons::Audience3 | Buttons::Audience4 => {
+            Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 |
+            Buttons::Audience1 | Buttons::Audience2 | Buttons::Audience3 | Buttons::Audience4 => {
                 let (index, target) = match button {
                     Buttons::Dial1 => (0, MuteTarget::TargetA),
                     Buttons::Dial2 => (1, MuteTarget::TargetA),
@@ -478,8 +565,15 @@ impl PipeweaverHandler {
                 };
                 if let Some(device) = self.devices_shown.get(index) {
                     let current = self.renderers.get_mut(device).ok_or(anyhow!("Failed to get Renderer"))?;
-                    let message = if current.mute_states[target].is_active { APICommand::DelSourceMuteTarget(*device, target) } else { APICommand::AddSourceMuteTarget(*device, target) };
-                    let command = serde_json::to_string(&WebsocketRequest { id: self.get_command_index(), data: DaemonRequest::Pipewire(message) })?;
+                    let message = if current.mute_states[target].is_active {
+                        APICommand::DelSourceMuteTarget(*device, target)
+                    } else {
+                        APICommand::AddSourceMuteTarget(*device, target)
+                    };
+                    let command = serde_json::to_string(&WebsocketRequest {
+                        id: self.get_command_index(),
+                        data: DaemonRequest::Pipewire(message),
+                    })?;
                     stream.send(Message::Text(Utf8Bytes::from(command))).await?;
                 }
             }
@@ -494,7 +588,10 @@ impl PipeweaverHandler {
             let current = self.renderers.get(device).ok_or(anyhow!("Failed to get Renderer"))?;
             let volume = current.volumes[self.active_mix] as i16;
             let new_volume = (volume + change as i16).clamp(0, 100) as u8;
-            let command = serde_json::to_string(&WebsocketRequest { id: command_index, data: DaemonRequest::Pipewire(SetSourceVolume(*device, self.active_mix, new_volume)) })?;
+            let command = serde_json::to_string(&WebsocketRequest {
+                id: command_index,
+                data: DaemonRequest::Pipewire(SetSourceVolume(*device, self.active_mix, new_volume)),
+            })?;
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;
         }
         Ok(())

@@ -17,7 +17,7 @@ use beacn_lib::manager::{
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use log::debug;
+use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
@@ -35,8 +35,17 @@ pub fn spawn_device_manager(
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
     let mut receiver_map: Vec<DeviceMap> = vec![];
 
-    spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
-    thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
+    if let Err(e) = spawn_hotplug_handler(plug_tx, manage_rx) {
+        error!("Failed to spawn HotPlug Handler: {e}");
+        let _ = self_tx.send(ToMainMessages::Quit);
+        return;
+    }
+
+    thread::spawn(move || {
+        if let Err(e) = spawn_login_handler(login_tx, login_stop_rx) {
+            error!("Login handler exited with error: {e}");
+        }
+    });
 
     loop {
         let mut selector = Select::new();
@@ -147,7 +156,22 @@ pub fn spawn_device_manager(
                                     spawn_pipeweaver_handler(tx.clone(), device_type, input_rx, shared_state.clone(), cmd_rx);
                                     pipeweaver_state = Some(shared_state);
                                 }
+<<<<<<< feature/pipeweaver-preflight-setup
                                 let _ = event_tx.send(DeviceMessage::DeviceArrived(DeviceArriveMessage::Control(data, tx, pipeweaver_state)));
+=======
+
+                                // Create shared Pipeweaver state for UI ↔ handler bridge
+                                let (pw_shared, pw_cmd_rx) = SharedPipeweaverState::new();
+
+                                // Use the async runtime for this
+                                debug!("Starting PipeWeaver Handler");
+                                let img_tx = tx.clone();
+                                spawn_pipeweaver_handler(img_tx, device_type, input_rx, pw_shared.clone(), pw_cmd_rx);
+
+                                let arrived = DeviceArriveMessage::Control(data, tx, Some(pw_shared));
+                                let message = DeviceMessage::DeviceArrived(arrived);
+                                let _ = event_tx.send(message);
+>>>>>>> main
                             }
                         }
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);

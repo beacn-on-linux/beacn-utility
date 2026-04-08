@@ -191,7 +191,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -1318,7 +1318,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3160,8 +3160,13 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-ipc"
+<<<<<<< feature/pipeweaver-preflight-setup
 version = "0.1.1"
 source = "git+https://github.com/pipeweaver/pipeweaver#d902f16db21f2f8f7c286a53032a4c3d6e00a7c9"
+=======
+version = "0.1.0"
+source = "git+https://github.com/pipeweaver/pipeweaver?rev=716c17526f5fdac40a0ddfdf2d110b5fc1bab412#716c17526f5fdac40a0ddfdf2d110b5fc1bab412"
+>>>>>>> main
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3180,8 +3185,13 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-profile"
+<<<<<<< feature/pipeweaver-preflight-setup
 version = "0.1.1"
 source = "git+https://github.com/pipeweaver/pipeweaver#d902f16db21f2f8f7c286a53032a4c3d6e00a7c9"
+=======
+version = "0.1.0"
+source = "git+https://github.com/pipeweaver/pipeweaver?rev=716c17526f5fdac40a0ddfdf2d110b5fc1bab412#716c17526f5fdac40a0ddfdf2d110b5fc1bab412"
+>>>>>>> main
 dependencies = [
  "enum-map",
  "pipeweaver-shared",
@@ -3191,8 +3201,13 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-shared"
+<<<<<<< feature/pipeweaver-preflight-setup
 version = "0.1.1"
 source = "git+https://github.com/pipeweaver/pipeweaver#d902f16db21f2f8f7c286a53032a4c3d6e00a7c9"
+=======
+version = "0.1.0"
+source = "git+https://github.com/pipeweaver/pipeweaver?rev=716c17526f5fdac40a0ddfdf2d110b5fc1bab412#716c17526f5fdac40a0ddfdf2d110b5fc1bab412"
+>>>>>>> main
 dependencies = [
  "clap",
  "enum-map",
@@ -3541,9 +3556,15 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
+<<<<<<< feature/pipeweaver-preflight-setup
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab3f43e3283ab1488b624b44b0e988d0acea0b3214e694730a055cb6b2efa801"
+=======
+version = "0.12.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
+>>>>>>> main
 dependencies = [
  "base64",
  "bytes",
@@ -3656,8 +3677,13 @@ dependencies = [
  "bitflags 2.11.0",
  "errno",
  "libc",
+<<<<<<< feature/pipeweaver-preflight-setup
  "linux-raw-sys 0.12.1",
  "windows-sys 0.61.2",
+=======
+ "linux-raw-sys 0.11.0",
+ "windows-sys 0.59.0",
+>>>>>>> main
 ]
 
 [[package]]
@@ -3667,6 +3693,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
+<<<<<<< feature/pipeweaver-preflight-setup
+=======
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
+>>>>>>> main
 name = "safe_arch"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4064,8 +4099,13 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.2",
  "once_cell",
+<<<<<<< feature/pipeweaver-preflight-setup
  "rustix 1.1.4",
  "windows-sys 0.61.2",
+=======
+ "rustix 1.1.2",
+ "windows-sys 0.59.0",
+>>>>>>> main
 ]
 
 [[package]]
@@ -4909,7 +4949,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ pub(crate) mod mixer_page;
 mod numbers;
 mod pages;
 mod shared_pages;
-mod states;
+pub(crate) mod states;
 mod widgets;
 
 pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {

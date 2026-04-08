@@ -7,6 +7,7 @@ use ksni::blocking::TrayMethods;
 use ksni::menu::StandardItem;
 use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray};
 use log::{debug, warn};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::{env, fs};
@@ -92,7 +93,11 @@ pub fn handle_tray(
     }
 
     // Remove the temporary icon file
-    fs::remove_file(tmp_file_path)?;
+    match fs::remove_file(&tmp_file_path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == ErrorKind::NotFound => {}
+        Err(e) => warn!("Failed to remove temporary tray icon {tmp_file_path:?}: {e}"),
+    }
     debug!("Tray Stopped");
     Ok(())
 }
