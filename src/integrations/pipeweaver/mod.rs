@@ -95,6 +95,11 @@ struct PipeweaverHandler {
     active_mix: Mix,
     devices_shown: Vec<Ulid>,
     renderers: Renderers,
+
+    /// Shared state for the desktop mixer UI.
+    shared_state: Option<crate::ui::states::pipeweaver_state::SharedPipeweaverState>,
+    /// Receives API commands from the desktop UI to forward to Pipeweaver.
+    ui_cmd_rx: Option<tokio::sync::mpsc::UnboundedReceiver<pipeweaver_ipc::commands::DaemonRequest>>,
 }
 
 impl PipeweaverHandler {
@@ -119,6 +124,9 @@ impl PipeweaverHandler {
             active_mix: Mix::A,
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
+
+            shared_state: None,
+            ui_cmd_rx: None,
         }
     }
 
@@ -144,10 +152,16 @@ impl PipeweaverHandler {
                 if !self.has_connected {
                     self.draw_status("Failed to connect to Pipeweaver");
                     self.disable_buttons();
+                    if let Some(ref ss) = self.shared_state {
+                        ss.set_disconnected(Some("Failed to connect".to_string()));
+                    }
                 } else {
                     self.draw_splash();
                     self.draw_status("Connection to Pipeweaver lost");
                     self.disable_buttons();
+                    if let Some(ref ss) = self.shared_state {
+                        ss.set_disconnected(Some("Connection lost".to_string()));
+                    }
                 }
             }
             self.displaying_error = true;
@@ -205,7 +219,17 @@ impl PipeweaverHandler {
         self.has_connected = true;
         self.displaying_error = false;
 
+        if let Some(ref ss) = self.shared_state {
+            ss.set_connected();
+        }
+
         self.load_status(&mut stream).await?;
+
+        // Push initial status to the desktop mixer UI
+        if let Some(ref ss) = self.shared_state {
+            ss.update_status(self.status.clone());
+        }
+
         self.load_initial_state().await?;
         self.run_message_loop(&mut stream).await?;
 
@@ -286,8 +310,19 @@ impl PipeweaverHandler {
         self.sender.send(ControlMessage::Enabled(true, tx))?;
         rx.recv()??;
 
+        // Take ownership of the UI command receiver for use in select!
+        let mut ui_cmd_rx = self.ui_cmd_rx.take();
+
         debug!("Starting Pipeweaver Message Loop");
         loop {
+            // Create a future that resolves when a UI command is available (or never if None)
+            let ui_cmd_fut = async {
+                match ui_cmd_rx.as_mut() {
+                    Some(rx) => rx.recv().await,
+                    None => std::future::pending().await,
+                }
+            };
+
             select! {
                 Some(message) = stream.next() => {
                     let message = message?;
@@ -297,6 +332,11 @@ impl PipeweaverHandler {
                             // Update the raw status for the change
                             json_patch::patch(&mut self.raw_status, &patch)?;
                             self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
+
+                            // Push updated status to the desktop mixer UI
+                            if let Some(ref ss) = self.shared_state {
+                                ss.update_status(self.status.clone());
+                            }
 
                             // Check whether the channel list has changed
                             let sources = &self.status.audio.profile.devices.sources;
@@ -424,6 +464,16 @@ impl PipeweaverHandler {
                     let (tx,rx) = oneshot::channel();
                     self.sender.send(ControlMessage::KeepAlive(tx))?;
                     rx.recv()??;
+                }
+                // Process commands from the desktop mixer UI
+                Some(ui_request) = ui_cmd_fut => {
+                    let cmd_id = self.get_command_index();
+                    let request = serde_json::to_string(&WebsocketRequest {
+                        id: cmd_id,
+                        data: ui_request,
+                    })?;
+                    stream.send(Message::Text(Utf8Bytes::from(request))).await?;
+                    debug!("Forwarded UI command to Pipeweaver (id: {})", cmd_id);
                 }
             }
         }
@@ -786,8 +836,12 @@ pub fn spawn_pipeweaver_handler(
     sender: Sender<ControlMessage>,
     device: DeviceType,
     input_rx: Receiver<Interactions>,
+    shared_state: crate::ui::states::pipeweaver_state::SharedPipeweaverState,
+    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<pipeweaver_ipc::commands::DaemonRequest>,
 ) {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx);
+    handler.shared_state = Some(shared_state);
+    handler.ui_cmd_rx = Some(cmd_rx);
     runtime().spawn(async move { handler.run_handler().await });
 }
 

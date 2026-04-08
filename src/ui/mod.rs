@@ -5,10 +5,11 @@ use once_cell::sync::Lazy;
 pub(crate) mod app;
 mod audio_pages;
 mod controller_pages;
+pub(crate) mod mixer_page;
 mod numbers;
 mod pages;
 mod shared_pages;
-mod states;
+pub(crate) mod states;
 mod widgets;
 
 // SVG Images

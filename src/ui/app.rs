@@ -1,10 +1,12 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
-use crate::ui::pages::{pipeweaver_ui, settings_ui};
+use crate::ui::mixer_page::{mixer_ui, MixerPageState};
+use crate::ui::pages::settings_ui;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::states::controller_state::BeacnControllerState;
+use crate::ui::states::pipeweaver_state::SharedPipeweaverState;
 use crate::ui::widgets::{round_nav_button, round_pipeweaver_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
@@ -30,6 +32,10 @@ pub struct BeacnMicApp {
     // We can probably do better here
     mixer_active: bool,
     settings_active: bool,
+
+    // Pipeweaver mixer state (shared with the async handler)
+    pipeweaver_state: Option<SharedPipeweaverState>,
+    mixer_page_state: MixerPageState,
 }
 
 impl BeacnMicApp {
@@ -59,6 +65,9 @@ impl BeacnMicApp {
 
             mixer_active: false,
             settings_active: false,
+
+            pipeweaver_state: None,
+            mixer_page_state: MixerPageState::default(),
         }
     }
 }
@@ -147,10 +156,15 @@ impl App for BeacnMicApp {
                         self.active_device = Some(definition);
                     }
                 }
-                DeviceArriveMessage::Control(definition, sender) => {
+                DeviceArriveMessage::Control(definition, sender, pw_state) => {
                     let state = BeacnControllerState::load_settings(definition.clone(), sender);
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
+
+                    // Store the Pipeweaver shared state for the mixer UI
+                    if let Some(pw) = pw_state {
+                        self.pipeweaver_state = Some(pw);
+                    }
 
                     if self.active_device.is_none() {
                         self.active_device = Some(definition);
@@ -285,7 +299,11 @@ impl BeacnMicApp {
 
         if self.mixer_active {
             egui::CentralPanel::default().show(ctx, |ui| {
-                pipeweaver_ui(ui);
+                if let Some(ref pw_state) = self.pipeweaver_state {
+                    mixer_ui(ui, pw_state, &mut self.mixer_page_state);
+                } else {
+                    ui.label("Pipeweaver not available — no Mix or Mix Create device connected.");
+                }
             });
             return;
         }
