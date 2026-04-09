@@ -207,7 +207,7 @@ impl ParametricEq {
             #[allow(clippy::collapsible_if)]
             if response.hovered() {
                 if let Some(pointer_pos) = response.hover_pos() {
-                    let scroll = ui.ctx().input(|i| i.raw_scroll_delta).y;
+                    let scroll = ui.ctx().input(|i| i.smooth_scroll_delta.y);
                     if scroll != 0.0 {
                         let scroll_up = scroll > 0.0;
                         self.handle_scroll(rect, pointer_pos, scroll_up, &mut bands, state);

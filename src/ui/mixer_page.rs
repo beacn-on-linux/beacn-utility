@@ -9,6 +9,7 @@ use egui::{Color32, ComboBox, Grid, RichText, ScrollArea, Ui, Vec2};
 use pipeweaver_ipc::commands::{APICommand, Application, PhysicalDevice};
 use pipeweaver_shared::{AppDefinition, AppTarget, DeviceType, Mix, MuteTarget, NodeType};
 use std::collections::{HashMap, HashSet};
+use std::process::Command;
 use ulid::Ulid;
 
 pub struct MixerPageState {
@@ -19,6 +20,7 @@ pub struct MixerPageState {
     pub selected_manage_input: Option<u32>,
     pending_attach_channel_name: Option<String>,
     pending_attach_input: Option<u32>,
+    setup_feedback: Option<String>,
 }
 
 impl Default for MixerPageState {
@@ -31,6 +33,7 @@ impl Default for MixerPageState {
             selected_manage_input: None,
             pending_attach_channel_name: None,
             pending_attach_input: None,
+            setup_feedback: None,
         }
     }
 }
@@ -73,12 +76,7 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
     } else {
         draw_header(ui, state, page_state, snap.connected, false);
         ui.separator();
-        ui.centered_and_justified(|ui| {
-            ui.label(
-                RichText::new("Waiting for Pipeweaver status…")
-                    .color(Color32::from_rgb(180, 180, 180)),
-            );
-        });
+        draw_pipeweaver_preflight(ui, page_state, snap.connected);
     }
 }
 
@@ -184,6 +182,116 @@ fn draw_header(
         if ui.checkbox(&mut auto, "Autostart Pipeweaver").changed() {
             state.send_daemon_command(pipeweaver_ipc::commands::DaemonCommand::SetAutoStart(auto));
         }
+    });
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PipeweaverRuntime {
+    Running,
+    InstalledNotRunning,
+    NotInstalled,
+}
+
+fn detect_pipeweaver_runtime(connected: bool) -> PipeweaverRuntime {
+    if connected {
+        return PipeweaverRuntime::Running;
+    }
+
+    if is_pipeweaver_installed() {
+        PipeweaverRuntime::InstalledNotRunning
+    } else {
+        PipeweaverRuntime::NotInstalled
+    }
+}
+
+fn is_pipeweaver_installed() -> bool {
+    Command::new("pipeweaver")
+        .arg("--help")
+        .output()
+        .map(|output| output.status.success() || !output.stderr.is_empty())
+        .unwrap_or(false)
+}
+
+fn try_start_pipeweaver() -> Result<(), String> {
+    Command::new("pipeweaver")
+        .arg("--background")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to start Pipeweaver: {e}"))
+}
+
+fn draw_pipeweaver_preflight(ui: &mut Ui, page_state: &mut MixerPageState, connected: bool) {
+    let runtime = detect_pipeweaver_runtime(connected);
+
+    ui.group(|ui| {
+        ui.vertical(|ui| {
+            ui.label(
+                RichText::new("Pipeweaver Setup")
+                    .size(14.0)
+                    .color(Color32::from_rgb(220, 220, 220)),
+            );
+            ui.add_space(4.0);
+
+            match runtime {
+                PipeweaverRuntime::Running => {
+                    ui.label(
+                        RichText::new("Pipeweaver is running. Waiting for mixer status...")
+                            .color(Color32::from_rgb(180, 180, 180)),
+                    );
+                }
+                PipeweaverRuntime::InstalledNotRunning => {
+                    ui.label(
+                        RichText::new(
+                            "Pipeweaver appears to be installed, but the local daemon is not responding yet.",
+                        )
+                        .color(Color32::from_rgb(180, 180, 180)),
+                    );
+                    ui.label(
+                        RichText::new(
+                            "Start it here, then wait a few seconds for the utility to reconnect automatically.",
+                        )
+                        .size(10.0)
+                        .color(Color32::from_rgb(140, 140, 140)),
+                    );
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Start Pipeweaver").clicked() {
+                            page_state.setup_feedback = Some(match try_start_pipeweaver() {
+                                Ok(()) => "Start command sent. Waiting for Pipeweaver to come online...".to_string(),
+                                Err(err) => err,
+                            });
+                        }
+                        if ui.button("Clear Message").clicked() {
+                            page_state.setup_feedback = None;
+                        }
+                    });
+                }
+                PipeweaverRuntime::NotInstalled => {
+                    ui.label(
+                        RichText::new(
+                            "Pipeweaver is required for BEACN Mix / Mix Create routing on Linux.",
+                        )
+                        .color(Color32::from_rgb(220, 190, 120)),
+                    );
+                    ui.label(
+                        RichText::new(
+                            "Install Pipeweaver first, then reopen this page or launch the daemon and wait for the utility to reconnect.",
+                        )
+                        .size(10.0)
+                        .color(Color32::from_rgb(140, 140, 140)),
+                    );
+                }
+            }
+
+            if let Some(message) = &page_state.setup_feedback {
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new(message)
+                        .size(10.0)
+                        .color(Color32::from_rgb(160, 210, 255)),
+                );
+            }
+        });
     });
 }
 

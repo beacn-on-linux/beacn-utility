@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
 use beacn_lib::crossbeam::channel::Sender;
-use egui::{Context, Id};
+use egui::{Context, Id, Ui};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
@@ -48,7 +48,7 @@ struct EventProxy(Arc<EventLoopProxy<UserEvent>>);
 
 pub trait App {
     fn with_context(&mut self, ctx: &Context);
-    fn update(&mut self, ctx: &Context);
+    fn update(&mut self, ui: &mut Ui);
     fn should_close(&mut self) -> bool;
     fn on_close(&mut self);
 
@@ -124,7 +124,7 @@ impl WindowRunner {
             let mut raw_input = renderer.winit_state.take_egui_input(window);
             raw_input.time = Some(self.app_start_time.elapsed().as_secs_f64());
 
-            let full_output = self.context.run(raw_input, |ctx| {
+            let full_output = self.context.run_ui(raw_input, |ctx| {
                 self.app.update(ctx);
             });
 
@@ -396,6 +396,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                             | WindowEvent::CursorEntered { .. }
                             | WindowEvent::AxisMotion { .. }
                             | WindowEvent::CursorLeft { .. }
+                            | WindowEvent::MouseWheel { .. }
                     ) {
                         debug!("Unhandled Window Event: {event:?}")
                     }
