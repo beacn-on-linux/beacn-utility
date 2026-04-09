@@ -19,4 +19,3 @@ pub(crate) fn settings_ui(ui: &mut Ui, context: &Context) {
         ui.label("Unable to Handle Auto-Start");
     }
 }
-

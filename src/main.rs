@@ -148,7 +148,8 @@ fn main() -> Result<()> {
 
         match event_loop {
             Ok(mut event_loop) => {
-                let runner = WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
+                let runner =
+                    WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
                 if let Err(e) = runner.run(&mut event_loop, hide_initial) {
                     error!("UI thread exited with error: {e}");
                     let _ = window_main_tx.send(ToMainMessages::Quit);

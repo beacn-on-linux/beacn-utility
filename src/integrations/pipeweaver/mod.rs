@@ -246,7 +246,8 @@ impl PipeweaverHandler {
                         let data = object.get("data").ok_or(error)?.clone();
                         let error = anyhow!("Failed to Read Status");
                         self.raw_status = data.get("Status").ok_or(error)?.clone();
-                        self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
+                        self.status =
+                            serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
                         break;
                     }
                 }
@@ -418,7 +419,8 @@ impl PipeweaverHandler {
                 self.renderers.insert(*device, render);
             }
         }
-        self.renderers.retain(|id, _| self.devices_shown.contains(id));
+        self.renderers
+            .retain(|id, _| self.devices_shown.contains(id));
         Ok(())
     }
 
@@ -428,7 +430,10 @@ impl PipeweaverHandler {
         DrawingUtils::composite_from_pos(&mut base, &jpeg_as_img(HEADER)?, (0, 0));
 
         for (index, item) in self.devices_shown.iter().enumerate() {
-            let renderer = self.renderers.get(item).ok_or(anyhow!("No Such Render Object"))?;
+            let renderer = self
+                .renderers
+                .get(item)
+                .ok_or(anyhow!("No Such Render Object"))?;
             let drawing = renderer.full_render(self.active_mix);
             let (width, _) = CHANNEL_DIMENSIONS;
             let x = width * index as u32;
@@ -437,14 +442,18 @@ impl PipeweaverHandler {
         }
 
         let (tx, rx) = oneshot::channel();
-        self.sender.send(SendImage(img_as_jpeg(base, BG_COLOUR)?, 0, 0, tx))?;
+        self.sender
+            .send(SendImage(img_as_jpeg(base, BG_COLOUR)?, 0, 0, tx))?;
         rx.recv()??;
         Ok(())
     }
 
     fn redraw_volumes(&self) -> Result<()> {
         for (index, item) in self.devices_shown.iter().enumerate() {
-            let renderer = self.renderers.get(item).ok_or(anyhow!("No Such Render Object"))?;
+            let renderer = self
+                .renderers
+                .get(item)
+                .ok_or(anyhow!("No Such Render Object"))?;
             let drawing = renderer.get_volume(self.active_mix)?;
             let (x, y) = drawing.position;
             let (ch_w, _) = CHANNEL_DIMENSIONS;
@@ -467,10 +476,20 @@ impl PipeweaverHandler {
     }
 
     fn load_page_button_colours(&self) -> Result<()> {
-        let left_colour = if self.active_page == 0 { COLOUR_BLACK } else { COLOUR_WHITE };
+        let left_colour = if self.active_page == 0 {
+            COLOUR_BLACK
+        } else {
+            COLOUR_WHITE
+        };
         let right_colour = match self.get_page_count() {
             1 => COLOUR_BLACK,
-            c => if self.active_page == c - 1 { COLOUR_BLACK } else { COLOUR_WHITE },
+            c => {
+                if self.active_page == c - 1 {
+                    COLOUR_BLACK
+                } else {
+                    COLOUR_WHITE
+                }
+            }
         };
         self.set_button_colour(ButtonLighting::Left, left_colour)?;
         self.set_button_colour(ButtonLighting::Right, right_colour)?;
@@ -486,8 +505,14 @@ impl PipeweaverHandler {
     }
 
     fn load_dial_button_colour(&self, index: usize) -> Result<()> {
-        let device_id = self.devices_shown.get(index).ok_or(anyhow!("No Such Index"))?;
-        let render = self.renderers.get(device_id).ok_or(anyhow!("Failed to Fetch Renderer"))?;
+        let device_id = self
+            .devices_shown
+            .get(index)
+            .ok_or(anyhow!("No Such Index"))?;
+        let render = self
+            .renderers
+            .get(device_id)
+            .ok_or(anyhow!("Failed to Fetch Renderer"))?;
         let dial_button = match index {
             0 => ButtonLighting::Dial1,
             1 => ButtonLighting::Dial2,
@@ -496,7 +521,12 @@ impl PipeweaverHandler {
             _ => bail!("Invalid Dial Index"),
         };
         let colour = render.colour;
-        let beacn_colour = RGBA { red: colour[0], green: colour[1], blue: colour[2], alpha: colour[3] };
+        let beacn_colour = RGBA {
+            red: colour[0],
+            green: colour[1],
+            blue: colour[2],
+            alpha: colour[3],
+        };
         self.set_button_colour(dial_button, beacn_colour)
     }
 
@@ -554,7 +584,9 @@ impl PipeweaverHandler {
 
         let channels_per_page = 4 - pinned.len() as u8;
         if others.len() < channels_per_page as usize {
-            for other in others { channels.push(*other); }
+            for other in others {
+                channels.push(*other);
+            }
             return channels;
         }
 
@@ -573,9 +605,15 @@ impl PipeweaverHandler {
         channels
     }
 
-    fn get_device_ref<'a>(&self, device: &Ulid, sources: &'a SourceDevices) -> Result<DeviceRef<'a>> {
+    fn get_device_ref<'a>(
+        &self,
+        device: &Ulid,
+        sources: &'a SourceDevices,
+    ) -> Result<DeviceRef<'a>> {
         sources
-            .physical_devices.iter().map(DeviceRef::Physical)
+            .physical_devices
+            .iter()
+            .map(DeviceRef::Physical)
             .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
             .find(|dev| match dev {
                 DeviceRef::Physical(d) => d.description.id == *device,
@@ -594,7 +632,10 @@ impl PipeweaverHandler {
     async fn handle_button(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
         match button {
             Buttons::AudienceMix => {
-                self.active_mix = match self.active_mix { Mix::A => Mix::B, Mix::B => Mix::A };
+                self.active_mix = match self.active_mix {
+                    Mix::A => Mix::B,
+                    Mix::B => Mix::A,
+                };
                 self.redraw_volumes()?;
                 self.load_mix_button_colours()?;
             }
@@ -604,13 +645,23 @@ impl PipeweaverHandler {
                     Buttons::PageRight => 1,
                     _ => bail!("Invalid button"),
                 };
-                if self.active_page == 0 && change == -1 { return Ok(()); }
-                if self.active_page == self.get_page_count() - 1 && change == 1 { return Ok(()); }
+                if self.active_page == 0 && change == -1 {
+                    return Ok(());
+                }
+                if self.active_page == self.get_page_count() - 1 && change == 1 {
+                    return Ok(());
+                }
                 self.active_page = self.active_page.wrapping_add_signed(change);
                 self.refresh_page()?;
             }
-            Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 |
-            Buttons::Audience1 | Buttons::Audience2 | Buttons::Audience3 | Buttons::Audience4 => {
+            Buttons::Dial1
+            | Buttons::Dial2
+            | Buttons::Dial3
+            | Buttons::Dial4
+            | Buttons::Audience1
+            | Buttons::Audience2
+            | Buttons::Audience3
+            | Buttons::Audience4 => {
                 let (index, target) = match button {
                     Buttons::Dial1 => (0, MuteTarget::TargetA),
                     Buttons::Dial2 => (1, MuteTarget::TargetA),
@@ -624,7 +675,10 @@ impl PipeweaverHandler {
                 };
 
                 if let Some(device) = self.devices_shown.get(index) {
-                    let current = self.renderers.get_mut(device).ok_or(anyhow!("Failed to get Renderer"))?;
+                    let current = self
+                        .renderers
+                        .get_mut(device)
+                        .ok_or(anyhow!("Failed to get Renderer"))?;
                     let message = if current.mute_states[target].is_active {
                         APICommand::DelSourceMuteTarget(*device, target)
                     } else {
@@ -651,12 +705,19 @@ impl PipeweaverHandler {
 
         let command_index = self.get_command_index();
         if let Some(device) = self.devices_shown.get(device_index) {
-            let current = self.renderers.get(device).ok_or(anyhow!("Failed to get Renderer"))?;
+            let current = self
+                .renderers
+                .get(device)
+                .ok_or(anyhow!("Failed to get Renderer"))?;
             let volume = current.volumes[self.active_mix] as i16;
             let new_volume = (volume + change as i16).clamp(0, 100) as u8;
             let command = serde_json::to_string(&WebsocketRequest {
                 id: command_index,
-                data: DaemonRequest::Pipewire(SetSourceVolume(*device, self.active_mix, new_volume)),
+                data: DaemonRequest::Pipewire(SetSourceVolume(
+                    *device,
+                    self.active_mix,
+                    new_volume,
+                )),
             })?;
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;
         }
@@ -688,7 +749,10 @@ fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
     bail!("Failed to load image");
 }
 
-fn sync_to_async(rx: Receiver<Interactions>, tx: tokio::sync::mpsc::Sender<Interactions>) -> Result<()> {
+fn sync_to_async(
+    rx: Receiver<Interactions>,
+    tx: tokio::sync::mpsc::Sender<Interactions>,
+) -> Result<()> {
     debug!("Running Up Receiver..");
     loop {
         match rx.recv() {

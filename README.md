@@ -1,130 +1,156 @@
-# Beacn Utility for Linux
+# BEACN Utility for Linux
 
-A UI for configuring and using the Beacn hardware on Linux. Join us on [Discord](https://discord.gg/PdsscuEhMh).
+Linux utility for configuring and using BEACN hardware.
 
-***
+This repository is maintained as the `ttmullins/beacn-utility` fork of the original `beacn-on-linux/beacn-utility` project. The goal of this fork is to keep the app practical, easy to build, and easier for Linux users to trust and contribute to.
 
-### USE AT YOUR OWN RISK
+## What this project is
 
-This code directly modifies the on-board storage of the Beacn Mic and Studio. While it's been tested and made to
-be as safe as is possible, it was derived from reverse engineering and thus may not be accurate.
+BEACN Utility gives Linux users a desktop UI for BEACN device configuration, especially for DSP and device-management workflows that do not have first-party Linux support.
 
-This project is not supported by, or affiliated in any way with Beacn. For official Beacn software, please refer
-to their website.
+## Current status
 
-In addition, this project accepts no responsibility or liability for any use of this software, or any problems
-which may occur from its use. Please read the LICENSE for more information.
+### Working today
+- BEACN Mic support
+- BEACN Studio support
+- Core DSP adjustment workflows
+- Linux desktop UI and tray/background behavior
+- Source builds with `cargo`
 
-***
-# Installation
+### In progress / limited
+- Mix and Mix Create support is present but still evolving
+- PipeWeaver-dependent mixer workflows need more validation across distros
+- Packaging and release hygiene need to improve in this fork
 
-## Automatic Installation
-The Beacn Utility project provides a simple script which will attempt to install the correct package for your
-distribution. This script will install the utility in such a way that future releases will be managed through your
-standard package manager.
+### Not planned right now
+- Profiles
+- Audio visualizations
 
-There is a [wiki page](https://github.com/beacn-on-linux/beacn-utility/wiki/Release-Transparency) which describes the
-process, and how you can verify that the code you're running is the same as what is in this repository.
+## Safety notice
 
-Run the following in a Terminal, and follow the prompts:
+**Use this software carefully.**
+
+This application can modify on-device storage for supported BEACN hardware. The implementation was derived through reverse engineering and community testing rather than official vendor support.
+
+That does **not** mean it is unsafe by default, but it does mean users should treat it like low-level hardware software:
+
+- back up settings before major changes
+- avoid interrupting writes
+- test carefully after changing device values
+- open an issue if anything looks wrong
+
+This project is not affiliated with or endorsed by BEACN.
+
+## Quick start
+
+### Install
+Right now, the most reliable way to use this fork is to build from source.
+
 ```bash
-curl -fsSL https://beacn-on-linux.github.io/beacn-utility-repo/scripts/install.sh | bash
+git clone https://github.com/ttmullins/beacn-utility.git
+cd beacn-utility
+cargo run --release
 ```
 
-## Manual Installation
-If you don't want to use the script, there are still options available! The [releases page](https://github.com/beacn-on-linux/beacn-utility/releases/latest) 
-contains the following:
+To build a reusable release binary instead:
 
-* `.rpm` package for Redhat based distributions (Fedora, CentOS, RHEL, etc)
-* `.deb` package for Debian based distributions (Debian, Ubuntu, Linux Mint, Pop, etc)
-* `.flatpakref` A reference file for the Beacn Utility Flatpak repository
-* Compile from Source (instructions below)
+```bash
+cargo build --release
+```
 
-### Notes
- * The Beacn Utility is also available in the AUR as `beacn-utility`
- * The RPM and DEB packages do not provide automatic updates, and there's no app check.
- * For Bazzite, you can install the rpm via ostree, although I'd recommend the flatpak instead.
+Your compiled binary will be at:
 
-***
-![img.png](.github/resources/img.png)
+```bash
+target/release/beacn-utility
+```
 
-Currently, this tool is quite barebones and basic and is likely going to stay that way, it's primary goal is to provide
-a way to adjust the DSP values of the Mic or Studio. Outside of rendering a test image, Mix and Mix Create support is
-mostly absent. This app is still quite new, so may also might be slightly buggy, expect issues.
-***
+## Linux requirements
 
-## Quick Start
+### udev rules
+If you are on `systemd` older than `257.7`:
 
-### Prerequisites
+1. Copy `50-beacn.rules` to `/etc/udev/rules.d/`
+2. Reload rules:
 
-| Requirement | Devices | Notes |
-|---|---|---|
-| **udev rules** | All | Required on `systemd` < 257.7 — see [Setting Up Beacn Devices](#setting-up-beacn-devices-on-linux) below |
-| **ALSA UCM profiles** | Mic, Studio | Required on `alsa-ucm-conf` < 1.2.15 — see [Setting Up Beacn Devices](#setting-up-beacn-devices-on-linux) below |
-| **[PipeWeaver](https://github.com/pipeweaver/pipeweaver)** | Mix, Mix Create | Required for the desktop mixer UI (volume, routing, app assignment). The mixer page will show a disconnected state if PipeWeaver is not running. |
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
 
-### Steps
+### ALSA UCM profiles
+If you are using a BEACN Mic or Studio and your `alsa-ucm-conf` is older than `1.2.15`, install the community ALSA UCM profiles:
 
-1. Install the Beacn Utility ([automatic](#automatic-installation) or [manual](#manual-installation))
-2. If your `systemd` or `alsa-ucm-conf` version requires it, complete the [device setup steps](#setting-up-beacn-devices-on-linux) below
-3. *(Mix / Mix Create only)* Install and start [PipeWeaver](https://github.com/pipeweaver/pipeweaver) — the mixer UI will connect automatically once it's running
-4. Plug in your device and launch Beacn Utility
+- <https://github.com/beacn-on-linux/beacn-ucm-profiles>
 
----
+After changing udev rules or ALSA UCM content, unplug and reconnect the device.
 
-## Getting Started
+### PipeWeaver
+Some mixer workflows depend on PipeWeaver:
 
-### Setting Up Beacn Devices on Linux
+- <https://github.com/pipeweaver/pipeweaver>
 
-The steps taken to set up Beacn Devices depend on the current package version of your distribution.
+If PipeWeaver is not running, mixer-related pages may show a disconnected or limited state.
 
-If you are running a `systemd` version older than 257.7, perform the following steps:
-1) Copy `50-beacn.rules` from this repository to `/etc/udev/rules.d/`
-2) Run `sudo udevadm control --reload-rules && sudo udevadm trigger` 
+## Tested / expected environments
 
-If you are running an `alsa-ucm-conf` version older than 1.2.15, and are using a Beacn Mic or Beacn Studio:
-1) Manually install the [ALSA UCM profiles](https://github.com/beacn-on-linux/beacn-ucm-profiles) for the Beacn Hardware.
+This fork should be treated as **community-supported** unless a distro is explicitly validated in a release note.
 
-If you've needed to perform any of the above, unplug and replug your beacn device. For the Mic and Studio, you should
-now see properly allocated Microphone / Headphone channels in your audio settings.
-***
+### Good candidates
+- Fedora
+- Bazzite
+- Arch / EndeavourOS
+- Ubuntu
+- Debian-based desktops with current PipeWire stacks
 
-## Compiling From Source
+### Expect extra setup
+- older enterprise-style distros
+- minimal desktop environments
+- systems with outdated `systemd`, `alsa-ucm-conf`, or PipeWire components
 
-If you simply want to just run this app, you can do so with the following:
+## Known limitations
 
-1) Check out this repository
-2) Run `cargo run --release`
+- Mix and Mix Create support is not yet as mature as Mic / Studio support
+- release artifacts are not yet consistently published from this fork
+- hardware/software combinations on Linux vary a lot, so distro-specific bugs are expected
+- first-run troubleshooting guidance still needs improvement
 
-### Building this App
+## Troubleshooting
 
-If you instead want to build the app and have a useful binary you can link to:
+### The app opens but the device is missing
+Check:
+- USB connection
+- udev rules
+- whether the device appears in your system audio stack
+- whether unplug/replug fixes enumeration
 
-1) Check out this repository
-2) Run `cargo build --release`
-3) Grab `target/release/beacn-utility`
+### Mixer page looks disconnected
+Check:
+- PipeWeaver is installed
+- PipeWeaver is running
+- the versions of the utility and PipeWeaver are compatible
 
-***
+### Something seems unsafe after a change
+Stop using the app, capture logs, and open an issue with:
+- distro and version
+- desktop environment
+- device model
+- steps taken
+- screenshots and logs if possible
 
-## Compiling to Flatpak
+## Project roadmap
 
-To build a local flatpak of this project, check out the [beacn-utility-flatpak](https://github.com/beacn-on-linux/beacn-utility-flatpak)
-repository.
+See [ROADMAP.md](ROADMAP.md).
 
-***
-## Current Project Status
+## Contributing
 
-Not Yet Implemented:
-* Probably a button or two, let me know if you spot one.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Implemented:
-* Beacn Mix and Mix Create mixer UI (via PipeWeaver)
+## Changelog
 
-Not (currently) Planned:
-* Profiles
-* Audio Visualisations
+See [CHANGELOG.md](CHANGELOG.md).
 
-***
+## Credits
 
-This tool may eventually be merged into a 'Bigger' app that includes other Beacn devices, this will happen as and
-when time permits and devices are handled.
+- Original upstream project: `beacn-on-linux/beacn-utility`
+- Community BEACN on Linux contributors
+- PipeWeaver contributors

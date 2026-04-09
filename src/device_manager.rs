@@ -98,8 +98,12 @@ pub fn spawn_device_manager(
                                     Err(e) => (
                                         None,
                                         DefinitionState::Error(match e {
-                                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
-                                            BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
+                                            BeacnError::Usb(UsbError::Access) => {
+                                                ErrorType::PermissionDenied
+                                            }
+                                            BeacnError::Usb(UsbError::Busy) => {
+                                                ErrorType::ResourceBusy
+                                            }
                                             BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
                                             BeacnError::Other(e) => ErrorType::Other(e.to_string()),
                                         }),
@@ -122,22 +126,33 @@ pub fn spawn_device_manager(
                                 if let Some(device) = device {
                                     receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
                                 }
-                                let _ = event_tx.send(DeviceMessage::DeviceArrived(DeviceArriveMessage::Audio(data, tx)));
+                                let _ = event_tx.send(DeviceMessage::DeviceArrived(
+                                    DeviceArriveMessage::Audio(data, tx),
+                                ));
                             }
                             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                                 let (input_tx, input_rx) = channel::unbounded();
-                                let (device, state) = match open_control_device(location, Some(input_tx)) {
-                                    Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (
-                                        None,
-                                        DefinitionState::Error(match e {
-                                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
-                                            BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
-                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
-                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
-                                        }),
-                                    ),
-                                };
+                                let (device, state) =
+                                    match open_control_device(location, Some(input_tx)) {
+                                        Ok(d) => (Some(d), DefinitionState::Running),
+                                        Err(e) => (
+                                            None,
+                                            DefinitionState::Error(match e {
+                                                BeacnError::Usb(UsbError::Access) => {
+                                                    ErrorType::PermissionDenied
+                                                }
+                                                BeacnError::Usb(UsbError::Busy) => {
+                                                    ErrorType::ResourceBusy
+                                                }
+                                                BeacnError::Usb(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                                BeacnError::Other(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                            }),
+                                        ),
+                                    };
                                 let (serial, version) = match &device {
                                     Some(d) => (d.get_serial(), d.get_version()),
                                     None => ("Unknown".to_string(), "Unknown".to_string()),
@@ -146,17 +161,28 @@ pub fn spawn_device_manager(
                                     state,
                                     location,
                                     device_type,
-                                    device_info: DeviceInfo { serial, version: VersionNumber::from(version) },
+                                    device_info: DeviceInfo {
+                                        serial,
+                                        version: VersionNumber::from(version),
+                                    },
                                 };
                                 let (tx, rx) = channel::unbounded();
                                 let mut pipeweaver_state = None;
                                 if let Some(device) = device {
                                     receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
                                     let (shared_state, cmd_rx) = SharedPipeweaverState::new();
-                                    spawn_pipeweaver_handler(tx.clone(), device_type, input_rx, shared_state.clone(), cmd_rx);
+                                    spawn_pipeweaver_handler(
+                                        tx.clone(),
+                                        device_type,
+                                        input_rx,
+                                        shared_state.clone(),
+                                        cmd_rx,
+                                    );
                                     pipeweaver_state = Some(shared_state);
                                 }
-                                let _ = event_tx.send(DeviceMessage::DeviceArrived(DeviceArriveMessage::Control(data, tx, pipeweaver_state)));
+                                let _ = event_tx.send(DeviceMessage::DeviceArrived(
+                                    DeviceArriveMessage::Control(data, tx, pipeweaver_state),
+                                ));
                             }
                         }
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
@@ -174,7 +200,9 @@ pub fn spawn_device_manager(
                 Err(_) => break,
             },
             i => {
-                if let Some(device) = device_indices.get(&i) && let Some(device) = receiver_map.get(*device) {
+                if let Some(device) = device_indices.get(&i)
+                    && let Some(device) = receiver_map.get(*device)
+                {
                     match device {
                         DeviceMap::Audio(dev, _, rx) => {
                             if let Ok(msg) = operation.recv(rx) {
@@ -182,15 +210,22 @@ pub fn spawn_device_manager(
                                     AudioMessage::Handle(msg, resp) => {
                                         let response = catch_unwind(|| dev.handle_message(msg));
                                         if let Err(panic) = response {
-                                            let error = panic.downcast_ref::<String>().cloned().unwrap_or(String::from("Unknown Error"));
+                                            let error = panic
+                                                .downcast_ref::<String>()
+                                                .cloned()
+                                                .unwrap_or(String::from("Unknown Error"));
                                             let _ = resp.send(Err(anyhow!(error).into()));
                                         } else {
                                             let _ = resp.send(response.unwrap());
                                         }
                                     }
                                     AudioMessage::Linked(command) => match command {
-                                        LinkedCommands::GetLinked(tx) => { let _ = tx.send(dev.get_linked_app_list()); }
-                                        LinkedCommands::SetLinked(app, tx) => { let _ = tx.send(dev.set_linked_app(app)); }
+                                        LinkedCommands::GetLinked(tx) => {
+                                            let _ = tx.send(dev.get_linked_app_list());
+                                        }
+                                        LinkedCommands::SetLinked(app, tx) => {
+                                            let _ = tx.send(dev.set_linked_app(app));
+                                        }
                                     },
                                 }
                             }
@@ -198,13 +233,27 @@ pub fn spawn_device_manager(
                         DeviceMap::Control(dev, _, rx) => {
                             if let Ok(msg) = operation.recv(rx) {
                                 match msg {
-                                    ControlMessage::SendImage(img, x, y, tx) => { let _ = tx.send(dev.set_image(x, y, &img)); }
-                                    ControlMessage::DisplayBrightness(brightness, tx) => { let _ = tx.send(dev.set_display_brightness(brightness)); }
-                                    ControlMessage::ButtonBrightness(brightness, tx) => { let _ = tx.send(dev.set_button_brightness(brightness)); }
-                                    ControlMessage::DimTimeout(timeout, tx) => { let _ = tx.send(dev.set_dim_timeout(timeout)); }
-                                    ControlMessage::ButtonColour(button, colour, tx) => { let _ = tx.send(dev.set_button_colour(button, colour)); }
-                                    ControlMessage::Enabled(enabled, tx) => { let _ = tx.send(dev.set_enabled(enabled)); }
-                                    ControlMessage::KeepAlive(tx) => { let _ = tx.send(dev.send_keepalive()); }
+                                    ControlMessage::SendImage(img, x, y, tx) => {
+                                        let _ = tx.send(dev.set_image(x, y, &img));
+                                    }
+                                    ControlMessage::DisplayBrightness(brightness, tx) => {
+                                        let _ = tx.send(dev.set_display_brightness(brightness));
+                                    }
+                                    ControlMessage::ButtonBrightness(brightness, tx) => {
+                                        let _ = tx.send(dev.set_button_brightness(brightness));
+                                    }
+                                    ControlMessage::DimTimeout(timeout, tx) => {
+                                        let _ = tx.send(dev.set_dim_timeout(timeout));
+                                    }
+                                    ControlMessage::ButtonColour(button, colour, tx) => {
+                                        let _ = tx.send(dev.set_button_colour(button, colour));
+                                    }
+                                    ControlMessage::Enabled(enabled, tx) => {
+                                        let _ = tx.send(dev.set_enabled(enabled));
+                                    }
+                                    ControlMessage::KeepAlive(tx) => {
+                                        let _ = tx.send(dev.send_keepalive());
+                                    }
                                 }
                             }
                         }
@@ -222,13 +271,23 @@ pub fn spawn_device_manager(
 #[allow(unused)]
 fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
-        if let DeviceMap::Control(dev, _, _) = device { let _ = dev.set_enabled(enabled); }
+        if let DeviceMap::Control(dev, _, _) = device {
+            let _ = dev.set_enabled(enabled);
+        }
     }
 }
 
 enum DeviceMap {
-    Audio(Box<dyn BeacnAudioDevice>, DeviceDefinition, Receiver<AudioMessage>),
-    Control(Box<dyn BeacnControlDevice>, DeviceDefinition, Receiver<ControlMessage>),
+    Audio(
+        Box<dyn BeacnAudioDevice>,
+        DeviceDefinition,
+        Receiver<AudioMessage>,
+    ),
+    Control(
+        Box<dyn BeacnControlDevice>,
+        DeviceDefinition,
+        Receiver<ControlMessage>,
+    ),
 }
 
 #[derive(Debug, Clone)]
@@ -240,7 +299,11 @@ pub enum DeviceMessage {
 #[derive(Debug, Clone)]
 pub enum DeviceArriveMessage {
     Audio(DeviceDefinition, Sender<AudioMessage>),
-    Control(DeviceDefinition, Sender<ControlMessage>, Option<SharedPipeweaverState>),
+    Control(
+        DeviceDefinition,
+        Sender<ControlMessage>,
+        Option<SharedPipeweaverState>,
+    ),
 }
 
 pub enum AudioMessage {
@@ -261,7 +324,11 @@ pub enum ControlMessage {
     DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
     DimTimeout(Duration, oneshot::Sender<Result<(), BeacnError>>),
-    ButtonColour(ButtonLighting, RGBA, oneshot::Sender<Result<(), BeacnError>>),
+    ButtonColour(
+        ButtonLighting,
+        RGBA,
+        oneshot::Sender<Result<(), BeacnError>>,
+    ),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]

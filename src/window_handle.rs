@@ -36,6 +36,7 @@ const EVENT_PROXY: &str = "event_proxy";
 pub enum UserEvent {
     RequestRedraw,
     FocusWindow,
+    #[allow(dead_code)]
     DeviceMessage(DeviceMessage),
     SetAutoStart(bool),
     Quit,
@@ -427,8 +428,12 @@ impl GlowRenderer {
         let surface_attributes = SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
             .build(
                 raw_window_handle,
-                size.width.try_into().map_err(|_| anyhow!("Invalid window width"))?,
-                size.height.try_into().map_err(|_| anyhow!("Invalid window height"))?,
+                size.width
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid window width"))?,
+                size.height
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid window height"))?,
             );
 
         let gl_surface = unsafe {

@@ -2,7 +2,7 @@
 //!
 //! The handler writes status updates; the UI reads them and sends commands back.
 
-use pipeweaver_ipc::commands::{APICommand, DaemonCommand, DaemonRequest, DaemonStatus};
+use pipeweaver_ipc::commands::{APICommand, DaemonRequest, DaemonStatus};
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc::{self, error::TrySendError};
 
@@ -24,7 +24,7 @@ pub struct PipeweaverSnapshot {
 pub struct SharedPipeweaverState {
     inner: Arc<RwLock<PipeweaverSnapshot>>,
     /// Bounded channel for the UI to send requests to the Pipeweaver handler.
-    /// Uses `DaemonRequest` so both `APICommand` and `DaemonCommand` can be sent.
+    /// Uses `DaemonRequest` so both `APICommand` and other daemon requests can be sent.
     command_tx: mpsc::Sender<DaemonRequest>,
 }
 
@@ -49,11 +49,6 @@ impl SharedPipeweaverState {
     /// Send a PipeWire API command (routing, volumes, etc.).
     pub fn send_command(&self, cmd: APICommand) {
         self.try_send(DaemonRequest::Pipewire(cmd));
-    }
-
-    /// Send a daemon-level command (autostart, reset, etc.).
-    pub fn send_daemon_command(&self, cmd: DaemonCommand) {
-        self.try_send(DaemonRequest::Daemon(cmd));
     }
 
     fn try_send(&self, request: DaemonRequest) {

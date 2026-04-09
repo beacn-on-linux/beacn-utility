@@ -1,7 +1,7 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
-use crate::ui::mixer_page::{mixer_ui, MixerPageState};
+use crate::ui::mixer_page::{MixerPageState, mixer_ui};
 use crate::ui::pages::settings_ui;
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
@@ -176,7 +176,10 @@ impl App for BeacnMicApp {
                     self.device_list.retain(|d| d != definition);
 
                     let has_mixer_device = self.device_list.iter().any(|d| {
-                        matches!(d.device_type, DeviceType::BeacnMix | DeviceType::BeacnMixCreate)
+                        matches!(
+                            d.device_type,
+                            DeviceType::BeacnMix | DeviceType::BeacnMixCreate
+                        )
                     });
                     if !has_mixer_device {
                         self.pipeweaver_state = None;

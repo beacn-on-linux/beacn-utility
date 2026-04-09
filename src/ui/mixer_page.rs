@@ -425,7 +425,11 @@ fn draw_channel_management(
             ComboBox::from_id_salt("manage_channel_input")
                 .selected_text(selected_manage_input_label)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut page_state.selected_manage_input, None, "Attach input");
+                    ui.selectable_value(
+                        &mut page_state.selected_manage_input,
+                        None,
+                        "Attach input",
+                    );
                     for dev in &physical_inputs {
                         ui.selectable_value(
                             &mut page_state.selected_manage_input,
@@ -435,13 +439,17 @@ fn draw_channel_management(
                     }
                 });
 
-            let selected_virtual_channel = page_state
-                .selected_manage_channel
-                .and_then(|id| virtual_channels.iter().find(|channel| channel.id == id).copied());
+            let selected_virtual_channel = page_state.selected_manage_channel.and_then(|id| {
+                virtual_channels
+                    .iter()
+                    .find(|channel| channel.id == id)
+                    .copied()
+            });
 
             if ui
                 .add_enabled(
-                    selected_virtual_channel.is_some() && page_state.selected_manage_input.is_some(),
+                    selected_virtual_channel.is_some()
+                        && page_state.selected_manage_input.is_some(),
                     egui::Button::new("Attach Input"),
                 )
                 .clicked()
@@ -454,7 +462,10 @@ fn draw_channel_management(
             }
 
             if ui
-                .add_enabled(selected_virtual_channel.is_some(), egui::Button::new("Delete"))
+                .add_enabled(
+                    selected_virtual_channel.is_some(),
+                    egui::Button::new("Delete"),
+                )
                 .clicked()
             {
                 if let Some(channel) = selected_virtual_channel {
@@ -534,12 +545,15 @@ fn draw_source_strips(
     page_state: &MixerPageState,
     channels: &[SourceChannel],
 ) {
-    ui.label(RichText::new("Sources").size(13.0).color(Color32::from_rgb(200, 200, 200)));
+    ui.label(
+        RichText::new("Sources")
+            .size(13.0)
+            .color(Color32::from_rgb(200, 200, 200)),
+    );
 
     if channels.is_empty() {
         ui.label(
-            RichText::new("No source channels configured.")
-                .color(Color32::from_rgb(140, 140, 140)),
+            RichText::new("No source channels configured.").color(Color32::from_rgb(140, 140, 140)),
         );
         return;
     }
@@ -566,10 +580,8 @@ fn draw_single_strip(
 
     ui.allocate_ui(Vec2::new(strip_width, strip_height), |ui| {
         ui.vertical(|ui| {
-            let (rect, _response) = ui.allocate_exact_size(
-                Vec2::new(strip_width, 22.0),
-                egui::Sense::hover(),
-            );
+            let (rect, _response) =
+                ui.allocate_exact_size(Vec2::new(strip_width, 22.0), egui::Sense::hover());
             ui.painter().rect_filled(rect, 3.0, ch.colour);
             ui.painter().text(
                 rect.center(),
@@ -672,8 +684,7 @@ fn draw_application_routing(
 
     if source_apps.is_empty() {
         ui.label(
-            RichText::new("No applications detected.")
-                .color(Color32::from_rgb(140, 140, 140)),
+            RichText::new("No applications detected.").color(Color32::from_rgb(140, 140, 140)),
         );
         return;
     }
@@ -682,7 +693,8 @@ fn draw_application_routing(
         .id_salt("app_routing_scroll")
         .max_height(220.0)
         .show(ui, |ui| {
-            let mut route_options: Vec<(Option<Ulid>, String)> = vec![(None, "Unrouted".to_owned())];
+            let mut route_options: Vec<(Option<Ulid>, String)> =
+                vec![(None, "Unrouted".to_owned())];
             for ch in channels {
                 route_options.push((Some(ch.id), ch.name.clone()));
             }
@@ -729,7 +741,9 @@ fn draw_application_routing(
                                 .show_ui(ui, |ui| {
                                     for (opt_id, opt_name) in &route_options {
                                         let selected = *opt_id == current_route;
-                                        if ui.selectable_label(selected, opt_name.as_str()).clicked()
+                                        if ui
+                                            .selectable_label(selected, opt_name.as_str())
+                                            .clicked()
                                         {
                                             match opt_id {
                                                 Some(channel_id) => state.send_command(
@@ -756,8 +770,7 @@ fn draw_application_routing(
                                 .clamping(egui::SliderClamping::Always);
                             if ui.add(vol_slider).changed() {
                                 state.send_command(APICommand::SetApplicationVolume(
-                                    node_id,
-                                    vol as u8,
+                                    node_id, vol as u8,
                                 ));
                             }
 
@@ -789,8 +802,7 @@ fn draw_output_routing(
 
     if channels.is_empty() {
         ui.label(
-            RichText::new("No source channels to route.")
-                .color(Color32::from_rgb(140, 140, 140)),
+            RichText::new("No source channels to route.").color(Color32::from_rgb(140, 140, 140)),
         );
         return;
     }
@@ -816,8 +828,7 @@ fn draw_output_routing(
 
     if target_rows.is_empty() {
         ui.label(
-            RichText::new("No output targets configured.")
-                .color(Color32::from_rgb(140, 140, 140)),
+            RichText::new("No output targets configured.").color(Color32::from_rgb(140, 140, 140)),
         );
         return;
     }
@@ -850,11 +861,7 @@ fn draw_output_routing(
 
                             let mut checked = enabled;
                             if ui.checkbox(&mut checked, "").changed() {
-                                state.send_command(APICommand::SetRoute(
-                                    ch.id,
-                                    target.id,
-                                    checked,
-                                ));
+                                state.send_command(APICommand::SetRoute(ch.id, target.id, checked));
                             }
                         }
                         ui.end_row();

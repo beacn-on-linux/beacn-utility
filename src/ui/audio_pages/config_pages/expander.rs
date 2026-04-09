@@ -28,7 +28,8 @@ impl ConfigPage for ExpanderPage {
                 ui.vertical(|ui| {
                     if ui.checkbox(&mut values.enabled, "Enabled").changed() {
                         for mode in ExpanderMode::iter() {
-                            let message = Message::Expander(Expander::Enabled(mode, values.enabled));
+                            let message =
+                                Message::Expander(Expander::Enabled(mode, values.enabled));
                             state.handle_message(message).expect("Failed");
                         }
                     }
