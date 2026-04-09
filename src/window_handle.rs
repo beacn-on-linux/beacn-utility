@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
 use beacn_lib::crossbeam::channel::Sender;
-use egui::{Context, Id, Ui};
+use egui::{Context, Id};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
@@ -32,7 +32,6 @@ use std::{env, fs};
 
 const EVENT_PROXY: &str = "event_proxy";
 
-// These are events we can send into winit to trigger an update
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     RequestRedraw,
@@ -42,32 +41,26 @@ pub enum UserEvent {
     Quit,
 }
 
-// This is a reference to the Event Proxy, which we can store inside the context
 #[derive(Clone)]
 struct EventProxy(Arc<EventLoopProxy<UserEvent>>);
 
 pub trait App {
     fn with_context(&mut self, ctx: &Context);
-    fn update(&mut self, ui: &mut Ui);
+    fn update(&mut self, ctx: &Context);
     fn should_close(&mut self) -> bool;
     fn on_close(&mut self);
-
-    // I don't like this being here, but it's easiest this way
     fn handle_device_message(&mut self, msg: DeviceMessage);
 }
 
 pub struct WindowRunner {
     app: Box<dyn App>,
     initial_hide: bool,
-
     window: Option<Arc<Window>>,
     renderer: Option<GlowRenderer>,
     app_start_time: Instant,
     context: Context,
     event_loop_proxy: Option<EventLoopProxy<UserEvent>>,
-
     window_attributes: WindowAttributes,
-
     sender: Sender<ToMainMessages>,
 }
 
@@ -87,18 +80,13 @@ impl WindowRunner {
     ) -> Self {
         Self {
             app,
-
             initial_hide: true,
-
             window: None,
             renderer: None,
             app_start_time: Instant::now(),
-
             context: Default::default(),
             event_loop_proxy: None,
-
             window_attributes: attributes,
-
             sender,
         }
     }
@@ -106,16 +94,9 @@ impl WindowRunner {
     pub fn run(mut self, event_loop: &mut EventLoop<UserEvent>, initial_hide: bool) -> Result<()> {
         self.initial_hide = initial_hide;
         event_loop.set_control_flow(ControlFlow::Wait);
-
-        // Create the event loop proxy
         self.event_loop_proxy = Some(event_loop.create_proxy());
-
-        // Create an initial context, this will be replaced when a window is created
         self.create_new_context();
-
-        // Use run_app_on_demand instead of run() so it can return when window closes
         event_loop.run_app_on_demand(&mut self)?;
-
         Ok(())
     }
 
@@ -124,7 +105,7 @@ impl WindowRunner {
             let mut raw_input = renderer.winit_state.take_egui_input(window);
             raw_input.time = Some(self.app_start_time.elapsed().as_secs_f64());
 
-            let full_output = self.context.run_ui(raw_input, |ctx| {
+            let full_output = self.context.run(raw_input, |ctx| {
                 self.app.update(ctx);
             });
 
@@ -134,7 +115,6 @@ impl WindowRunner {
 
             renderer.render_egui(&full_output, &self.context);
 
-            // Swap buffers
             if let Err(e) = renderer.gl_surface.swap_buffers(&renderer.gl_context) {
                 error!("Failed to swap buffers: {e}");
                 self.destroy_window();
@@ -145,15 +125,10 @@ impl WindowRunner {
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         if self.window.is_none() {
             debug!("Creating Window");
-
-            // Create a new context for the window
             self.create_new_context();
-
-            // Now try creating the Window
             let attributes = self.window_attributes.clone();
             let window = Arc::new(event_loop.create_window(attributes)?);
             let renderer = GlowRenderer::new(Arc::clone(&window), &self.context)?;
-
             self.window = Some(window);
             self.renderer = Some(renderer);
         }
@@ -162,18 +137,15 @@ impl WindowRunner {
     }
 
     fn create_new_context(&mut self) {
-        // Prepare a new context for the window
         self.context = Context::default();
         prepare_context(&mut self.context);
         self.app.with_context(&self.context);
 
-        // Attach the proxy in the new context
         if let Some(proxy) = &self.event_loop_proxy {
             self.context.data_mut(|data| {
                 data.insert_persisted(Id::new(EVENT_PROXY), EventProxy(Arc::new(proxy.clone())));
             });
 
-            // Set up the Redraw Handler
             let proxy = proxy.clone();
             self.context.set_request_repaint_callback(move |_info| {
                 let _ = proxy.send_event(UserEvent::RequestRedraw);
@@ -182,7 +154,6 @@ impl WindowRunner {
             warn!("Event loop proxy unavailable while creating egui context");
         }
 
-        // Update the main thread with the new context
         let _ = self
             .sender
             .send(ToMainMessages::UpdateContext(self.context.clone()));
@@ -202,13 +173,11 @@ fn desktop_entry_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
-// This is a helper function which lets the app send a UserEvent into the context
 pub fn send_user_event(ctx: &egui::Context, event: UserEvent) {
-    ctx.data(|data| {
-        if let Some(proxy) = data.get_persisted::<EventProxy>(Id::new(EVENT_PROXY)) {
-            let _ = proxy.0.send_event(event);
-        }
-    });
+    let proxy = ctx.data_mut(|data| data.get_persisted::<EventProxy>(Id::new(EVENT_PROXY)));
+    if let Some(proxy) = proxy {
+        let _ = proxy.0.send_event(event);
+    }
 }
 
 impl ApplicationHandler<UserEvent> for WindowRunner {
@@ -232,7 +201,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 }
             }
             UserEvent::FocusWindow => {
-                // Create a window if it doesn't exist
                 if let Err(e) = self.create_window(event_loop) {
                     error!("Failed to create window while focusing: {e}");
                     let _ = self.sender.send(ToMainMessages::Quit);
@@ -301,7 +269,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         });
                     } else {
                         debug!("Running Outside Flatpak, manually handling");
-                        // TODO: I have the XDG crate, I can locate this automatically
 
                         let attempt = match get_autostart_file() {
                             Ok(path) => {
@@ -327,7 +294,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                                         Err(anyhow!("Unable to Determine Executable"))
                                     }
                                 } else {
-                                    // Existing file was deleted, that's all that's needed
                                     Ok(())
                                 }
                             }
@@ -359,7 +325,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             let response = renderer.winit_state.on_window_event(window, &event);
 
-            // Request redraw if egui wants it AND we're not already a RedrawRequested event
             if response.repaint && !matches!(&event, WindowEvent::RedrawRequested) {
                 window.request_redraw();
             }
@@ -375,7 +340,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     }
                 }
                 WindowEvent::Destroyed => {
-                    // Window has been destroyed, break out of the loop
                     debug!("Window Destroyed, cleaning handlers");
                     self.destroy_window();
                 }
@@ -387,7 +351,6 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     self.window_attributes.position = Some(position.into());
                 }
                 _ => {
-                    // Ignore some spammy events which aren't needed
                     if !matches!(
                         event,
                         WindowEvent::CursorMoved { .. }
@@ -421,7 +384,6 @@ impl GlowRenderer {
             .raw_display_handle()
             .map_err(|e| anyhow!("Failed to get raw display handle: {e}"))?;
 
-        // Create OpenGL config
         let config_template = ConfigTemplateBuilder::new()
             .with_transparency(false)
             .build();
@@ -441,7 +403,6 @@ impl GlowRenderer {
                 .ok_or_else(|| anyhow!("No compatible OpenGL config found"))?
         };
 
-        // Create OpenGL context, we won't specify an API version, glow will pick the best.
         let context_attributes = ContextAttributesBuilder::new()
             .with_context_api(ContextApi::OpenGl(None))
             .build(Some(raw_window_handle));
@@ -462,7 +423,6 @@ impl GlowRenderer {
             }
         };
 
-        // Create OpenGL surface
         let size = window.inner_size();
         let surface_attributes = SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
             .build(
@@ -477,22 +437,18 @@ impl GlowRenderer {
                 .map_err(|e| anyhow!("Failed to create GL window surface: {e}"))?
         };
 
-        // Make context current
         let gl_context = not_current_gl_context
             .make_current(&gl_surface)
             .map_err(|e| anyhow!("Failed to make GL context current: {e}"))?;
 
-        // Create glow context
         let gl = Arc::new(unsafe {
             glow::Context::from_loader_function(|s| {
                 let s = std::ffi::CString::new(s)
                     .expect("failed to construct C string from string for gl proc address");
-
                 gl_display.get_proc_address(&s)
             })
         });
 
-        // Set up egui winit state
         let viewport_id = egui_ctx.viewport_id();
         let egui_winit = egui_winit::State::new(
             egui_ctx.clone(),
@@ -503,7 +459,6 @@ impl GlowRenderer {
             None,
         );
 
-        // Create egui glow painter
         let painter = egui_glow::Painter::new(Arc::clone(&gl), "", None, false)
             .map_err(|e| anyhow!("Failed to create egui glow painter: {e}"))?;
 

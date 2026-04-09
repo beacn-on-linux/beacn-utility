@@ -1,4 +1,3 @@
-
 //! Mixer UI page for Pipeweaver audio routing.
 //!
 //! Renders source channel strips, channel management, application routing,
@@ -51,7 +50,7 @@ pub fn mixer_ui(ui: &mut Ui, state: &SharedPipeweaverState, page_state: &mut Mix
         let source_channels = build_source_channels(sources, apps);
 
         process_pending_attach(state, page_state, &source_channels);
-        draw_header(ui, state, page_state, snap.connected, status.config.auto_start);
+        draw_header(ui, state, page_state, snap.connected, false);
 
         ui.separator();
         draw_channel_management(
@@ -92,15 +91,11 @@ fn process_pending_attach(
         return;
     };
 
-    let exists = channels
+    if let Some(channel) = channels
         .iter()
-        .any(|channel| channel.is_virtual && channel.name == channel_name);
-
-    if exists {
-        state.send_command(APICommand::AttachPhysicalNodeByName(
-            channel_name,
-            input_node_id,
-        ));
+        .find(|channel| channel.is_virtual && channel.name == channel_name)
+    {
+        state.send_command(APICommand::AttachPhysicalNode(channel.id, input_node_id));
         page_state.pending_attach_channel_name = None;
         page_state.pending_attach_input = None;
         page_state.selected_new_channel_input = None;
@@ -112,7 +107,7 @@ fn draw_header(
     state: &SharedPipeweaverState,
     page_state: &mut MixerPageState,
     connected: bool,
-    autostart_enabled: bool,
+    _autostart_enabled: bool,
 ) {
     ui.horizontal(|ui| {
         let (dot_colour, status_text) = if connected {
@@ -174,13 +169,6 @@ fn draw_header(
             .clicked()
         {
             page_state.active_mix = Mix::B;
-        }
-
-        ui.add_space(16.0);
-
-        let mut auto = autostart_enabled;
-        if ui.checkbox(&mut auto, "Autostart Pipeweaver").changed() {
-            state.send_daemon_command(pipeweaver_ipc::commands::DaemonCommand::SetAutoStart(auto));
         }
     });
 }
@@ -304,7 +292,6 @@ struct PhysicalSourceOption {
 fn build_physical_source_options(devices: &[PhysicalDevice]) -> Vec<PhysicalSourceOption> {
     devices
         .iter()
-        .filter(|dev| dev.is_usable)
         .map(|dev| PhysicalSourceOption {
             node_id: dev.node_id,
             label: dev

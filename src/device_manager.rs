@@ -214,7 +214,7 @@ pub fn spawn_device_manager(
         }
     }
 
-    if manage_tx.is_ready() { let _ = manage_tx.send(HotPlugThreadManagement::Quit); }
+    let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     let _ = login_stop_tx.blocking_send(());
     debug!("Device Manager Stopped");
 }
