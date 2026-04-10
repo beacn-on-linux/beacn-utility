@@ -120,7 +120,7 @@ impl App for BeacnMicApp {
                                 .fixed_pos([pos.x + 8.0, pos.y - 16.0])
                                 .show(ui.ctx(), |ui| {
                                     egui::Frame::popup(ui.style()).show(ui, |ui| {
-                                        ui.label("Pipeweaver UI Launched");
+                                        ui.label("Pipeweaver UI Launched, check your task bar or app grid for notifications");
                                     });
                                 });
                         } else {
