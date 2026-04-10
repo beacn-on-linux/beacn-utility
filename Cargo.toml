@@ -67,6 +67,7 @@ serde_json = "1.0.149"
 zbus = "5.13.1"
 
 # Pipeweaver Stuff
+interprocess = { version = "2.4.0", features = ["tokio"] }
 pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver" }
 pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver" }

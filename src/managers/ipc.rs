@@ -1,5 +1,5 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 use beacn_lib::crossbeam::channel::{Receiver, Sender};
 use beacn_lib::crossbeam::select;
 use directories::BaseDirs;

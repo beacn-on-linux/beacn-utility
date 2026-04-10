@@ -489,6 +489,7 @@ dependencies = [
  "futures-util",
  "glutin",
  "image",
+ "interprocess",
  "json-patch",
  "ksni",
  "log",

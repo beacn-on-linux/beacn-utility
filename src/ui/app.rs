@@ -1,11 +1,12 @@
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
+use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::controller_pages::ControllerPage;
 use crate::ui::pages::{pipeweaver_ui, settings_ui};
 use crate::ui::states::LoadState;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::states::controller_state::BeacnControllerState;
-use crate::ui::widgets::{round_nav_button, round_pipeweaver_button};
+use crate::ui::widgets::{pipeweaver_button, round_nav_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
@@ -30,6 +31,9 @@ pub struct BeacnMicApp {
     // We can probably do better here
     mixer_active: bool,
     settings_active: bool,
+
+    // Toast state for Pipeweaver button
+    pipeweaver_toast_timer: Option<std::time::Instant>,
 }
 
 impl BeacnMicApp {
@@ -59,6 +63,7 @@ impl BeacnMicApp {
 
             mixer_active: false,
             settings_active: false,
+            pipeweaver_toast_timer: None,
         }
     }
 }
@@ -91,9 +96,36 @@ impl App for BeacnMicApp {
             .show_inside(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(5.0);
-                    if round_pipeweaver_button(ui, "pipeweaver", self.mixer_active).clicked() {
+                    let pipeweaver_btn = pipeweaver_button(ui, "pipeweaver", self.mixer_active);
+
+                    if pipeweaver_btn.clicked() {
                         self.settings_active = false;
-                        self.mixer_active = true;
+                        let should_toast = launch_pipeweaver_ui();
+
+                        if should_toast {
+                            self.mixer_active = false;
+                            self.pipeweaver_toast_timer = Some(std::time::Instant::now());
+                        } else {
+                            self.mixer_active = true;
+                            self.pipeweaver_toast_timer = None;
+                        }
+                    }
+
+                    // Show toast if needed
+                    if let Some(start) = self.pipeweaver_toast_timer {
+                        let toast_duration = std::time::Duration::from_secs(2);
+                        if start.elapsed() < toast_duration {
+                            let pos = pipeweaver_btn.rect.right_center();
+                            egui::Area::new(egui::Id::new("pipeweaver_toast"))
+                                .fixed_pos([pos.x + 8.0, pos.y - 16.0])
+                                .show(ui.ctx(), |ui| {
+                                    egui::Frame::popup(ui.style()).show(ui, |ui| {
+                                        ui.label("Pipeweaver UI Launched");
+                                    });
+                                });
+                        } else {
+                            self.pipeweaver_toast_timer = None;
+                        }
                     }
                     ui.add_space(5.0);
                     ui.separator();

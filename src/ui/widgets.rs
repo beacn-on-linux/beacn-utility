@@ -35,7 +35,7 @@ pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
 
 // So the pipeweaver button is the same as a basic button, but because it's already coloured
 // we don't need to add a tint to it, and also because of it's size we need far less padding
-pub fn round_pipeweaver_button(ui: &mut Ui, img: &str, active: bool) -> Response {
+pub fn pipeweaver_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     // We might need to do caching here..
     let image = SVG.get(img).unwrap().clone();
 

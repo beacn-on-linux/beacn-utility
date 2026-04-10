@@ -8,25 +8,35 @@ use crate::integrations::pipeweaver::layout::{
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
 use crate::runtime;
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Error, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
+use directories::BaseDirs;
 use futures_util::{SinkExt, StreamExt};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
+use interprocess::local_socket::tokio::prelude::LocalSocketStream;
+use interprocess::local_socket::traits::tokio::Stream;
+use interprocess::local_socket::{GenericFilePath, ToFsName};
 use log::{debug, info, warn};
+use pipeweaver_ipc::client::Client;
+use pipeweaver_ipc::clients::ipc::ipc_client::IPCClient;
+use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
 use pipeweaver_ipc::commands::APICommand::SetSourceVolume;
 use pipeweaver_ipc::commands::DaemonRequest::GetStatus;
 use pipeweaver_ipc::commands::{
-    APICommand, DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse,
+    APICommand, DaemonCommand, DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest,
+    WebsocketResponse,
 };
 use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
 use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::ErrorKind;
+use std::path::PathBuf;
 use std::time::Duration;
+use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::channel;
@@ -37,6 +47,55 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 use ulid::Ulid;
 
 const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
+const PIPEWEAVER_APP_NAME: &str = "PipeWeaver";
+const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
+
+// Simple method that checks whether pipeweaver is running, and if so, launches the UI
+pub fn launch_pipeweaver_ui() -> bool {
+    if let Ok(path) = get_pipeweaver_socket_path() {
+        if let Ok(file_name) = path.to_fs_name::<GenericFilePath>() {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+
+            return rt.block_on(async move {
+                if let Ok(stream) = LocalSocketStream::connect(file_name).await {
+                    let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(stream);
+
+                    let mut client = IPCClient::new(socket);
+
+                    let message = DaemonRequest::Daemon(DaemonCommand::OpenInterface);
+                    if let Ok(result) = client.send(&message).await {
+                        return match result {
+                            DaemonResponse::Ok => true,
+                            DaemonResponse::Err(e) => {
+                                warn!("Failed to Connect to Pipeweaver: {}", e);
+                                false
+                            }
+                            _ => false,
+                        };
+                    }
+                }
+                false
+            });
+        }
+    }
+    false
+}
+
+pub fn get_pipeweaver_socket_path() -> Result<PathBuf> {
+    let path = BaseDirs::new()
+        .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
+        .map(Ok::<PathBuf, Error>)
+        .unwrap_or_else(|| {
+            let tmp_dir = env::temp_dir().join(PIPEWEAVER_APP_NAME);
+            if !tmp_dir.exists() {
+                fs::create_dir_all(&tmp_dir)?;
+            }
+            Ok(tmp_dir)
+        })?;
+
+    let socket_path = path.join(format!("{}.socket", PIPEWEAVER_APP_NAME_ID));
+    Ok(socket_path)
+}
 
 mod channel;
 mod layout;
