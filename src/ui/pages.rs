@@ -1,6 +1,6 @@
 use crate::AUTO_START_KEY;
 use crate::window_handle::{UserEvent, send_user_event};
-use egui::{Color32, Id, RichText, Ui};
+use egui::{Id, RichText, Ui};
 
 pub(crate) fn settings_ui(ui: &mut Ui) {
     // Get the Auto-start state from the context
@@ -21,28 +21,30 @@ pub(crate) fn settings_ui(ui: &mut Ui) {
 }
 
 pub(crate) fn pipeweaver_ui(ui: &mut Ui) {
-    ui.vertical_centered(|ui| {
-        ui.label("Pipeweaver Placeholder Page");
-    });
+    ui.label(
+        RichText::new("Enhance your Beacn experience with Pipeweaver")
+            .strong()
+            .size(22.0),
+    );
+    ui.add_space(20.0);
+    ui.label("Pipeweaver brings streaming-focused audio control to Linux, with mixing, routing, and separate personal and stream outputs.");
+    ui.add_space(10.0);
+    ui.label("If you have a Mix / Mix Create, the Beacn Utility will talk to Pipeweaver to bring volume and mix control to your devices, similar to how you've used them on Windows.");
+    ui.add_space(10.0);
+    ui.label("Pipeweaver isn’t running right now. If you’ve already installed it, just start it up. If not, hit the button below and give it an install!");
     ui.add_space(20.0);
 
-    ui.label("Pipeweaver is a standalone application for Linux that provides virtual audio channels, mixing (including Personal and Audience), and routing, in a similar way to the official Beacn App");
-    ui.add_space(10.0);
-    ui.label("When used alongside the Beacn Utility, Mix and Mix Create functionality will become available, allowing you to manage audio channels in the same way you would on Windows");
-    ui.add_space(10.0);
-    ui.label("Pipeweaver is currently in early development so requires a bit of know-how to compile and run, proper releases are coming soon!");
-    ui.add_space(20.0);
+    // CTA BUTTON (make it feel like a button, not a link)
+    let btn = ui.add_sized(
+        [160.0, 32.0],
+        egui::Button::new(RichText::new("Get Pipeweaver").strong()),
+    );
 
-    let info_button = ui.add(egui::Label::new(
-        RichText::new("Grab Pipeweaver Here!")
-            .color(Color32::LIGHT_BLUE)
-            .underline(),
-    ));
-    if info_button.hovered() {
+    if btn.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
 
-    if info_button.clicked() {
+    if btn.clicked() {
         ui.ctx().open_url(egui::OpenUrl::new_tab(
             "https://github.com/pipeweaver/pipeweaver",
         ));

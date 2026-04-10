@@ -52,31 +52,30 @@ const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
 
 // Simple method that checks whether pipeweaver is running, and if so, launches the UI
 pub fn launch_pipeweaver_ui() -> bool {
-    if let Ok(path) = get_pipeweaver_socket_path() {
-        if let Ok(file_name) = path.to_fs_name::<GenericFilePath>() {
-            let rt = tokio::runtime::Runtime::new().unwrap();
+    if let Ok(path) = get_pipeweaver_socket_path()
+        && let Ok(file_name) = path.to_fs_name::<GenericFilePath>()
+    {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        return rt.block_on(async move {
+            if let Ok(stream) = LocalSocketStream::connect(file_name).await {
+                let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(stream);
 
-            return rt.block_on(async move {
-                if let Ok(stream) = LocalSocketStream::connect(file_name).await {
-                    let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(stream);
+                let mut client = IPCClient::new(socket);
 
-                    let mut client = IPCClient::new(socket);
-
-                    let message = DaemonRequest::Daemon(DaemonCommand::OpenInterface);
-                    if let Ok(result) = client.send(&message).await {
-                        return match result {
-                            DaemonResponse::Ok => true,
-                            DaemonResponse::Err(e) => {
-                                warn!("Failed to Connect to Pipeweaver: {}", e);
-                                false
-                            }
-                            _ => false,
-                        };
-                    }
+                let message = DaemonRequest::Daemon(DaemonCommand::OpenInterface);
+                if let Ok(result) = client.send(&message).await {
+                    return match result {
+                        DaemonResponse::Ok => true,
+                        DaemonResponse::Err(e) => {
+                            warn!("Failed to Connect to Pipeweaver: {}", e);
+                            false
+                        }
+                        _ => false,
+                    };
                 }
-                false
-            });
-        }
+            }
+            false
+        });
     }
     false
 }
