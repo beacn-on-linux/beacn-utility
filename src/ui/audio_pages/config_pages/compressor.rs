@@ -80,7 +80,8 @@ impl ConfigPage for CompressorPage {
 
                                     // Send it
                                     let ratio = CompressorRatio(values.ratio);
-                                    let message = Message::Compressor(Compressor::Ratio(Simple, ratio));
+                                    let comp_msg = Compressor::Ratio(Simple, ratio);
+                                    let message = Message::Compressor(comp_msg);
                                     state.handle_message(message).expect("Failed");
                                 }
                             });
@@ -88,7 +89,8 @@ impl ConfigPage for CompressorPage {
                             let s = get_slider(ui, "Ratio", ":1", &mut values.ratio, 0.0..=10.0);
                             if s.changed() {
                                 let ratio = CompressorRatio(values.ratio);
-                                let message = Message::Compressor(Compressor::Ratio(Advanced, ratio));
+                                let comp_msg = Compressor::Ratio(Advanced, ratio);
+                                let message = Message::Compressor(comp_msg);
                                 state.handle_message(message).expect("Failed");
                             }
 
@@ -97,7 +99,8 @@ impl ConfigPage for CompressorPage {
                             let s = get_slider(ui, "Attack", "ms", &mut values.attack, 1..=2000);
                             if s.changed() {
                                 let attack = TimeFrame(values.attack as f32);
-                                let message = Message::Compressor(Compressor::Attack(Advanced, attack));
+                                let comp_msg = Compressor::Attack(Advanced, attack);
+                                let message = Message::Compressor(comp_msg);
                                 state.handle_message(message).expect("Failed");
                             }
 
