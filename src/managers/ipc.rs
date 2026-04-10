@@ -1,7 +1,8 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use beacn_lib::crossbeam::channel::{Receiver, Sender};
 use beacn_lib::crossbeam::select;
+use directories::BaseDirs;
 use log::{debug, warn};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -129,7 +130,17 @@ pub fn handle_active_instance() -> bool {
 }
 
 fn get_socket_file_path() -> PathBuf {
-    env::temp_dir().join(APP_NAME).join(get_socket_file_name())
+    let base_path = BaseDirs::new()
+        .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| {
+            let tmp_dir = env::temp_dir();
+            if !tmp_dir.exists() {
+                let _ = fs::create_dir_all(&tmp_dir);
+            }
+            tmp_dir
+        });
+
+    base_path.join(APP_NAME).join(get_socket_file_name())
 }
 
 fn get_socket_file_name() -> String {
