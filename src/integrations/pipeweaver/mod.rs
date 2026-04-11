@@ -8,6 +8,8 @@ use crate::integrations::pipeweaver::layout::{
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
 use crate::runtime;
+use crate::ui::states::pipeweaver_state::SharedPipeweaverState;
+use tokio::sync::mpsc::Receiver;
 use anyhow::{Context, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
@@ -97,9 +99,9 @@ struct PipeweaverHandler {
     renderers: Renderers,
 
     /// Shared state for the desktop mixer UI.
-    shared_state: Option<crate::ui::states::pipeweaver_state::SharedPipeweaverState>,
+    shared_state: Option<SharedPipeweaverState>,
     /// Receives API commands from the desktop UI to forward to Pipeweaver.
-    ui_cmd_rx: Option<tokio::sync::mpsc::UnboundedReceiver<pipeweaver_ipc::commands::DaemonRequest>>,
+    ui_cmd_rx: Option<Receiver<DaemonRequest>>,
 }
 
 impl PipeweaverHandler {
@@ -836,13 +838,88 @@ pub fn spawn_pipeweaver_handler(
     sender: Sender<ControlMessage>,
     device: DeviceType,
     input_rx: Receiver<Interactions>,
-    shared_state: crate::ui::states::pipeweaver_state::SharedPipeweaverState,
-    cmd_rx: tokio::sync::mpsc::UnboundedReceiver<pipeweaver_ipc::commands::DaemonRequest>,
+    shared_state: SharedPipeweaverState,
+    cmd_rx: Receiver<DaemonRequest>,
 ) {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx);
     handler.shared_state = Some(shared_state);
     handler.ui_cmd_rx = Some(cmd_rx);
     runtime().spawn(async move { handler.run_handler().await });
+}
+
+pub fn spawn_pipeweaver_ui_bridge(shared_state: SharedPipeweaverState, mut ui_cmd_rx: tokio::sync::mpsc::Receiver<DaemonRequest>) {
+    runtime().spawn(async move {
+        let url = "ws://localhost:14565/api/websocket";
+        let mut command_index = 0;
+
+        loop {
+            match connect_async(url).await {
+                Ok((mut stream, _)) => {
+                    info!("UI Bridge: Connected to Pipeweaver");
+                    shared_state.set_connected();
+
+                    // Initial status fetch
+                    let status_id = command_index;
+                    command_index += 1;
+                    let status_request = WebsocketRequest { id: status_id, data: GetStatus };
+                    if let Ok(req_text) = serde_json::to_string(&status_request) {
+                        let _ = stream.send(Message::Text(Utf8Bytes::from(req_text))).await;
+                    }
+
+                    // Raw status for patching
+                    let mut raw_status = Value::Null;
+
+                    loop {
+                        select! {
+                            Some(message) = stream.next() => {
+                                match message {
+                                    Ok(Message::Text(msg)) => {
+                                        if let Ok(value) = serde_json::from_str::<Value>(msg.as_str()) {
+                                            if let Some(id) = value.get("id").and_then(|v| v.as_u64()) {
+                                                if id == status_id {
+                                                    if let Some(data) = value.get("data").and_then(|v| v.get("Status")) {
+                                                        raw_status = data.clone();
+                                                        if let Ok(status) = serde_json::from_value::<DaemonStatus>(raw_status.clone()) {
+                                                            shared_state.update_status(status);
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            if let Ok(resp) = serde_json::from_value::<WebsocketResponse>(value) {
+                                                if let DaemonResponse::Patch(patch) = resp.data {
+                                                    let _ = json_patch::patch(&mut raw_status, &patch);
+                                                    if let Ok(status) = serde_json::from_value::<DaemonStatus>(raw_status.clone()) {
+                                                        shared_state.update_status(status);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Err(_) => break,
+                                    _ => {}
+                                }
+                            }
+                            Some(ui_request) = ui_cmd_rx.recv() => {
+                                let cmd_id = command_index;
+                                command_index += 1;
+                                let request = WebsocketRequest { id: cmd_id, data: ui_request };
+                                if let Ok(req_text) = serde_json::to_string(&request) {
+                                    let _ = stream.send(Message::Text(Utf8Bytes::from(req_text))).await;
+                                }
+                            }
+                        }
+                    }
+                    info!("UI Bridge: Connection to Pipeweaver lost");
+                    shared_state.set_disconnected(Some("Connection lost".to_string()));
+                }
+                Err(_) => {
+                    shared_state.set_disconnected(Some("Failed to connect".to_string()));
+                    sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+    });
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {

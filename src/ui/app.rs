@@ -40,6 +40,9 @@ pub struct BeacnMicApp {
 
 impl BeacnMicApp {
     pub fn new(device_recv: channel::Receiver<DeviceMessage>) -> Self {
+        let (pw_state, pw_rx) = SharedPipeweaverState::new();
+        crate::integrations::pipeweaver::spawn_pipeweaver_ui_bridge(pw_state.clone(), pw_rx);
+
         Self {
             device_list: vec![],
             active_device: None,
@@ -66,7 +69,7 @@ impl BeacnMicApp {
             mixer_active: false,
             settings_active: false,
 
-            pipeweaver_state: None,
+            pipeweaver_state: Some(pw_state),
             mixer_page_state: MixerPageState::default(),
         }
     }
@@ -156,15 +159,10 @@ impl App for BeacnMicApp {
                         self.active_device = Some(definition);
                     }
                 }
-                DeviceArriveMessage::Control(definition, sender, pw_state) => {
+                DeviceArriveMessage::Control(definition, sender, _pw_state) => {
                     let state = BeacnControllerState::load_settings(definition.clone(), sender);
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
-
-                    // Store the Pipeweaver shared state for the mixer UI
-                    if let Some(pw) = pw_state {
-                        self.pipeweaver_state = Some(pw);
-                    }
 
                     if self.active_device.is_none() {
                         self.active_device = Some(definition);
@@ -293,18 +291,18 @@ impl BeacnMicApp {
         }
     }
     fn render_content(&mut self, ctx: &Context) {
-        if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
-            return;
-        }
-
         if self.mixer_active {
             egui::CentralPanel::default().show(ctx, |ui| {
                 if let Some(ref pw_state) = self.pipeweaver_state {
                     mixer_ui(ui, pw_state, &mut self.mixer_page_state);
                 } else {
-                    ui.label("Pipeweaver not available — no Mix or Mix Create device connected.");
+                    ui.label("Pipeweaver not available.");
                 }
             });
+            return;
+        }
+
+        if self.active_device.is_none() && !self.settings_active {
             return;
         }
 

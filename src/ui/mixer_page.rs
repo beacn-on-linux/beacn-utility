@@ -5,70 +5,12 @@
 
 use crate::ui::states::pipeweaver_state::SharedPipeweaverState;
 use egui::{Color32, ComboBox, Grid, RichText, ScrollArea, Ui, Vec2};
+use enum_map::EnumMap;
 use pipeweaver_ipc::commands::APICommand;
 use pipeweaver_shared::{AppDefinition, AppTarget, DeviceType, Mix, MuteTarget};
-use std::path::PathBuf;
+use std::collections::HashMap;
 use ulid::Ulid;
-
-// ─── Autostart helpers ───────────────────────────────────────────────────────
-
-/// Path to Pipeweaver's XDG autostart desktop file.
-/// Matches the path used by pipeweaver-daemon itself.
-fn pipeweaver_autostart_path() -> Option<PathBuf> {
-    let config_dir = std::env::var("XDG_CONFIG_HOME")
-        .or_else(|_| std::env::var("HOME").map(|h| format!("{h}/.config")))
-        .ok()?;
-    Some(PathBuf::from(format!(
-        "{config_dir}/autostart/io.github.pipeweaver.pipeweaver.desktop"
-    )))
-}
-
-/// Returns true if the Pipeweaver autostart .desktop file exists.
-pub fn pipeweaver_autostart_enabled() -> bool {
-    pipeweaver_autostart_path()
-        .map(|p| p.exists())
-        .unwrap_or(false)
-}
-
-/// Creates or removes the Pipeweaver autostart .desktop file.
-fn set_pipeweaver_autostart(enabled: bool) {
-    let Some(path) = pipeweaver_autostart_path() else {
-        return;
-    };
-
-    if !enabled {
-        let _ = std::fs::remove_file(&path);
-        return;
-    }
-
-    // Create the autostart directory if needed
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-
-    // Find the pipeweaver-daemon executable on PATH
-    let exe = which_pipeweaver_daemon();
-    let content = format!(
-        "[Desktop Entry]\nType=Application\nName=Pipeweaver\n\
-         Comment=Audio Control and Routing\nExec={exe} --background\nTerminal=false\n"
-    );
-    let _ = std::fs::write(&path, content);
-}
-
-fn which_pipeweaver_daemon() -> String {
-    // Try $PATH lookup first, fall back to a common install location
-    if let Ok(output) = std::process::Command::new("which").arg("pipeweaver").output() {
-        if output.status.success() {
-            if let Ok(s) = String::from_utf8(output.stdout) {
-                let trimmed = s.trim().to_string();
-                if !trimmed.is_empty() {
-                    return trimmed;
-                }
-            }
-        }
-    }
-    "pipeweaver".to_string()
-}
+use pipeweaver_ipc::commands::Application;
 
 // ─── Local page state ────────────────────────────────────────────────────────
 
@@ -76,15 +18,12 @@ fn which_pipeweaver_daemon() -> String {
 pub struct MixerPageState {
     /// Which mix is currently displayed in the channel-strip volume sliders.
     pub active_mix: Mix,
-    /// Mirrors whether Pipeweaver's XDG autostart .desktop file exists.
-    pub autostart_enabled: bool,
 }
 
 impl Default for MixerPageState {
     fn default() -> Self {
         Self {
             active_mix: Mix::default(),
-            autostart_enabled: pipeweaver_autostart_enabled(),
         }
     }
 }
@@ -145,8 +84,8 @@ fn draw_header(
             (Color32::from_rgb(220, 60, 60), "Disconnected")
         };
 
-        let snap = state.snapshot();
-        let error_suffix = snap
+        let snapshot = state.snapshot();
+        let error_suffix = snapshot
             .error
             .as_deref()
             .map(|e| format!(" — {e}"))
@@ -202,11 +141,10 @@ fn draw_header(
 
         ui.add_space(16.0);
 
-        // Autostart checkbox — creates/removes Pipeweaver's XDG autostart .desktop file
-        let mut auto = page_state.autostart_enabled;
-        if ui.checkbox(&mut auto, "Autostart Pipeweaver").changed() {
-            page_state.autostart_enabled = auto;
-            set_pipeweaver_autostart(auto);
+        // Autostart checkbox — read from snapshot and send via IPC
+        let mut auto = snapshot.status.as_ref().map(|s| s.config.auto_start).unwrap_or(false);
+        if ui.checkbox(&mut auto, "Pipeweaver autostart").changed() {
+            state.send_daemon_command(pipeweaver_ipc::commands::DaemonCommand::SetAutoStart(auto));
         }
     });
 }
@@ -386,7 +324,7 @@ fn draw_single_strip(
 fn draw_application_routing(
     ui: &mut Ui,
     state: &SharedPipeweaverState,
-    apps: &enum_map::EnumMap<DeviceType, std::collections::HashMap<String, std::collections::HashMap<String, Vec<pipeweaver_ipc::commands::Application>>>>,
+    apps: &EnumMap<DeviceType, HashMap<String, HashMap<String, Vec<Application>>>>,
     channels: &[SourceChannel],
 ) {
     ui.label(RichText::new("Application Routing").size(13.0).color(Color32::from_rgb(200, 200, 200)));

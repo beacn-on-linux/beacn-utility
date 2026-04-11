@@ -2,8 +2,8 @@
 Type=Application
 Name=Beacn Utility
 Comment=Control interface for Beacn hardware
-Path=/usr/bin
-Exec=/usr/bin/beacn-utility
+Path=/home/penguin/personal-code/beacn-utility/target/release
+Exec=/home/penguin/personal-code/beacn-utility/target/release/beacn-utility
 Icon=beacn-utility
 Terminal=false
 Categories=Utility

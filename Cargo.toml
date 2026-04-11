@@ -67,13 +67,14 @@ serde_json = "1.0.149"
 zbus = "5.13.1"
 
 # Pipeweaver Stuff
-pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
-pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
-pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver", rev = "716c17526f5fdac40a0ddfdf2d110b5fc1bab412" }
+pipeweaver-ipc = { git = "https://github.com/pipeweaver/pipeweaver", rev = "d902f16e5a8d17eb6498b7c71e5024d7abee7b7d" }
+pipeweaver-profile = { git = "https://github.com/pipeweaver/pipeweaver", rev = "d902f16e5a8d17eb6498b7c71e5024d7abee7b7d" }
+pipeweaver-shared = { git = "https://github.com/pipeweaver/pipeweaver", rev = "d902f16e5a8d17eb6498b7c71e5024d7abee7b7d" }
 tokio-tungstenite = "0.28.0"
 futures-util = "0.3.31"
 json-patch = "4.1.0"
 ulid = "1.2.1"
+parking_lot = "0.12"
 
 # WINDOWS: Useful primarily for testing and comparison
 [target.'cfg(windows)'.dependencies]
