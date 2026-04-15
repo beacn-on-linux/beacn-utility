@@ -79,7 +79,7 @@ pub struct ParametricEq {
     band_mesh: EnumMap<EQBand, Option<Arc<Mesh>>>,
 
     // Cache of the main curve, and rect size
-    curve_points: Vec<Pos2>,
+    curve_mesh: Option<Arc<Mesh>>,
     rect: Rect,
 
     // Active bands for interactions
@@ -97,7 +97,7 @@ impl ParametricEq {
             band_freq_response: Default::default(),
             band_mesh: Default::default(),
 
-            curve_points: vec![],
+            curve_mesh: None,
             rect: Rect::NOTHING,
 
             active_band: None,
@@ -110,7 +110,7 @@ impl ParametricEq {
         self.eq_mode = EQMode::Simple;
         self.band_freq_response = Default::default();
         self.band_mesh = Default::default();
-        self.curve_points.clear();
+        self.curve_mesh = None;
         self.rect = Rect::NOTHING;
         self.active_band = None;
         self.active_band_drag = None;
@@ -198,7 +198,7 @@ impl ParametricEq {
             self.eq_mode = state.equaliser.mode;
             self.band_mesh.clear();
             self.band_freq_response.clear();
-            self.curve_points.clear();
+            self.curve_mesh = None;
             self.rect = rect;
         }
 
@@ -508,56 +508,77 @@ impl ParametricEq {
     }
 
     fn draw_eq_curve(&mut self, painter: &egui::Painter, plot_rect: Rect, bands: &Bands) {
-        let curve_color = Color32::from_rgb(255, 255, 255);
-        let curve_stroke = Stroke::new(3.0, curve_color);
-        if self.curve_points.is_empty() {
-            // Ok, for each point, we need to sum the frequency gain of all the bands, and
-            // then convert those values to the correct positions.
-            let mut source = vec![];
-            for band in EQBand::iter() {
-                // Only count it if the band is enabled
-                if bands[band].enabled {
-                    source.push(self.get_eq_frequency_response(plot_rect, band, bands));
-                }
-            }
-
-            if source.is_empty() {
-                // EQ Doesn't have active bands, just draw a straight line at 0dB
-                let start = pos2(plot_rect.min.x, Self::db_to_y(0.0, plot_rect));
-                let end = pos2(plot_rect.max.x, Self::db_to_y(0.0, plot_rect));
-                self.curve_points.push(start);
-                self.curve_points.push(end);
-                painter.add(Shape::line(self.curve_points.clone(), curve_stroke));
-                return;
-            }
-
-            let len = source[0].len();
-            let mut result = vec![0.0; len];
-            for vec in source {
-                assert_eq!(vec.len(), len, "All vectors must be the same length");
-                for (i, val) in vec.iter().enumerate() {
-                    result[i] += val;
-                }
-            }
-
-            let steps = plot_rect.width() as usize;
-            let mut points = Vec::with_capacity(steps + 1);
-
-            for (i, result) in result.iter().enumerate().take(steps + 1) {
-                let x = plot_rect.min.x + i as f32;
-                points.push(pos2(x, Self::db_to_y(*result, plot_rect)));
-            }
-            let mut adapted_points = self.adaptive_smooth_points(points, plot_rect, 8);
-
-            // Clamp the points inside our bounds
-            let min_y = plot_rect.min.y;
-            let max_y = plot_rect.height() + plot_rect.min.y;
-            adapted_points
-                .iter_mut()
-                .for_each(|f| f.y = f.y.clamp(min_y, max_y));
-            self.curve_points = adapted_points;
+        if let Some(mesh) = &self.curve_mesh {
+            painter.add(Shape::mesh(mesh.clone()));
+            return;
         }
-        painter.add(Shape::line(self.curve_points.clone(), curve_stroke));
+
+        let curve_color = Color32::from_rgb(255, 255, 255);
+
+        // Sum frequency responses across all enabled bands
+        let sources: Vec<Vec<f32>> = EQBand::iter()
+            .filter(|&band| bands[band].enabled)
+            .map(|band| self.get_eq_frequency_response(plot_rect, band, bands))
+            .collect();
+
+        let steps = plot_rect.width() as usize;
+        let summed: Vec<f32> = if sources.is_empty() {
+            vec![0.0; steps + 1]
+        } else {
+            let mut result = vec![0.0; sources[0].len()];
+            for vec in &sources {
+                for (r, v) in result.iter_mut().zip(vec) {
+                    *r += v;
+                }
+            }
+            result
+        };
+
+        // Convert gains to screen positions
+        let points: Vec<Pos2> = summed
+            .iter()
+            .enumerate()
+            .map(|(i, &db)| {
+                let x = plot_rect.min.x + i as f32;
+                let y = Self::db_to_y(db, plot_rect).clamp(plot_rect.min.y, plot_rect.max.y);
+                pos2(x, y)
+            })
+            .collect();
+
+        let points = self.adaptive_smooth_points(points, plot_rect, 8);
+
+        // Tessellate the stroked line into a mesh manually
+        let mesh = Arc::new(Self::build_curve_mesh(&points, 3.0, curve_color));
+        painter.add(Shape::mesh(mesh.clone()));
+        self.curve_mesh = Some(mesh);
+    }
+
+    fn build_curve_mesh(points: &[Pos2], stroke_width: f32, color: Color32) -> Mesh {
+        let mut mesh = Mesh::default();
+        let half = stroke_width / 2.0;
+
+        for pair in points.windows(2) {
+            let [p1, p2] = [pair[0], pair[1]];
+            let dir = (p2 - p1).normalized();
+            let normal = vec2(-dir.y, dir.x);
+            let offset = normal * half;
+
+            let base_idx = mesh.vertices.len() as u32;
+            mesh.colored_vertex(p1 + offset, color); // 0: top-left
+            mesh.colored_vertex(p1 - offset, color); // 1: bottom-left
+            mesh.colored_vertex(p2 + offset, color); // 2: top-right
+            mesh.colored_vertex(p2 - offset, color); // 3: bottom-right
+            mesh.indices.extend([
+                base_idx,
+                base_idx + 1,
+                base_idx + 2,
+                base_idx + 1,
+                base_idx + 3,
+                base_idx + 2,
+            ]);
+        }
+
+        mesh
     }
 
     fn draw_eq_individual(
@@ -931,7 +952,7 @@ impl ParametricEq {
     fn invalidate_band(&mut self, band: EQBand) {
         self.band_freq_response[band] = None;
         self.band_mesh[band] = None;
-        self.curve_points.clear();
+        self.curve_mesh = None;
     }
 
     /// Convert frequency to x-coordinate in plot area
