@@ -628,7 +628,6 @@ impl ParametricEq {
         let feather_colour = premultiply(colour, 0.0);
 
         for pair in curve.windows(2) {
-            // -- Render the Base Fill
             let [p1, p2] = [pair[0], pair[1]];
             let p1_base = Pos2::new(p1.x, zero_db_y);
             let p2_base = Pos2::new(p2.x, zero_db_y);
@@ -637,18 +636,15 @@ impl ParametricEq {
             mesh.colored_vertex(p1, base_colour);
             mesh.colored_vertex(p2, base_colour);
             mesh.colored_vertex(p1_base, base_colour);
-
-            mesh.colored_vertex(p2, base_colour);
             mesh.colored_vertex(p2_base, base_colour);
-            mesh.colored_vertex(p1_base, base_colour);
 
             mesh.indices.extend([
                 base_idx,
                 base_idx + 1,
                 base_idx + 2,
+                base_idx + 1,
                 base_idx + 3,
-                base_idx + 4,
-                base_idx + 5,
+                base_idx + 2,
             ]);
 
             // -- Render the Feather
