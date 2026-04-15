@@ -1,7 +1,7 @@
 use std::f32::consts::PI;
 use wide::f32x8;
 
-static SAMPLE_RATE: f32 = 48000.0;
+const SAMPLE_RATE: f32 = 48000.0;
 
 // Reference: https://www.w3.org/TR/audio-eq-cookbook/
 pub(crate) struct EQUtil;

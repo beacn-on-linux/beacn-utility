@@ -26,32 +26,32 @@ use wide::f32x8;
 type Bands = EnumMap<EQBand, EqualiserBand>;
 
 // The frequency range to be rendered
-static MIN_FREQUENCY: u32 = 20;
-static MAX_FREQUENCY: u32 = 20000;
+const MIN_FREQUENCY: u32 = 20;
+const MAX_FREQUENCY: u32 = 20000;
 
 // The Acceptable Gain Range
-static MIN_GAIN: f32 = -12.0;
-static MAX_GAIN: f32 = 12.0;
+const MIN_GAIN: f32 = -12.0;
+const MAX_GAIN: f32 = 12.0;
 
 // The number of points to actually use in the curves
 const EQ_CURVE_RESOLUTION: usize = 512;
 
 // The Margin around the EQ Area
-static EQ_MARGIN: Vec2 = Vec2::new(25.0, 20.0);
+const EQ_MARGIN: Vec2 = Vec2::new(25.0, 20.0);
 
 // When attempting to interact with a dot, this is how far outside we look
-static EQ_GRAB_THRESHOLD: f32 = 20.0;
-static EQ_POINT_RADIUS: f32 = 6.0;
-static EQ_SELECTED_RADIUS: f32 = 8.0;
+const EQ_GRAB_THRESHOLD: f32 = 20.0;
+const EQ_POINT_RADIUS: f32 = 6.0;
+const EQ_SELECTED_RADIUS: f32 = 8.0;
 
-static EQ_COLOURS: [[u8; 3]; 4] = [
+const EQ_COLOURS: [[u8; 3]; 4] = [
     [239, 54, 60],
     [31, 187, 185],
     [254, 201, 37],
     [255, 15, 110],
 ];
 
-static EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
+const EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     [
         Color32::from_rgba_unmultiplied(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2], 128),
         Color32::from_rgba_unmultiplied(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2], 128),
@@ -60,7 +60,7 @@ static EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     ]
 });
 
-static EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
+const EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     [
         Color32::from_rgb(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2]),
         Color32::from_rgb(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2]),
