@@ -22,7 +22,7 @@ pub(crate) fn settings_ui(ui: &mut Ui) {
 
 pub(crate) fn pipeweaver_ui(ui: &mut Ui) {
     ui.label(
-        RichText::new("Enhance your Beacn experience with Pipeweaver")
+        RichText::new("Enhance your Beacn on Linux experience with Pipeweaver")
             .strong()
             .size(22.0),
     );
