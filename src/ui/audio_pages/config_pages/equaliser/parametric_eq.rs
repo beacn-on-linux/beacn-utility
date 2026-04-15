@@ -33,6 +33,9 @@ static MAX_FREQUENCY: u32 = 20000;
 static MIN_GAIN: f32 = -12.0;
 static MAX_GAIN: f32 = 12.0;
 
+// The number of points to actually use in the curves
+const EQ_CURVE_RESOLUTION: usize = 512;
+
 // The Margin around the EQ Area
 static EQ_MARGIN: Vec2 = Vec2::new(25.0, 20.0);
 
@@ -515,15 +518,13 @@ impl ParametricEq {
 
         let curve_color = Color32::from_rgb(255, 255, 255);
 
-        // Sum frequency responses across all enabled bands
         let sources: Vec<Vec<f32>> = EQBand::iter()
             .filter(|&band| bands[band].enabled)
-            .map(|band| self.get_eq_frequency_response(plot_rect, band, bands))
+            .map(|band| self.get_eq_frequency_response(plot_rect, band, bands, EQ_CURVE_RESOLUTION))
             .collect();
 
-        let steps = plot_rect.width() as usize;
         let summed: Vec<f32> = if sources.is_empty() {
-            vec![0.0; steps + 1]
+            vec![0.0; EQ_CURVE_RESOLUTION + 1]
         } else {
             let mut result = vec![0.0; sources[0].len()];
             for vec in &sources {
@@ -534,20 +535,18 @@ impl ParametricEq {
             result
         };
 
-        // Convert gains to screen positions
+        let steps = summed.len() - 1;
         let points: Vec<Pos2> = summed
             .iter()
             .enumerate()
             .map(|(i, &db)| {
-                let x = plot_rect.min.x + i as f32;
+                let x = plot_rect.min.x + (i as f32 / steps as f32) * plot_rect.width();
                 let y = Self::db_to_y(db, plot_rect).clamp(plot_rect.min.y, plot_rect.max.y);
                 pos2(x, y)
             })
             .collect();
 
         let points = self.adaptive_smooth_points(points, plot_rect, 8);
-
-        // Tessellate the stroked line into a mesh manually
         let mesh = Arc::new(Self::build_curve_mesh(&points, 3.0, curve_color));
         painter.add(Shape::mesh(mesh.clone()));
         self.curve_mesh = Some(mesh);
@@ -594,7 +593,9 @@ impl ParametricEq {
             return;
         }
 
-        let mut curve = self.get_eq_curve_points(rect, band, bands).clone();
+        let mut curve = self
+            .get_eq_curve_points(rect, band, bands, EQ_CURVE_RESOLUTION)
+            .clone();
         let zero_db_y = ParametricEq::db_to_y(0.0, rect);
 
         // Remove all points which are within 0.5px of 0
@@ -719,34 +720,44 @@ impl ParametricEq {
     }
 
     /// Get the EQ Curve based on band
-    fn get_eq_curve_points(&mut self, rect: Rect, band: EQBand, bands: &Bands) -> Vec<Pos2> {
-        let steps = rect.width() as usize;
-        let mut points = Vec::with_capacity(steps + 1);
-
-        for i in 0..=steps {
-            let i = rect.min.x + i as f32;
-            points.push(pos2(i, 0.0));
-        }
-
-        let gains = self.get_eq_frequency_response(rect, band, bands);
-        for (i, point) in points.iter_mut().enumerate() {
-            point.y = Self::db_to_y(gains[i], rect);
-        }
+    fn get_eq_curve_points(
+        &mut self,
+        rect: Rect,
+        band: EQBand,
+        bands: &Bands,
+        steps: usize,
+    ) -> Vec<Pos2> {
+        let gains = self.get_eq_frequency_response(rect, band, bands, steps);
+        let points = gains
+            .iter()
+            .enumerate()
+            .map(|(i, &db)| {
+                let x = rect.min.x + (i as f32 / steps as f32) * rect.width();
+                pos2(x, Self::db_to_y(db, rect))
+            })
+            .collect();
 
         self.adaptive_smooth_points(points, rect, 8)
     }
 
-    fn get_eq_frequency_response(&mut self, rect: Rect, band: EQBand, bands: &Bands) -> Vec<f32> {
+    fn get_eq_frequency_response(
+        &mut self,
+        rect: Rect,
+        band: EQBand,
+        bands: &Bands,
+        steps: usize,
+    ) -> Vec<f32> {
         if let Some(frequencies) = &self.band_freq_response[band] {
             return frequencies.clone();
         }
-        let steps = rect.width() as usize;
-        let mut freqs: Vec<f32> = vec![];
 
-        let offset_x = rect.min.x;
-        for i in 0..=steps {
-            freqs.push(Self::x_to_freq(i as f32 + offset_x, rect));
-        }
+        let freqs: Vec<f32> = (0..=steps)
+            .map(|i| {
+                let x = rect.min.x + (i as f32 / steps as f32) * rect.width();
+                Self::x_to_freq(x, rect)
+            })
+            .collect();
+
         let gains = self.eq_gain_simd(freqs.as_slice(), band, bands);
         self.band_freq_response[band] = Some(gains.clone());
         gains
