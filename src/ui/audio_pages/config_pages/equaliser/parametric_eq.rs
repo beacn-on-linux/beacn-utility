@@ -890,10 +890,9 @@ impl ParametricEq {
         state: &mut BeacnAudioState,
     ) {
         // We don't have an active item, so there's nothing to do
-        if self.active_band_drag.is_none() {
+        let Some(active) = self.active_band_drag else {
             return;
-        }
-        let active = self.active_band_drag.unwrap();
+        };
         let plot_rect = Self::get_plot_rect(rect);
         let band = &mut bands[active];
 
