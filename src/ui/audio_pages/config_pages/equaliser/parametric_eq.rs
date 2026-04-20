@@ -51,7 +51,7 @@ const EQ_COLOURS: [[u8; 3]; 4] = [
     [255, 15, 110],
 ];
 
-const EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
+static EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     [
         Color32::from_rgba_unmultiplied(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2], 128),
         Color32::from_rgba_unmultiplied(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2], 128),
@@ -60,7 +60,7 @@ const EQ_TRANSPARENT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     ]
 });
 
-const EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
+static EQ_POINT_COLOURS: LazyLock<[Color32; 4]> = LazyLock::new(|| {
     [
         Color32::from_rgb(EQ_COLOURS[0][0], EQ_COLOURS[0][1], EQ_COLOURS[0][2]),
         Color32::from_rgb(EQ_COLOURS[1][0], EQ_COLOURS[1][1], EQ_COLOURS[1][2]),
