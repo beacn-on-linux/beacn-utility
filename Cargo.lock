@@ -3195,8 +3195,8 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-ipc"
-version = "0.1.4"
-source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.4#3998b6c7efc9a684f4b249b1ee1c62c03ab8b1c1"
+version = "0.1.5"
+source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.5#b8527965d16c54683ac635dc14b90a67ff040d9b"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3215,8 +3215,8 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-profile"
-version = "0.1.4"
-source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.4#3998b6c7efc9a684f4b249b1ee1c62c03ab8b1c1"
+version = "0.1.5"
+source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.5#b8527965d16c54683ac635dc14b90a67ff040d9b"
 dependencies = [
  "enum-map",
  "pipeweaver-shared",
@@ -3226,8 +3226,8 @@ dependencies = [
 
 [[package]]
 name = "pipeweaver-shared"
-version = "0.1.4"
-source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.4#3998b6c7efc9a684f4b249b1ee1c62c03ab8b1c1"
+version = "0.1.5"
+source = "git+https://github.com/pipeweaver/pipeweaver?tag=v0.1.5#b8527965d16c54683ac635dc14b90a67ff040d9b"
 dependencies = [
  "clap",
  "enum-map",
