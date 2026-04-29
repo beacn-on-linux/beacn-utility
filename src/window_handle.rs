@@ -103,20 +103,26 @@ impl WindowRunner {
         }
     }
 
-    pub fn run(mut self, event_loop: &mut EventLoop<UserEvent>, initial_hide: bool) -> Result<()> {
+    pub fn run(
+        mut self,
+        event_loop: &mut EventLoop<UserEvent>,
+        initial_hide: bool,
+    ) -> Result<(), (Box<dyn App>, bool, anyhow::Error)> {
         self.initial_hide = initial_hide;
         event_loop.set_control_flow(ControlFlow::Wait);
 
         // Create the event loop proxy
         self.event_loop_proxy = Some(event_loop.create_proxy());
 
-        // Create an initial context, this will be replaced when a window is created
+        // Create the initial context, this will be replaced when a window is created
         self.create_new_context();
 
-        // Use run_app_on_demand instead of run() so it can return when window closes
-        event_loop.run_app_on_demand(&mut self)?;
-
-        Ok(())
+        // Run the app on demand, this will return when the window is closed, if it errors
+        // return the 'state' of the window when the error occurred
+        event_loop.run_app_on_demand(&mut self).map_err(|e| {
+            let was_hidden = self.window.is_none();
+            (self.app, was_hidden, e.into())
+        })
     }
 
     fn render_frame(&mut self) {
