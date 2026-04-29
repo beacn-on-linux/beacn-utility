@@ -13,7 +13,7 @@ use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{LevelFilter, debug, error, info, warn};
+use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
