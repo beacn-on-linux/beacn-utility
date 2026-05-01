@@ -7,14 +7,12 @@ use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
-use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
-use beacn_lib::crossbeam;
-use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use directories::BaseDirs;
+use flume::{Receiver, Sender};
 use futures_util::{SinkExt, StreamExt};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
@@ -40,11 +38,10 @@ use std::time::Duration;
 use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::channel;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use tokio::{select, time};
+use tokio::{select, task, time};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 use ulid::Ulid;
@@ -204,7 +201,7 @@ impl PipeweaverHandler {
         // and try again after 5 seconds,
         'connect: while let Err(e) = self.handle_connection(url).await {
             // It doesn't matter if we lose an input here, we're not handling them anyway.
-            if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
+            if self.input_rx.is_disconnected() {
                 warn!("Interaction Handler Terminated, Bailing!");
                 clean_stop = false;
                 break;
@@ -239,17 +236,10 @@ impl PipeweaverHandler {
                 warn!("Pipeweaver Error: {}", e);
             }
 
-            // Spawn a sync <-> async loop so we can consume incoming messages while disconnected
-            let sync_receiver = self.input_rx.clone();
-            let (interaction_tx, mut interaction_rx) = channel(10);
-
-            let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
-            runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
-
             // Create a loop which handles things like incoming messages and stopping
             loop {
                 select! {
-                    Some(_) = interaction_rx.recv() => {
+                    _ = self.input_rx.recv_async() => {
                         // We need to NOOP this, drain the channel so messages don't queue.
                     }
                     Ok(_) = self.stop_rx.changed() => {
@@ -257,7 +247,6 @@ impl PipeweaverHandler {
                     }
                     _ = sleep(Duration::from_secs(5)) => {
                         // 5 Seconds have elapsed, break this loop to reconnect
-                        drop(stop_tx);
                         continue 'connect;
                     }
                 }
@@ -380,14 +369,6 @@ impl PipeweaverHandler {
     }
 
     async fn run_message_loop(&mut self, stream: &mut WebSocket) -> Result<()> {
-        debug!("Spawning Sync <-> Async Loop");
-
-        let sync_receiver = self.input_rx.clone();
-        let (interaction_tx, mut interaction_rx) = channel(10);
-
-        let (_stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
-        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
-
         let mut keep_alive = time::interval(Duration::from_secs(10));
 
         let (tx, rx) = oneshot::channel();
@@ -511,26 +492,22 @@ impl PipeweaverHandler {
                         bail!("Received non-text message from Websocket!")
                     }
                 }
-                maybe_msg = interaction_rx.recv() => {
-                    match maybe_msg {
-                        Some(msg) => {
-                            match self.device_type {
-                                DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                                    match msg {
-                                        Interactions::ButtonPress(button, state) => {
-                                            if state == ButtonState::Release {
-                                                self.handle_button(button, stream).await?;
-                                            }
-                                        }
-                                        Interactions::DialChanged(dial, change) => {
-                                            self.handle_dial(dial, change, stream).await?;
-                                        }
+                maybe_msg = self.input_rx.recv_async() => {
+                    let msg = maybe_msg?;
+                    match self.device_type {
+                        DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                            match msg {
+                                Interactions::ButtonPress(button, state) => {
+                                    if state == ButtonState::Release {
+                                        self.handle_button(button, stream).await?;
                                     }
                                 }
-                                t => bail!("WTF is this doing here?! {:?}", t)
+                                Interactions::DialChanged(dial, change) => {
+                                    self.handle_dial(dial, change, stream).await?;
+                                }
                             }
-                        },
-                        None => bail!("Receive Handler Closed!")
+                        }
+                        t => bail!("WTF is this doing here?! {:?}", t)
                     }
                 }
                 _instant = keep_alive.tick() => {
@@ -902,7 +879,9 @@ pub fn spawn_pipeweaver_handler(
     stop_rx: watch::Receiver<()>,
 ) -> JoinHandle<()> {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx);
-    runtime().spawn(async move { handler.run_handler().await })
+    task::spawn(async move {
+        handler.run_handler().await;
+    })
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
@@ -914,28 +893,4 @@ fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
         return Ok(img.into_rgba8());
     }
     bail!("Failed to load image");
-}
-
-fn sync_to_async(
-    rx: Receiver<Interactions>,
-    tx: tokio::sync::mpsc::Sender<Interactions>,
-    cancel: Receiver<()>,
-) -> Result<()> {
-    debug!("Running Up Receiver..");
-    loop {
-        crossbeam::select! {
-            recv(rx) -> msg => match msg {
-                Ok(val) => tx.blocking_send(val)?,
-                Err(_) => {
-                    debug!("Crossbeam channel disconnected, stopping sync wrapper");
-                    break;
-                }
-            },
-            recv(cancel) -> _ => {
-                // We don't care about the result, we just want to stop the loop
-                break;
-            }
-        }
-    }
-    Ok(())
 }

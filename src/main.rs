@@ -4,8 +4,6 @@ use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::Result;
 use anyhow::bail;
-use beacn_lib::crossbeam::channel::unbounded;
-use beacn_lib::crossbeam::{channel, select};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
@@ -16,16 +14,15 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
-use signal_hook::consts::{SIGINT, SIGTERM};
-use signal_hook::iterator::Signals;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
 use std::path::PathBuf;
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use std::{env, thread};
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::Handle;
+use tokio::signal::unix::{SignalKind, signal};
+use tokio::{join, select, signal, task};
 use xdg::BaseDirectories;
 
 mod device_manager;
@@ -46,18 +43,14 @@ const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
-static TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
-pub fn runtime() -> &'static Runtime {
-    TOKIO_RUNTIME.get_or_init(|| Builder::new_multi_thread().enable_all().build().unwrap())
-}
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
-    runtime().block_on(future)
+    Handle::current().block_on(future)
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Register Signal Handler
-    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    //let mut signals = Signals::new([SIGINT, SIGTERM])?;
 
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
@@ -111,45 +104,45 @@ async fn main() -> Result<()> {
         || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
 
     // Firstly, create a message bus which allows threads to message back to here
-    let (main_tx, main_rx) = channel::unbounded();
+    let (main_tx, main_rx) = flume::unbounded();
 
     // Check whether an existing instance is running, and bail if so
-    if handle_active_instance() {
+    if handle_active_instance().await {
         return Ok(());
     }
 
-    // Setup Signal Handling
-    let (signal_tx, signal_rx) = unbounded::<i32>();
-    thread::spawn(move || {
-        for sig in signals.forever() {
-            // We don't need any kind of clean shutdown here, this thread will bail when
-            // the main loop terminates.
-            let _ = signal_tx.send(sig);
-        }
-    });
+    // // Setup Signal Handling
+    // let (signal_tx, signal_rx) = unbounded::<i32>();
+    // thread::spawn(move || {
+    //     for sig in signals.forever() {
+    //         // We don't need any kind of clean shutdown here, this thread will bail when
+    //         // the main loop terminates.
+    //         let _ = signal_tx.send(sig);
+    //     }
+    // });
 
     // Spawn up the IPC handler
-    let (ipc_tx, ipc_rx) = channel::unbounded();
+    let (ipc_tx, ipc_rx) = flume::unbounded();
     let ipc_main_tx = main_tx.clone();
-    let ipc = thread::spawn(|| handle_ipc(ipc_rx, ipc_main_tx));
+    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_main_tx));
 
     // Ok, spawn up the Tray Handler
-    let (tray_tx, tray_rx) = channel::unbounded();
+    let (tray_tx, tray_rx) = flume::unbounded();
     let tray_main_tx = main_tx.clone();
-    let tray = thread::spawn(|| {
-        if let Err(e) = handle_tray(tray_rx, tray_main_tx) {
+    let tray = task::spawn(async move {
+        if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
             error!("Failed to Spawn Tray: {e}");
         }
     });
 
     // Ok, we need to spawn up the device manager, first lets create some channels
     // The first channel is for us to be able to tell the manager to shut down, or reconfigure
-    let (manage_tx, manage_rx) = channel::unbounded();
+    let (manage_tx, manage_rx) = flume::unbounded();
 
     // This one sends and receives messages when devices are attached and removed
-    let (device_tx, device_rx) = channel::unbounded();
+    let (device_tx, device_rx) = flume::unbounded();
     let dev_main_tx = main_tx.clone();
-    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
+    let device_manager = task::spawn(spawn_device_manager(manage_rx, dev_main_tx, device_tx));
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
@@ -218,65 +211,35 @@ async fn main() -> Result<()> {
     let mut context = Context::default();
     loop {
         select! {
-            recv(main_rx) -> msg => {
+            _ = shutdown_signal() => {
+                break;
+            }
+
+            Ok(msg) = main_rx.recv_async() => {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ToMainMessages::UpdateContext(new_ctx) => {
-                                debug!("Context Updated");
-                                // Context Update
-                                context = new_ctx;
-                            }
-                            ToMainMessages::SpawnWindow => {
-                                // Window Re-Open requested
-                                send_user_event(&context, UserEvent::FocusWindow);
-                            }
-                            ToMainMessages::RequestRedraw => {
-                                // Repaint requested
-                                send_user_event(&context, UserEvent::RequestRedraw);
-                            }
-                            ToMainMessages::Quit => {
-                                // Break out and Close
-                                break;
-                            }
-                        }
+                    ToMainMessages::UpdateContext(new_ctx) => {
+                        debug!("Context Updated");
+                        // Context Update
+                        context = new_ctx;
                     }
-                    Err(e) => {
-                        error!("Main Loop Broken, bailing: {e}");
+                    ToMainMessages::SpawnWindow => {
+                        // Window Re-Open requested
+                        send_user_event(&context, UserEvent::FocusWindow);
+                    }
+                    ToMainMessages::RequestRedraw => {
+                        // Repaint requested
+                        send_user_event(&context, UserEvent::RequestRedraw);
+                    }
+                    ToMainMessages::Quit => {
+                        // Break out and Close
                         break;
                     }
                 }
             }
-            recv(device_rx) -> msg => {
-                match msg {
-                    Ok(msg) => {
-                        // Pump this to the UI
-                        send_user_event(&context, UserEvent::DeviceMessage(msg))
-                    }
-                    Err(e) => {
-                        error!("Device Handler Broken, bailing: {e}");
-                        break;
-                    }
-                }
-            }
-            recv(signal_rx) -> sig => {
-                match sig {
-                    Ok(SIGINT) => {
-                        println!("Caught Ctrl+C");
-                        break;
-                    }
-                    Ok(SIGTERM) => {
-                        println!("Caught SIGTERM");
-                        break;
-                    }
-                    Ok(other) => {
-                        println!("Signal: {}", other);
-                    }
-                    Err(e) => {
-                        error!("Signal Handler Broken, bailing: {e}");
-                        break
-                    },
-                }
+
+            Ok(msg) = device_rx.recv_async() => {
+                // Pump this to the UI
+                send_user_event(&context, UserEvent::DeviceMessage(msg));
             }
         }
     }
@@ -287,14 +250,21 @@ async fn main() -> Result<()> {
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
 
+    let _ = join!(tray, ipc, device_manager);
     let _ = window.join();
-    let _ = tray.join();
-    let _ = device_manager.join();
-    let _ = ipc.join();
 
     debug!("Shutdown Complete");
 
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+    select! {
+        _ = signal::ctrl_c() => {},
+        _ = sigterm.recv() => {},
+    }
 }
 
 fn prepare_context(ctx: &mut Context) {

@@ -9,10 +9,10 @@ use crate::ui::states::controller_state::BeacnControllerState;
 use crate::ui::widgets::{pipeweaver_button, round_nav_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
-use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
 use egui::ahash::HashMap;
 use egui::{Context, Ui};
+use flume::Receiver;
 use log::debug;
 
 pub struct BeacnMicApp {
@@ -25,7 +25,7 @@ pub struct BeacnMicApp {
     audio_pages: Vec<Box<dyn AudioPage>>,
     control_pages: Vec<Box<dyn ControllerPage>>,
 
-    device_recv: channel::Receiver<DeviceMessage>,
+    device_recv: Receiver<DeviceMessage>,
     active_page: usize,
 
     // We can probably do better here
@@ -37,7 +37,7 @@ pub struct BeacnMicApp {
 }
 
 impl BeacnMicApp {
-    pub fn new(device_recv: channel::Receiver<DeviceMessage>) -> Self {
+    pub fn new(device_recv: Receiver<DeviceMessage>) -> Self {
         Self {
             device_list: vec![],
             active_device: None,

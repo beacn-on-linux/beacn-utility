@@ -6,7 +6,6 @@ use crate::{
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
-use beacn_lib::crossbeam::channel::Sender;
 use egui::{Context, Id, Ui};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
@@ -22,6 +21,7 @@ use egui_winit::winit::{
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
+use flume::Sender;
 use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
 use ini::Ini;

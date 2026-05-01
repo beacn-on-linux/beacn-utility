@@ -12,11 +12,10 @@
 */
 
 use anyhow::Result;
-use beacn_lib::crossbeam;
+use flume::{Receiver, Sender};
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::env;
-use tokio::sync::mpsc as tokio_mpsc;
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
 use zbus::{Connection, proxy};
@@ -60,25 +59,14 @@ pub enum LoginEventTriggers {
     Unlock,
 }
 
-pub fn spawn_login_handler(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
-    stop_rx: tokio_mpsc::Receiver<()>,
+pub async fn spawn_login_handler(
+    tx: Sender<LoginEventTriggers>,
+    stop_rx: Receiver<()>,
 ) -> Result<()> {
-    debug!("Starting Sleep Handler with dedicated runtime..");
-
-    // Create a dedicated runtime for this thread since this is a long-running task
-    // that would otherwise block your main runtime for the entire app lifetime
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .build()?;
-
-    rt.block_on(run_internal(tx, stop_rx))
+    run_internal(tx, stop_rx).await
 }
 
-async fn run_internal(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
-    mut stop_rx: tokio_mpsc::Receiver<()>,
-) -> Result<()> {
+async fn run_internal(tx: Sender<LoginEventTriggers>, stop_rx: Receiver<()>) -> Result<()> {
     let mut inhibitor = None;
 
     debug!("Spawning Sleep Handler..");
@@ -190,7 +178,7 @@ async fn run_internal(
                 }
             }
             // Clean shutdown on stop signal
-            _ = stop_rx.recv() => {
+            _ = stop_rx.recv_async() => {
                 debug!("Received stop signal, shutting down sleep handler");
                 break;
             }

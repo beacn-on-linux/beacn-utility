@@ -1,22 +1,14 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
 use anyhow::{Result, bail};
-use beacn_lib::crossbeam::channel::{Receiver, Sender};
-use beacn_lib::crossbeam::select;
 use directories::BaseDirs;
+use flume::{Receiver, Sender};
 use log::{debug, warn};
-use std::io::ErrorKind;
-#[cfg(unix)]
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::time::Duration;
-use std::{
-    env, fs,
-    io::{Read, Write},
-    path::PathBuf,
-};
-#[cfg(windows)]
-use uds_windows::{UnixListener, UnixStream};
+use std::{env, fs, path::PathBuf};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{UnixListener, UnixStream};
+use tokio::select;
 
-pub fn handle_ipc(
+pub async fn handle_ipc(
     manager_rx: Receiver<ManagerMessages>,
     main_tx: Sender<ToMainMessages>,
 ) -> Result<()> {
@@ -42,52 +34,41 @@ pub fn handle_ipc(
         }
     };
 
-    if let Err(e) = listener.set_nonblocking(true) {
-        warn!("Failed to set socket non-blocking: {e}");
-        bail!("Failed to set socket non-blocking: {e}");
-    }
-
-    let poll_duration = Duration::from_millis(50);
-
     debug!("IPC listener started at {socket_path:?}");
     loop {
         select! {
-            recv(manager_rx) -> msg => {
+            msg = manager_rx.recv_async() => {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ManagerMessages::Quit => break,
-                        }
-                    }
+                    Ok(ManagerMessages::Quit) => break,
+
                     Err(e) => {
-                        warn!("Message Handler channel Broken, bailing: {e}");
+                        warn!("Manager channel closed: {e}");
                         break;
                     }
                 }
             }
 
-            default(poll_duration) => {
-                match listener.accept() {
+            result = listener.accept() => {
+                match result {
                     Ok((mut stream, _)) => {
                         let mut msg = String::new();
-                        if let Err(e) = stream.read_to_string(&mut msg) {
-                            warn!("Failed to read from message from stream: {e}");
-                            break;
-                        } else {
-                            match msg.as_str() {
-                                "TRIGGER" => {
-                                    let _ = main_tx.send(ToMainMessages::SpawnWindow);
-                                },
-                                _ => {
-                                    debug!("Unknown Message, aborting: {msg}");
-                                    break;
-                                },
+
+                        if let Err(e) = stream.read_to_string(&mut msg).await {
+                            warn!("Failed to read message from stream: {e}");
+                            continue;
+                        }
+
+                        match msg.as_str() {
+                            "TRIGGER" => {
+                                let _ = main_tx.send(ToMainMessages::SpawnWindow);
+                            }
+
+                            _ => {
+                                debug!("Unknown message: {msg}");
                             }
                         }
                     }
-                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                        // No client, do nothing
-                    }
+
                     Err(e) => {
                         warn!("Unexpected socket error: {e}");
                         break;
@@ -102,31 +83,33 @@ pub fn handle_ipc(
     Ok(())
 }
 
-pub fn handle_active_instance() -> bool {
+pub async fn handle_active_instance() -> bool {
     let socket_path = get_socket_file_path();
-    debug!("Looking for Socket at {socket_path:?}");
 
+    debug!("Looking for Socket at {socket_path:?}");
     if !socket_path.exists() {
-        debug!("Existing socket is not present");
         // The socket file doesn't exist, so the socket can't exist.
+        debug!("Existing socket is not present");
         return false;
     }
 
-    debug!("Attempting to Connect to Existing Socket");
-    // The socket exists, let's see if we can connect to it
-    match UnixStream::connect(&socket_path) {
+    debug!("Attempting to connect to existing socket");
+    match UnixStream::connect(&socket_path).await {
         Ok(mut stream) => {
-            debug!("Connected to Existing Socket at {socket_path:?}, Sending Trigger");
-            let _ = stream.write_all(b"TRIGGER");
-            return true;
+            debug!("Connected to existing socket at {socket_path:?}, sending trigger");
+            if let Err(e) = stream.write_all(b"TRIGGER").await {
+                debug!("Failed to send trigger message: {e}");
+                return false;
+            }
+            true
         }
+
         Err(e) => {
-            debug!("Failed to Connect to Socket: {e}");
-            debug!("Removing Stale Socket File");
+            debug!("Failed to connect to socket, removing stale file: {e}");
             let _ = fs::remove_file(socket_path);
+            false
         }
     }
-    false
 }
 
 fn get_socket_file_path() -> PathBuf {
