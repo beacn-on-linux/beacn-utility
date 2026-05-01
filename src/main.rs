@@ -4,6 +4,7 @@ use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::Result;
 use anyhow::bail;
+use beacn_lib::crossbeam::channel::unbounded;
 use beacn_lib::crossbeam::{channel, select};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
@@ -15,6 +16,8 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
+use signal_hook::consts::{SIGINT, SIGTERM};
+use signal_hook::iterator::Signals;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
@@ -52,6 +55,9 @@ pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
 }
 
 fn main() -> Result<()> {
+    // Register Signal Handler
+    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
 
@@ -110,6 +116,16 @@ fn main() -> Result<()> {
     if handle_active_instance() {
         return Ok(());
     }
+
+    // Setup Signal Handling
+    let (signal_tx, signal_rx) = unbounded::<i32>();
+    thread::spawn(move || {
+        for sig in signals.forever() {
+            // We don't need any kind of clean shutdown here, this thread will bail when
+            // the main loop terminates.
+            let _ = signal_tx.send(sig);
+        }
+    });
 
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = channel::unbounded();
@@ -240,6 +256,25 @@ fn main() -> Result<()> {
                         error!("Device Handler Broken, bailing: {e}");
                         break;
                     }
+                }
+            }
+            recv(signal_rx) -> sig => {
+                match sig {
+                    Ok(SIGINT) => {
+                        println!("Caught Ctrl+C");
+                        break;
+                    }
+                    Ok(SIGTERM) => {
+                        println!("Caught SIGTERM");
+                        break;
+                    }
+                    Ok(other) => {
+                        println!("Signal: {}", other);
+                    }
+                    Err(e) => {
+                        error!("Signal Handler Broken, bailing: {e}");
+                        break
+                    },
                 }
             }
         }
