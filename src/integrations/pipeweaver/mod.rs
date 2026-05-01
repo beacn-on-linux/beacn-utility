@@ -41,6 +41,8 @@ use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::channel;
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
@@ -142,6 +144,7 @@ struct PipeweaverHandler {
     device_type: DeviceType,
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
+    stop_rx: watch::Receiver<()>,
 
     has_connected: bool,
     displaying_error: bool,
@@ -161,11 +164,13 @@ impl PipeweaverHandler {
         device_type: DeviceType,
         sender: Sender<ControlMessage>,
         input_rx: Receiver<Interactions>,
+        stop_rx: watch::Receiver<()>,
     ) -> Self {
         Self {
             device_type,
             sender,
             input_rx,
+            stop_rx,
 
             has_connected: false,
             displaying_error: false,
@@ -185,6 +190,8 @@ impl PipeweaverHandler {
         info!("Starting Pipeweaver Manager");
         let url = "ws://localhost:14565/api/websocket";
 
+        let mut clean_stop = true;
+
         // Send the Pipeweaver Splash
         self.draw_splash();
         self.draw_status("Loading...");
@@ -199,6 +206,7 @@ impl PipeweaverHandler {
             // It doesn't matter if we lose an input here, we're not handling them anyway.
             if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
                 warn!("Interaction Handler Terminated, Bailing!");
+                clean_stop = false;
                 break;
             }
 
@@ -244,6 +252,9 @@ impl PipeweaverHandler {
                     Some(_) = interaction_rx.recv() => {
                         // We need to NOOP this, drain the channel so messages don't queue.
                     }
+                    Ok(_) = self.stop_rx.changed() => {
+                        break 'connect;
+                    }
                     _ = sleep(Duration::from_secs(5)) => {
                         // 5 Seconds have elapsed, break this loop to reconnect
                         drop(stop_tx);
@@ -251,6 +262,13 @@ impl PipeweaverHandler {
                     }
                 }
             }
+        }
+
+        info!("Pipeweaver Manager Terminated");
+        if clean_stop {
+            self.draw_splash();
+            self.draw_status("Beacn Utility Stopped");
+            self.disable_buttons();
         }
     }
 
@@ -367,7 +385,7 @@ impl PipeweaverHandler {
         let sync_receiver = self.input_rx.clone();
         let (interaction_tx, mut interaction_rx) = channel(10);
 
-        let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
+        let (_stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
         runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
@@ -379,6 +397,11 @@ impl PipeweaverHandler {
         debug!("Starting Pipeweaver Message Loop");
         loop {
             select! {
+                Ok(_) = self.stop_rx.changed() => {
+                    // Trigger a safe exit
+                    return Ok(());
+                }
+
                 Some(message) = stream.next() => {
                     let message = message?;
                     if message.is_text() {
@@ -876,9 +899,10 @@ pub fn spawn_pipeweaver_handler(
     sender: Sender<ControlMessage>,
     device: DeviceType,
     input_rx: Receiver<Interactions>,
-) {
-    let mut handler = PipeweaverHandler::new(device, sender, input_rx);
-    runtime().spawn(async move { handler.run_handler().await });
+    stop_rx: watch::Receiver<()>,
+) -> JoinHandle<()> {
+    let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx);
+    runtime().spawn(async move { handler.run_handler().await })
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {

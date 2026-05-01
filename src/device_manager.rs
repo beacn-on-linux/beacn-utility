@@ -13,14 +13,14 @@
 */
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
-use crate::{ManagerMessages, ToMainMessages};
+use crate::{ManagerMessages, ToMainMessages, runtime};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
+use beacn_lib::crossbeam::channel::{Receiver, Select, Sender, TryRecvError};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
@@ -33,7 +33,9 @@ use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
 use strum_macros::Display;
-
+use tokio::sync::watch;
+use tokio::task::JoinHandle;
+use tokio::time::sleep;
 //const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
 
 pub fn spawn_device_manager(
@@ -72,7 +74,7 @@ pub fn spawn_device_manager(
         for (i, device) in receiver_map.iter().enumerate() {
             let index = match device {
                 DeviceMap::Audio(_, _, rx) => selector.recv(rx),
-                DeviceMap::Control(_, _, rx) => selector.recv(rx),
+                DeviceMap::Control(_, _, rx, _, _) => selector.recv(rx),
             };
             device_indices.insert(index, i);
         }
@@ -202,14 +204,27 @@ pub fn spawn_device_manager(
                                 };
 
                                 let (tx, rx) = channel::unbounded();
+                                let (stop_tx, stop_rx) = watch::channel(());
+                                let img_tx = tx.clone();
+                                let task = spawn_pipeweaver_handler(
+                                    img_tx,
+                                    device_type,
+                                    input_rx,
+                                    stop_rx,
+                                );
+
                                 if let Some(device) = device {
-                                    receiver_map.push(DeviceMap::Control(device, data.clone(), rx));
+                                    receiver_map.push(DeviceMap::Control(
+                                        device,
+                                        data.clone(),
+                                        rx,
+                                        stop_tx,
+                                        task,
+                                    ));
                                 }
 
                                 // Use the async runtime for this
                                 debug!("Starting PipeWeaver Handler");
-                                let img_tx = tx.clone();
-                                spawn_pipeweaver_handler(img_tx, device_type, input_rx);
 
                                 let arrived = DeviceArriveMessage::Control(data, tx);
                                 let message = DeviceMessage::DeviceArrived(arrived);
@@ -222,7 +237,7 @@ pub fn spawn_device_manager(
                         let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
                         receiver_map.retain(|e| match e {
                             DeviceMap::Audio(_, d, _) => d.location != location,
-                            DeviceMap::Control(_, d, _) => d.location != location,
+                            DeviceMap::Control(_, d, _, _, _) => d.location != location,
                         });
 
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
@@ -268,7 +283,7 @@ pub fn spawn_device_manager(
                                     }
                                 }
                             }
-                            DeviceMap::Control(dev, _, rx) => {
+                            DeviceMap::Control(dev, _, rx, _, _) => {
                                 if let Ok(msg) = operation.recv(rx) {
                                     match msg {
                                         ControlMessage::SendImage(img, x, y, tx) => {
@@ -301,13 +316,44 @@ pub fn spawn_device_manager(
             }
         }
     }
+
+    // Stop the dbus login handler
+    let _ = login_stop_tx.blocking_send(());
+
+    // Stop any control devices which may be active
+    for device in receiver_map.iter_mut() {
+        if let DeviceMap::Control(dev, _, rx, stop, task) = device {
+            if stop.send(()).is_ok() {
+                // This is kinda ugly, but we need to continue processing images until the task
+                // is finished, so we can shut down the device cleanly.
+                runtime().block_on(async {
+                    loop {
+                        if task.is_finished() {
+                            break;
+                        }
+                        match rx.try_recv() {
+                            Ok(msg) => match msg {
+                                ControlMessage::SendImage(img, x, y, tx) => {
+                                    let _ = tx.send(dev.set_image(x, y, &img));
+                                }
+                                ControlMessage::ButtonColour(button, colour, tx) => {
+                                    let _ = tx.send(dev.set_button_colour(button, colour));
+                                }
+                                _ => {}
+                            },
+                            Err(TryRecvError::Empty) => sleep(Duration::from_millis(10)).await,
+                            Err(TryRecvError::Disconnected) => break,
+                        }
+                    }
+                });
+            }
+        }
+    }
+
     // For some reason, we're stopping. If the manager channel is still open, tell it to stop.
     if manage_tx.is_ready() {
         let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     }
-
-    // Stop the dbus login handler
-    let _ = login_stop_tx.blocking_send(());
 
     debug!("Device Manager Stopped");
 }
@@ -317,7 +363,7 @@ fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
         #[allow(clippy::single_match)]
         match device {
-            DeviceMap::Control(dev, _, _) => {
+            DeviceMap::Control(dev, _, _, _, _) => {
                 let _ = dev.set_enabled(enabled);
             }
             _ => {}
@@ -335,6 +381,8 @@ enum DeviceMap {
         Box<dyn BeacnControlDevice>,
         DeviceDefinition,
         Receiver<ControlMessage>,
+        watch::Sender<()>,
+        JoinHandle<()>,
     ),
 }
 
