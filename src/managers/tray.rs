@@ -39,7 +39,7 @@ pub fn handle_tray(
     let (icon_tx, icon_rx) = channel::bounded(20);
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
     let handle = icon
-        .disable_dbus_name(true)
+        .disable_dbus_name(ashpd::is_sandboxed())
         .assume_sni_available(true)
         .spawn()?;
 
