@@ -248,7 +248,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
             UserEvent::SetAutoStart(create) => {
                 let key = Id::new(AUTO_START_KEY);
                 if let Some(window) = &self.window {
-                    if env::var("FLATPAK_SANDBOX_DIR").is_ok() {
+                    if ashpd::is_sandboxed() {
                         println!("Running inside Flatpak, using Background Portal");
 
                         #[allow(deprecated)]
