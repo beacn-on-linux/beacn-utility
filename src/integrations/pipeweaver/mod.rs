@@ -10,6 +10,7 @@ use crate::integrations::pipeweaver::layout::{
 use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
+use beacn_lib::crossbeam;
 use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
@@ -194,7 +195,7 @@ impl PipeweaverHandler {
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
-        while let Err(e) = self.handle_connection(url).await {
+        'connect: while let Err(e) = self.handle_connection(url).await {
             // It doesn't matter if we lose an input here, we're not handling them anyway.
             if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
                 warn!("Interaction Handler Terminated, Bailing!");
@@ -213,17 +214,43 @@ impl PipeweaverHandler {
             }
             self.displaying_error = true;
 
-            if let Some(tungstenite::Error::Io(e)) = e.downcast_ref()
-                && e.kind() == ErrorKind::ConnectionRefused
-            {
-                // No point dumping a warning here, Pipeweaver isn't running.
-                sleep(Duration::from_secs(5)).await;
-                continue;
+            // We only suppress 'Connection Refused' errors, as they're expected to happen
+            let is_connection_refused = e
+                .downcast_ref::<tungstenite::Error>()
+                .and_then(|e| {
+                    if let tungstenite::Error::Io(io) = e {
+                        Some(io)
+                    } else {
+                        None
+                    }
+                })
+                .map(|io| io.kind() == ErrorKind::ConnectionRefused)
+                .unwrap_or(false);
+
+            if !is_connection_refused {
+                warn!("Pipeweaver Error: {}", e);
             }
 
-            warn!("Pipeweaver Error: {}", e);
-            sleep(Duration::from_secs(5)).await;
-            continue;
+            // Spawn a sync <-> async loop so we can consume incoming messages while disconnected
+            let sync_receiver = self.input_rx.clone();
+            let (interaction_tx, mut interaction_rx) = channel(10);
+
+            let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
+            runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
+
+            // Create a loop which handles things like incoming messages and stopping
+            loop {
+                select! {
+                    Some(_) = interaction_rx.recv() => {
+                        // We need to NOOP this, drain the channel so messages don't queue.
+                    }
+                    _ = sleep(Duration::from_secs(5)) => {
+                        // 5 Seconds have elapsed, break this loop to reconnect
+                        drop(stop_tx);
+                        continue 'connect;
+                    }
+                }
+            }
         }
     }
 
@@ -339,7 +366,9 @@ impl PipeweaverHandler {
 
         let sync_receiver = self.input_rx.clone();
         let (interaction_tx, mut interaction_rx) = channel(10);
-        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx));
+
+        let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
+        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
 
@@ -866,15 +895,20 @@ fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
 fn sync_to_async(
     rx: Receiver<Interactions>,
     tx: tokio::sync::mpsc::Sender<Interactions>,
+    cancel: Receiver<()>,
 ) -> Result<()> {
     debug!("Running Up Receiver..");
     loop {
-        match rx.recv() {
-            Ok(val) => {
-                tx.blocking_send(val)?;
-            }
-            Err(e) => {
-                debug!("Error Occurred, stopping sync wrapper: {}", e);
+        crossbeam::select! {
+            recv(rx) -> msg => match msg {
+                Ok(val) => tx.blocking_send(val)?,
+                Err(_) => {
+                    debug!("Crossbeam channel disconnected, stopping sync wrapper");
+                    break;
+                }
+            },
+            recv(cancel) -> _ => {
+                // We don't care about the result, we just want to stop the loop
                 break;
             }
         }
