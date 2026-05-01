@@ -52,8 +52,11 @@ ksni = { version = "0.3.4", features = ["blocking"] }
 image = "0.25.9"
 fontdue = "0.9.3"
 
-# Apature Science Handheld Portal Device (autostart / background)
+# Async Runtime
 tokio = { version = "1.49.0", features = ["rt-multi-thread"] }
+flume = "0.12.0"
+
+# Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.9", features = ["raw_handle", "background"] }
 
 # For Creating .desktop files outside the flatpak runtime
