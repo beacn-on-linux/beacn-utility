@@ -187,6 +187,9 @@ impl PipeweaverHandler {
         // Send the Pipeweaver Splash
         self.draw_splash();
         self.draw_status("Loading...");
+
+        sleep(Duration::from_millis(250)).await;
+
         self.disable_buttons();
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
