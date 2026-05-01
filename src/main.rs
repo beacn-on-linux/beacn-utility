@@ -31,6 +31,9 @@ mod managers;
 mod ui;
 mod window_handle;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const HASH: &str = env!("GIT_HASH");
+
 const BACKGROUND_PARAM: &str = "--background";
 const LEGACY_BACKGROUND_PARAM: &str = "--startup";
 
@@ -90,7 +93,8 @@ fn main() -> Result<()> {
     }
 
     CombinedLogger::init(log_targets)?;
-    info!("Logger initialized");
+
+    info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
     // Install a PANIC logger, to hopefully drop info if something breaks
     log_panics::init();
@@ -241,7 +245,7 @@ fn main() -> Result<()> {
         }
     }
 
-    debug!("Waiting for Threads to Terminate..");
+    debug!("Shutdown Triggered - Waiting for Threads to Terminate..");
     send_user_event(&context, UserEvent::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
@@ -251,6 +255,8 @@ fn main() -> Result<()> {
     let _ = tray.join();
     let _ = device_manager.join();
     let _ = ipc.join();
+
+    debug!("Shutdown Complete");
 
     Ok(())
 }
