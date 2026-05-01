@@ -115,7 +115,11 @@ fn main() -> Result<()> {
     // Ok, spawn up the Tray Handler
     let (tray_tx, tray_rx) = channel::unbounded();
     let tray_main_tx = main_tx.clone();
-    let tray = thread::spawn(|| handle_tray(tray_rx, tray_main_tx));
+    let tray = thread::spawn(|| {
+        if let Err(e) = handle_tray(tray_rx, tray_main_tx) {
+            error!("Failed to Spawn Tray: {e}");
+        }
+    });
 
     // Ok, we need to spawn up the device manager, first lets create some channels
     // The first channel is for us to be able to tell the manager to shut down, or reconfigure
