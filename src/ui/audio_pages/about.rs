@@ -4,7 +4,7 @@ use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
-use egui::{RichText, Ui};
+use egui::{Button, Color32, Image, RichText, Ui, vec2};
 
 pub struct About {}
 
@@ -85,10 +85,7 @@ impl AudioPage for About {
                 // Add clickable info icon
                 if let Some(info_icon) = SVG.get("info") {
                     let info_button = ui.add(
-                        #[allow(deprecated)]
-                        egui::ImageButton::new(egui::Image::new(info_icon.clone())
-                            .fit_to_exact_size(egui::vec2(16.0, 16.0)))
-                            .frame(false)
+                        Button::image(Image::new(info_icon.clone()).fit_to_exact_size(vec2(16.0, 16.0))).frame(false)
                     );
 
                     if info_button.hovered() {
