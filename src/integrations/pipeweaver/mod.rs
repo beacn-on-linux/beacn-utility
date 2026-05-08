@@ -538,8 +538,8 @@ impl PipeweaverHandler {
                     if msg.is_text() {
                         let result = serde_json::from_str::<MeterMessage>(msg.to_text()?)?;
 
-                        if let Some(index) = self.devices_shown.iter().position(|id| *id == result.id) {
-                            if let Some(renderer) = self.renderers.get_mut(&result.id) {
+                        if let Some(index) = self.devices_shown.iter().position(|id| *id == result.id) &&
+                            let Some(renderer) = self.renderers.get_mut(&result.id) {
                                 renderer.meter_target = result.percent.into();
 
                                 let current = renderer.meter;
@@ -574,39 +574,36 @@ impl PipeweaverHandler {
 
                                 sub_tick = Some((result.id, index));
                                 sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                            }
                         }
                     }
                 }
                 _ = &mut sub_sleep, if sub_tick.is_some() => {
-                    if let Some((id, index)) = sub_tick.take() {
-                        if let Some(renderer) = self.renderers.get_mut(&id) {
-                            let current = renderer.meter;
-                            let new = renderer.tick_meter(TICK_RATE);
-                            if current == new {
-                                sub_tick = Some((id, index));
-                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                    if let Some((id, index)) = sub_tick.take() && let Some(renderer) = self.renderers.get_mut(&id) {
+                        let current = renderer.meter;
+                        let new = renderer.tick_meter(TICK_RATE);
+                        if current == new {
+                            sub_tick = Some((id, index));
+                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
 
-                                continue;
-                            }
+                            continue;
+                        }
 
-                            let drawing = renderer.get_volume(self.active_mix)?;
-                            let (x, y) = drawing.position;
+                        let drawing = renderer.get_volume(self.active_mix)?;
+                        let (x, y) = drawing.position;
 
-                            let (ch_w, _) = CHANNEL_DIMENSIONS;
-                            let (root_x, root_y) = POSITION_ROOT;
-                            let x = ch_w * index as u32 + x + root_x;
-                            let y = y + root_y;
+                        let (ch_w, _) = CHANNEL_DIMENSIONS;
+                        let (root_x, root_y) = POSITION_ROOT;
+                        let x = ch_w * index as u32 + x + root_x;
+                        let y = y + root_y;
 
-                            let (tx, rx) = oneshot::channel();
-                            self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                            rx.recv()??;
+                        let (tx, rx) = oneshot::channel();
+                        self.sender.send(SendImage(drawing.image, x, y, tx))?;
+                        rx.recv()??;
 
-                            // Keep ticking until meter hits zero
-                            if renderer.meter > 0 {
-                                sub_tick = Some((id, index));
-                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                            }
+                        // Keep ticking until meter hits zero
+                        if renderer.meter > 0 {
+                            sub_tick = Some((id, index));
+                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
                         }
                     }
                 }

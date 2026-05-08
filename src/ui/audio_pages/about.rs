@@ -4,7 +4,7 @@ use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
-use egui::{Button, Color32, Image, RichText, Ui, vec2};
+use egui::{Button, Image, RichText, Ui, vec2};
 
 pub struct About {}
 
