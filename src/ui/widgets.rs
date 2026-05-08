@@ -1,10 +1,10 @@
 use crate::ui::SVG;
 use crate::ui::numbers::NumericType;
 use egui::emath::Numeric;
-use egui::{Align, Color32, DragValue, Layout, Response, RichText, Slider, Ui, Visuals, vec2};
-
-#[allow(deprecated)]
-use egui::ImageButton;
+use egui::{
+    Align, Button, Color32, CornerRadius, DragValue, Image, Layout, Response, RichText, Slider, Ui,
+    Visuals, vec2,
+};
 
 use std::fmt::Debug;
 use std::ops::RangeInclusive;
@@ -20,14 +20,16 @@ pub fn round_nav_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     let image = SVG.get(img).unwrap().clone();
 
     ui.scope(|ui| {
-        ui.style_mut().spacing.button_padding = vec2(10.0, 10.0);
+        ui.style_mut().spacing.button_padding = vec2(0.0, 0.0);
         ui.add_sized(
             [40.0, 40.0],
-            #[allow(deprecated)]
-            ImageButton::new(image)
-                .corner_radius(5.0)
-                .tint(tint_colour)
-                .selected(active),
+            Button::image(
+                Image::new(image)
+                    .tint(tint_colour)
+                    .fit_to_exact_size(vec2(20., 20.)),
+            )
+            .corner_radius(CornerRadius::same(5))
+            .selected(active),
         )
     })
     .inner
@@ -40,11 +42,12 @@ pub fn pipeweaver_button(ui: &mut Ui, img: &str, active: bool) -> Response {
     let image = SVG.get(img).unwrap().clone();
 
     ui.scope(|ui| {
-        ui.style_mut().spacing.button_padding = vec2(2.0, 2.0);
+        ui.style_mut().spacing.button_padding = vec2(0.0, 0.0);
         ui.add_sized(
             [40.0, 40.0],
-            #[allow(deprecated)]
-            ImageButton::new(image).corner_radius(5.0).selected(active),
+            Button::image(Image::new(image).fit_to_exact_size(vec2(35., 35.)))
+                .corner_radius(CornerRadius::same(5))
+                .selected(active),
         )
     })
     .inner
