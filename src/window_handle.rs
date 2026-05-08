@@ -13,8 +13,7 @@ use egui_glow::glow::HasContext;
 use egui_winit::winit;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
-#[allow(deprecated)]
-use egui_winit::winit::raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use egui_winit::winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use egui_winit::winit::window::{UserAttentionType, WindowAttributes};
 use egui_winit::winit::{
     application::ApplicationHandler,
@@ -251,11 +250,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     if ashpd::is_sandboxed() {
                         println!("Running inside Flatpak, using Background Portal");
 
-                        #[allow(deprecated)]
-                        let window_handle = window.raw_window_handle().unwrap();
-
-                        #[allow(deprecated)]
-                        let display_handle = window.raw_display_handle().ok();
+                        let window_handle = window.window_handle().unwrap().as_raw();
+                        let display_handle = window.display_handle().ok().map(|d| d.as_raw());
 
                         let reason = "Manage Beacn Devices on Startup";
 
@@ -407,8 +403,8 @@ impl GlowRenderer {
         use glutin::prelude::*;
         use glutin::surface::SurfaceAttributesBuilder;
 
-        let raw_window_handle = window.raw_window_handle().unwrap();
-        let raw_display_handle = window.raw_display_handle().unwrap();
+        let raw_window_handle = window.window_handle().unwrap().as_raw();
+        let raw_display_handle = window.display_handle().unwrap().as_raw();
 
         // Create OpenGL config
         let config_template = ConfigTemplateBuilder::new()
