@@ -431,7 +431,7 @@ impl PipeweaverHandler {
                 Ok(_) = self.draw_suspend_rx.changed() => {
                     // We've woken up from a suspension, so redraw everything
                     if !self.is_draw_suspended() {
-                        self.perform_full_refresh()?;
+                        self.refresh_page()?;
                     }
 
                     // Restart the loop, just in case there are other redraws needed
@@ -949,7 +949,10 @@ impl PipeweaverHandler {
                 }
 
                 self.active_page = self.active_page.wrapping_add_signed(change);
-                self.refresh_page()?;
+
+                if !self.is_draw_suspended() {
+                    self.refresh_page()?;
+                }
             }
 
             // The general behaviour for all the main buttons is the same, just with minor tweaks
