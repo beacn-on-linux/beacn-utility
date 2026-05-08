@@ -67,7 +67,11 @@ pub(crate) struct ChannelRenderer {
     pub(crate) colour: Rgba<u8>,
 
     pub(crate) volumes: EnumMap<Mix, u8>,
+
+    // Meter is the actual current value, target is how we're getting there
     pub(crate) meter: u8,
+    pub(crate) meter_target: f32,
+
     pub(crate) mute_states: EnumMap<MuteTarget, MuteState>,
 }
 
@@ -98,6 +102,7 @@ impl ChannelRenderer {
             colour: Rgba([desc.colour.red, desc.colour.green, desc.colour.blue, 255]),
             volumes: vols.volume,
             meter: 0,
+            meter_target: 0.0,
             mute_states: enum_map! {
                 MuteTarget::TargetA => MuteState {
                     is_active: mutes.mute_state.contains(&MuteTarget::TargetA),
@@ -195,6 +200,33 @@ impl ChannelRenderer {
             position: (0, 0),
             image: base,
         }
+    }
+
+    pub fn tick_meter(&mut self, delta_secs: f32) -> u8 {
+        const DECAY: f32 = 3.0;
+        const ATTACK: f32 = 10.0;
+
+        let target = self.meter_target;
+        let current = self.meter as f32;
+
+        self.meter = if target >= current {
+            let factor = 1.0 - (-ATTACK * delta_secs).exp();
+
+            (current + (target - current) * factor).round() as u8
+        } else {
+            let factor = (-DECAY * delta_secs).exp();
+
+            let next = (target + (current - target) * factor).round() as u8;
+
+            // Prevent quantization lock
+            if next >= self.meter && self.meter > 0 {
+                self.meter - 1
+            } else {
+                next
+            }
+        };
+
+        self.meter
     }
 
     pub fn get_volume(&self, mix: Mix) -> Result<RawImage> {

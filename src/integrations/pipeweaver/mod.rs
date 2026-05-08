@@ -32,6 +32,7 @@ use pipeweaver_ipc::commands::{
 };
 use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
 use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::io::ErrorKind;
@@ -129,6 +130,13 @@ const COLOUR_BLACK: RGBA = RGBA {
     alpha: 0,
 };
 
+// This is a mapping for the meter messages
+#[derive(Debug, Deserialize)]
+struct MeterMessage {
+    id: Ulid,
+    percent: u8,
+}
+
 // This is so we can more cleanly Map Physical / Virtual devices, because the data we need from
 // them is the same regardless, and ChannelRenderer has From<> for Both
 #[derive(Debug)]
@@ -189,6 +197,7 @@ impl PipeweaverHandler {
     pub async fn run_handler(&mut self) {
         info!("Starting Pipeweaver Manager");
         let url = "ws://localhost:14565/api/websocket";
+        let meter = "ws://localhost:14565/api/websocket/meter";
 
         let mut clean_stop = true;
 
@@ -202,7 +211,7 @@ impl PipeweaverHandler {
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
-        'connect: while let Err(e) = self.handle_connection(url).await {
+        'connect: while let Err(e) = self.handle_connection(url, meter).await {
             // It doesn't matter if we lose an input here, we're not handling them anyway.
             if matches!(self.input_rx.try_recv(), Err(TryRecvError::Disconnected)) {
                 warn!("Interaction Handler Terminated, Bailing!");
@@ -304,8 +313,9 @@ impl PipeweaverHandler {
         }
     }
 
-    async fn handle_connection(&mut self, url: &str) -> Result<()> {
+    async fn handle_connection(&mut self, url: &str, meter: &str) -> Result<()> {
         let (mut stream, _) = connect_async(url).await?;
+        let (mut meter, _) = connect_async(meter).await?;
         info!("Successfully connected to Pipeweaver");
 
         self.has_connected = true;
@@ -313,7 +323,7 @@ impl PipeweaverHandler {
 
         self.load_status(&mut stream).await?;
         self.load_initial_state().await?;
-        self.run_message_loop(&mut stream).await?;
+        self.run_message_loop(&mut stream, &mut meter).await?;
 
         Ok(())
     }
@@ -379,8 +389,15 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    async fn run_message_loop(&mut self, stream: &mut WebSocket) -> Result<()> {
+    async fn run_message_loop(
+        &mut self,
+        stream: &mut WebSocket,
+        meter: &mut WebSocket,
+    ) -> Result<()> {
         debug!("Spawning Sync <-> Async Loop");
+
+        const METER_HALF_TICK_MS: u64 = 50;
+        const TICK_RATE: f32 = METER_HALF_TICK_MS as f32 / 1000.0;
 
         let sync_receiver = self.input_rx.clone();
         let (interaction_tx, mut interaction_rx) = channel(10);
@@ -393,6 +410,11 @@ impl PipeweaverHandler {
         let (tx, rx) = oneshot::channel();
         self.sender.send(ControlMessage::Enabled(true, tx))?;
         rx.recv()??;
+
+        // These are half-tick messages, sent every 50ms to better smooth meter updates
+        let mut sub_tick: Option<(Ulid, usize)> = None;
+        let sub_sleep = tokio::time::sleep(Duration::MAX);
+        tokio::pin!(sub_sleep);
 
         debug!("Starting Pipeweaver Message Loop");
         loop {
@@ -511,6 +533,84 @@ impl PipeweaverHandler {
                         bail!("Received non-text message from Websocket!")
                     }
                 }
+                Some(msg) = meter.next() => {
+                    let msg = msg?;
+                    if msg.is_text() {
+                        let result = serde_json::from_str::<MeterMessage>(msg.to_text()?)?;
+
+                        if let Some(index) = self.devices_shown.iter().position(|id| *id == result.id) {
+                            if let Some(renderer) = self.renderers.get_mut(&result.id) {
+                                renderer.meter_target = result.percent.into();
+
+                                let current = renderer.meter;
+                                let new = renderer.tick_meter(TICK_RATE);
+                                if current == new {
+                                    sub_tick = Some((result.id, index));
+                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+
+                                    continue;
+                                }
+
+                                // Don't redraw if nothing has changed
+                                let current = renderer.meter;
+                                let new = renderer.tick_meter(0.1);
+                                if current == new {
+                                    continue;
+                                }
+
+                                let drawing = renderer.get_volume(self.active_mix)?;
+                                let (x, y) = drawing.position;
+
+                                let (ch_w, _) = CHANNEL_DIMENSIONS;
+                                let base_x = ch_w * index as u32;
+
+                                let (root_x, root_y) = POSITION_ROOT;
+                                let x = base_x + x + root_x;
+                                let y = y + root_y;
+
+                                let (tx, rx) = oneshot::channel();
+                                self.sender.send(SendImage(drawing.image, x, y, tx))?;
+                                rx.recv()??;
+
+                                sub_tick = Some((result.id, index));
+                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                            }
+                        }
+                    }
+                }
+                _ = &mut sub_sleep, if sub_tick.is_some() => {
+                    if let Some((id, index)) = sub_tick.take() {
+                        if let Some(renderer) = self.renderers.get_mut(&id) {
+                            let current = renderer.meter;
+                            let new = renderer.tick_meter(TICK_RATE);
+                            if current == new {
+                                sub_tick = Some((id, index));
+                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+
+                                continue;
+                            }
+
+                            let drawing = renderer.get_volume(self.active_mix)?;
+                            let (x, y) = drawing.position;
+
+                            let (ch_w, _) = CHANNEL_DIMENSIONS;
+                            let (root_x, root_y) = POSITION_ROOT;
+                            let x = ch_w * index as u32 + x + root_x;
+                            let y = y + root_y;
+
+                            let (tx, rx) = oneshot::channel();
+                            self.sender.send(SendImage(drawing.image, x, y, tx))?;
+                            rx.recv()??;
+
+                            // Keep ticking until meter hits zero
+                            if renderer.meter > 0 {
+                                sub_tick = Some((id, index));
+                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                            }
+                        }
+                    }
+                }
+
                 maybe_msg = interaction_rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
