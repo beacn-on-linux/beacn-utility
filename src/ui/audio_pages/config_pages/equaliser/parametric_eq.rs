@@ -10,12 +10,9 @@ use beacn_lib::audio::messages::equaliser::{
     EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
 };
 use egui::{
-    Align, Button, Color32, CornerRadius, FontId, Layout, Mesh, Pos2, Rect, Response, Sense, Shape,
-    Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
+    Align, Button, Color32, CornerRadius, FontId, Image, Layout, Mesh, Pos2, Rect, Response, Sense,
+    Shape, Stroke, StrokeKind, Ui, Vec2, pos2, vec2,
 };
-
-#[allow(deprecated)]
-use egui::ImageButton;
 
 use enum_map::EnumMap;
 use log::{debug, warn};
@@ -1074,12 +1071,15 @@ pub fn eq_mode(ui: &mut Ui, img: &str, active: bool, pos: ButtonPosition) -> Res
     };
 
     ui.scope(|ui| {
+        ui.style_mut().spacing.button_padding = vec2(5.0, 5.0);
         ui.add(
-            #[allow(deprecated)]
-            ImageButton::new(image)
-                .corner_radius(corner_radius)
-                .tint(tint_colour)
-                .selected(active),
+            Button::image(
+                Image::new(image)
+                    .tint(tint_colour)
+                    .fit_to_exact_size(vec2(35., 45.)),
+            )
+            .corner_radius(corner_radius)
+            .selected(active),
         )
     })
     .inner
