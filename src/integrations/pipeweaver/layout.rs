@@ -3,13 +3,14 @@
 
 use crate::APP_NAME;
 use anyhow::{Context, Result, anyhow, bail};
-use enum_map::EnumMap;
+use enum_map::{EnumMap, enum_map};
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage, load_from_memory};
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use pipeweaver_shared::Mix;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::PI;
 use std::fs;
@@ -46,7 +47,9 @@ type DistanceAngleMap = Lazy<(Vec<Vec<f32>>, Vec<Vec<f32>>)>;
 type DialBaseImage = Lazy<RgbaImage>;
 type DialValueImage = Lazy<EnumMap<Mix, HashMap<u8, RgbaImage>>>;
 type DialTextImage = Lazy<HashMap<u8, RgbaImage>>;
-type DialVolumeJPEG = Lazy<EnumMap<Mix, HashMap<u8, Vec<u8>>>>;
+type DialVolumeJPEG = Lazy<EnumMap<Mix, HashMap<u8, HashMap<u8, Vec<u8>>>>>;
+type DialMeterImage = Lazy<EnumMap<Mix, HashMap<u8, RgbaImage>>>;
+type DialMeterData = EnumMap<Mix, HashMap<u8, HashMap<u8, Vec<u8>>>>;
 
 // Resolution of the Beacn Mix / Mix Create Screens, and how many channels to display
 pub(crate) static DISPLAY_DIMENSIONS: Dimension = (800, 480);
@@ -64,10 +67,10 @@ pub(crate) static POSITION_ROOT: Position = (0, 80);
 // then though, it takes 6 seconds in DEBUG mode to generate these images, and 0.6s in RELEASE
 // mode, which is good enough for now.
 pub(crate) static DISTANCE_ANGLE_MAP: DistanceAngleMap = Lazy::new(DialHandler::precompute_maps);
-pub(crate) static DIAL_BASE_IMAGE: DialBaseImage =
-    Lazy::new(DialHandler::precompute_dial_background);
+pub(crate) static DIAL_BASE_IMAGE: DialBaseImage = Lazy::new(DialHandler::precompute_dial_bg);
 pub(crate) static DIAL_MIX_IMAGES: DialValueImage = Lazy::new(DialHandler::precompute_dial_volumes);
 pub(crate) static DIAL_TEXT_IMAGES: DialTextImage = Lazy::new(DialHandler::precompute_dial_text);
+pub(crate) static DIAL_METER_IMAGES: DialMeterImage = Lazy::new(DialHandler::precompute_meters);
 pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::composite_dials);
 
 // Next up, we define some colours, which will be used when generating components
@@ -75,8 +78,11 @@ pub(crate) static TEXT_COLOUR: Rgba<u8> = Rgba([180, 180, 180, 255]);
 pub(crate) static BG_COLOUR: Rgba<u8> = Rgba([42, 48, 45, 255]);
 
 pub(crate) static DIAL_INACTIVE: Rgba<u8> = Rgba([37, 41, 39, 255]);
+
 pub(crate) static MIX_A_DIAL: Rgba<u8> = Rgba([89, 177, 182, 255]);
 pub(crate) static MIX_B_DIAL: Rgba<u8> = Rgba([224, 124, 36, 255]);
+pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([79, 215, 255, 255]);
+pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([252, 153, 56, 255]); // adjust as needed
 
 pub(crate) static CHANNEL_BORDER_COLOUR: Rgba<u8> = Rgba([101, 101, 101, 255]);
 pub(crate) static CHANNEL_INNER_COLOUR: Rgba<u8> = Rgba([51, 55, 53, 255]);
@@ -561,20 +567,23 @@ impl DrawingUtils {
         ])
     }
 
-    pub fn get_volume_image(volume: u8, mix: Mix) -> Result<Vec<u8>> {
+    pub fn get_volume_image(volume: u8, meter: u8, mix: Mix) -> Result<Vec<u8>> {
         let mut base = DIAL_BASE_IMAGE.clone();
-        let dial = DIAL_MIX_IMAGES[mix]
+        let volume_arc = DIAL_MIX_IMAGES[mix]
             .get(&volume)
-            .ok_or(anyhow!("Not Found"))?;
+            .ok_or(anyhow!("Volume Arc Not Found"))?;
+        let meter_arc = DIAL_METER_IMAGES[mix]
+            .get(&meter)
+            .ok_or(anyhow!("Meter Arc Not Found"))?;
         let text = DIAL_TEXT_IMAGES
             .get(&volume)
             .ok_or(anyhow!("Text Not Found"))?;
 
-        // Composite this together...
-        Self::composite_from(&mut base, dial, 0, 0);
+        // Composite it together
+        Self::composite_from(&mut base, volume_arc, 0, 0);
+        Self::composite_from(&mut base, meter_arc, 0, 0);
         Self::composite_from(&mut base, text, 0, 0);
 
-        // Drop the bottom 6 pixels from the image
         let (width, mut height) = VOLUME_DIMENSIONS;
         height -= VOLUME_CROP;
         let cropped = image::imageops::crop_imm(&base, 0, 0, width, height);
@@ -584,7 +593,7 @@ impl DrawingUtils {
 
 struct DialHandler;
 impl DialHandler {
-    pub fn composite_dials() -> EnumMap<Mix, HashMap<u8, Vec<u8>>> {
+    pub fn composite_dials() -> DialMeterData {
         let start = Instant::now();
 
         let file_name = CACHE_PATH.to_string();
@@ -602,8 +611,9 @@ impl DialHandler {
 
         // Attempt to Load the Cache file
         let cache_file = xdg_dirs.find_cache_file(file_name.clone());
-        debug!("Attempting to load Cache from {cache_file:?}");
         if let Some(file) = cache_file {
+            debug!("Attempting to load Cache from {file:?}");
+
             match Self::load_cache(file) {
                 Ok(map) => {
                     info!("Loaded Cache in {:?}", start.elapsed());
@@ -615,20 +625,34 @@ impl DialHandler {
             }
         }
 
-        debug!("Generating Images (This will take a second!)");
-        let mut map = EnumMap::default();
+        debug!("Generating Images (This will take a few seconds..)");
 
-        for mix in Mix::iter() {
-            let mut volume_map = HashMap::new();
-            for i in 0..=100 {
-                if let Ok(image) = DrawingUtils::get_volume_image(i, mix) {
-                    volume_map.insert(i, image);
-                }
-            }
-            map[mix] = volume_map;
+        // Create a workload to generate the images
+        let work: Vec<(Mix, u8, u8)> = Mix::iter()
+            .flat_map(|mix| {
+                (0..=100u8)
+                    .flat_map(move |volume| (0..=volume).map(move |meter| (mix, volume, meter)))
+            })
+            .collect();
+
+        // Get rayon to handle the work in a threaded way
+        let results: Vec<(Mix, u8, u8, Vec<u8>)> = work
+            .par_iter()
+            .filter_map(|&(mix, volume, meter)| {
+                DrawingUtils::get_volume_image(volume, meter, mix)
+                    .ok()
+                    .map(|img| (mix, volume, meter, img))
+            })
+            .collect();
+
+        // Pull and map the results when done
+        let mut map: DialMeterData = EnumMap::default();
+        let count = results.len();
+        for (mix, volume, meter, img) in results {
+            map[mix].entry(volume).or_default().insert(meter, img);
         }
 
-        debug!("Generated In {:?}", start.elapsed());
+        debug!("Generated {} images in {:?}", count, start.elapsed());
 
         debug!("Attempting to Save to Cache");
         let time = Instant::now();
@@ -643,22 +667,33 @@ impl DialHandler {
         map
     }
 
-    fn precompute_dial_background() -> RgbaImage {
+    fn precompute_dial_bg() -> RgbaImage {
         let (width, height) = VOLUME_DIMENSIONS;
         Self::generate_dial(width, height, 100, DIAL_INACTIVE)
     }
 
     fn precompute_dial_volumes() -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
+        Self::precompute_arcs(enum_map! {
+            Mix::A => MIX_A_DIAL,
+            Mix::B => MIX_B_DIAL,
+        })
+    }
+
+    // Compute the meter arcs
+    fn precompute_meters() -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
+        Self::precompute_arcs(enum_map! {
+            Mix::A => METER_A_DIAL,
+            Mix::B => METER_B_DIAL,
+        })
+    }
+
+    fn precompute_arcs(colours: EnumMap<Mix, Rgba<u8>>) -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
         let (width, height) = VOLUME_DIMENSIONS;
         let mut enum_map = EnumMap::default();
         for mix in Mix::iter() {
-            let colour = match mix {
-                Mix::A => MIX_A_DIAL,
-                Mix::B => MIX_B_DIAL,
-            };
             let mut map = HashMap::new();
             for i in 0..=100 {
-                let img = Self::generate_dial(width, height, i, colour);
+                let img = Self::generate_dial(width, height, i, colours[mix]);
                 map.insert(i, img);
             }
             enum_map[mix] = map;
@@ -769,7 +804,7 @@ impl DialHandler {
         img
     }
 
-    fn save_cache(path: PathBuf, map: &EnumMap<Mix, HashMap<u8, Vec<u8>>>) -> Result<()> {
+    fn save_cache(path: PathBuf, map: &DialMeterData) -> Result<()> {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
@@ -777,20 +812,22 @@ impl DialHandler {
 
         for (mix, volume_map) in map.iter() {
             let mix_id = mix as u8;
-            for (&volume, data) in volume_map {
-                writer.write_all(&[mix_id, volume])?;
-                let len = data.len() as u32;
-                writer.write_all(&len.to_le_bytes())?;
-                writer.write_all(data)?;
+            for (&volume, meter_map) in volume_map {
+                for (&meter, data) in meter_map {
+                    writer.write_all(&[mix_id, volume, meter])?;
+                    let len = data.len() as u32;
+                    writer.write_all(&len.to_le_bytes())?;
+                    writer.write_all(data)?;
+                }
             }
         }
         Ok(())
     }
 
-    fn load_cache(path: PathBuf) -> Result<EnumMap<Mix, HashMap<u8, Vec<u8>>>> {
+    fn load_cache(path: PathBuf) -> Result<DialMeterData> {
         let file = File::open(&path)?;
         let mut reader = BufReader::new(file);
-        let mut map: EnumMap<Mix, HashMap<u8, Vec<u8>>> = EnumMap::default();
+        let mut map: DialMeterData = EnumMap::default();
 
         let mut version_bytes = [0u8; 2];
         reader.read_exact(&mut version_bytes)?;
@@ -800,10 +837,11 @@ impl DialHandler {
         }
 
         loop {
-            let mut header = [0u8; 6];
+            // mix + volume + meter + 4 len bytes
+            let mut header = [0u8; 7];
             if let Err(e) = reader.read_exact(&mut header) {
                 if e.kind() == UnexpectedEof {
-                    break; // EOF reached, stop reading
+                    break;
                 }
                 bail!("Failed to read header from cache file");
             }
@@ -814,14 +852,15 @@ impl DialHandler {
                 _ => bail!("Invalid mix identifier: {}", header[0]),
             };
             let volume = header[1];
-            let len = u32::from_le_bytes([header[2], header[3], header[4], header[5]]) as usize;
+            let meter = header[2];
+            let len = u32::from_le_bytes([header[3], header[4], header[5], header[6]]) as usize;
 
             let mut data = vec![0u8; len];
             reader.read_exact(&mut data).with_context(|| {
-                format!("Failed to read image data for mix {mix:?}, volume {volume}")
+                format!("Failed to read image data for mix {mix:?}, volume {volume}, meter {meter}")
             })?;
 
-            map[mix].insert(volume, data);
+            map[mix].entry(volume).or_default().insert(meter, data);
         }
 
         Ok(map)

@@ -67,6 +67,7 @@ pub(crate) struct ChannelRenderer {
     pub(crate) colour: Rgba<u8>,
 
     pub(crate) volumes: EnumMap<Mix, u8>,
+    pub(crate) meter: u8,
     pub(crate) mute_states: EnumMap<MuteTarget, MuteState>,
 }
 
@@ -96,6 +97,7 @@ impl ChannelRenderer {
             title: desc.name.clone(),
             colour: Rgba([desc.colour.red, desc.colour.green, desc.colour.blue, 255]),
             volumes: vols.volume,
+            meter: 0,
             mute_states: enum_map! {
                 MuteTarget::TargetA => MuteState {
                     is_active: mutes.mute_state.contains(&MuteTarget::TargetA),
@@ -197,8 +199,10 @@ impl ChannelRenderer {
 
     pub fn get_volume(&self, mix: Mix) -> Result<RawImage> {
         let volume = self.volumes[mix];
+        let meter = Self::scale_meter(self.volumes[mix], self.meter);
         let raw_image = DIAL_VOLUME_JPEG[mix]
             .get(&volume)
+            .and_then(|m| m.get(&meter))
             .ok_or(anyhow!("Image Missing"))?;
 
         Ok(RawImage {
@@ -209,7 +213,10 @@ impl ChannelRenderer {
 
     pub fn draw_volume(&self, mix: Mix) -> BeacnImage {
         let volume = self.volumes[mix];
-        if let Some(jpeg_data) = DIAL_VOLUME_JPEG[mix].get(&volume)
+        let meter = Self::scale_meter(self.volumes[mix], self.meter);
+        if let Some(jpeg_data) = DIAL_VOLUME_JPEG[mix]
+            .get(&volume)
+            .and_then(|m| m.get(&meter))
             && let Ok(img) = load_from_memory(jpeg_data)
         {
             return BeacnImage {
@@ -218,6 +225,11 @@ impl ChannelRenderer {
             };
         }
         panic!("Unable to Load Volume Image for Mix: {mix:?}");
+    }
+
+    fn scale_meter(volume: u8, meter: u8) -> u8 {
+        // Meter needs to be relative to the volume, so scale it.
+        (meter as f32 / 100.0 * volume as f32).round() as u8
     }
 
     fn draw_content_box(&self) -> BeacnImage {
