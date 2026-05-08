@@ -74,7 +74,7 @@ pub fn spawn_device_manager(
         for (i, device) in receiver_map.iter().enumerate() {
             let index = match device {
                 DeviceMap::Audio(_, _, rx) => selector.recv(rx),
-                DeviceMap::Control(_, _, rx, _, _) => selector.recv(rx),
+                DeviceMap::Control(_, _, rx, _, _, _) => selector.recv(rx),
             };
             device_indices.insert(index, i);
         }
@@ -97,17 +97,21 @@ pub fn spawn_device_manager(
                     // Do nothing until we have a full impl
                     match msg {
                         LoginEventTriggers::Sleep(tx) => {
+                            set_pipeweaver_draw_suspended(&receiver_map, true);
                             enable_devices(&receiver_map, false);
                             let _ = tx.send(());
                         }
                         LoginEventTriggers::Wake(tx) => {
+                            set_pipeweaver_draw_suspended(&receiver_map, false);
                             enable_devices(&receiver_map, true);
                             let _ = tx.send(());
                         }
                         LoginEventTriggers::Lock => {
+                            set_pipeweaver_draw_suspended(&receiver_map, true);
                             enable_devices(&receiver_map, false);
                         }
                         LoginEventTriggers::Unlock => {
+                            set_pipeweaver_draw_suspended(&receiver_map, false);
                             enable_devices(&receiver_map, true);
                         }
                     }
@@ -205,12 +209,14 @@ pub fn spawn_device_manager(
 
                                 let (tx, rx) = channel::unbounded();
                                 let (stop_tx, stop_rx) = watch::channel(());
+                                let (draw_suspend_tx, draw_suspend_rx) = watch::channel(false);
                                 let img_tx = tx.clone();
                                 let task = spawn_pipeweaver_handler(
                                     img_tx,
                                     device_type,
                                     input_rx,
                                     stop_rx,
+                                    draw_suspend_rx,
                                 );
 
                                 if let Some(device) = device {
@@ -219,6 +225,7 @@ pub fn spawn_device_manager(
                                         data.clone(),
                                         rx,
                                         stop_tx,
+                                        draw_suspend_tx,
                                         task,
                                     ));
                                 }
@@ -237,7 +244,7 @@ pub fn spawn_device_manager(
                         let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
                         receiver_map.retain(|e| match e {
                             DeviceMap::Audio(_, d, _) => d.location != location,
-                            DeviceMap::Control(_, d, _, _, _) => d.location != location,
+                            DeviceMap::Control(_, d, _, _, _, _) => d.location != location,
                         });
 
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
@@ -283,7 +290,7 @@ pub fn spawn_device_manager(
                                     }
                                 }
                             }
-                            DeviceMap::Control(dev, _, rx, _, _) => {
+                            DeviceMap::Control(dev, _, rx, _, _, _) => {
                                 if let Ok(msg) = operation.recv(rx) {
                                     match msg {
                                         ControlMessage::SendImage(img, x, y, tx) => {
@@ -322,7 +329,7 @@ pub fn spawn_device_manager(
 
     // Stop any control devices which may be active
     for device in receiver_map.iter_mut() {
-        if let DeviceMap::Control(dev, _, rx, stop, task) = device
+        if let DeviceMap::Control(dev, _, rx, stop, _, task) = device
             && stop.send(()).is_ok()
         {
             // This is kinda ugly, but we need to continue processing images until the task
@@ -363,10 +370,18 @@ fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
     for device in receiver_map {
         #[allow(clippy::single_match)]
         match device {
-            DeviceMap::Control(dev, _, _, _, _) => {
+            DeviceMap::Control(dev, _, _, _, _, _) => {
                 let _ = dev.set_enabled(enabled);
             }
             _ => {}
+        }
+    }
+}
+
+fn set_pipeweaver_draw_suspended(receiver_map: &Vec<DeviceMap>, suspended: bool) {
+    for device in receiver_map {
+        if let DeviceMap::Control(_, _, _, _, draw_suspend, _) = device {
+            let _ = draw_suspend.send(suspended);
         }
     }
 }
@@ -382,6 +397,7 @@ enum DeviceMap {
         DeviceDefinition,
         Receiver<ControlMessage>,
         watch::Sender<()>,
+        watch::Sender<bool>,
         JoinHandle<()>,
     ),
 }

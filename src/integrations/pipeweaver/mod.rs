@@ -153,6 +153,7 @@ struct PipeweaverHandler {
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
     stop_rx: watch::Receiver<()>,
+    draw_suspend_rx: watch::Receiver<bool>,
 
     has_connected: bool,
     displaying_error: bool,
@@ -173,12 +174,14 @@ impl PipeweaverHandler {
         sender: Sender<ControlMessage>,
         input_rx: Receiver<Interactions>,
         stop_rx: watch::Receiver<()>,
+        draw_suspend_rx: watch::Receiver<bool>,
     ) -> Self {
         Self {
             device_type,
             sender,
             input_rx,
             stop_rx,
+            draw_suspend_rx,
 
             has_connected: false,
             displaying_error: false,
@@ -418,11 +421,22 @@ impl PipeweaverHandler {
 
         debug!("Starting Pipeweaver Message Loop");
         loop {
+            let is_suspended = self.is_draw_suspended();
             select! {
                 Ok(_) = self.stop_rx.changed() => {
                     // Trigger a safe exit
                     return Ok(());
                 }
+
+                Ok(_) = self.draw_suspend_rx.changed() => {
+                    // We've woken up from a suspension, so redraw everything
+                    if !self.is_draw_suspended() {
+                        self.perform_full_refresh()?;
+                    }
+
+                    // Restart the loop, just in case there are other redraws needed
+                    continue;
+               }
 
                 Some(message) = stream.next() => {
                     let message = message?;
@@ -505,6 +519,11 @@ impl PipeweaverHandler {
                                             }
                                         };
 
+                                        if is_suspended {
+                                            // Everything is up to date, but we dont draw
+                                            continue;
+                                        }
+
                                         // Determine the 'start' position of this channel
                                         let (ch_w, _) = CHANNEL_DIMENSIONS;
                                         let base_x = ch_w * index as u32;
@@ -555,6 +574,15 @@ impl PipeweaverHandler {
                                 let current = renderer.meter;
                                 let new = renderer.tick_meter(0.1);
                                 if current == new {
+                                    sub_tick = Some((result.id, index));
+                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                                    continue;
+                                }
+
+                                if is_suspended {
+                                    // We'll tick the subtick, but wont draw this time
+                                    sub_tick = Some((result.id, index));
+                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
                                     continue;
                                 }
 
@@ -585,6 +613,13 @@ impl PipeweaverHandler {
                             sub_tick = Some((id, index));
                             sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
 
+                            continue;
+                        }
+
+                        // Drawing is suspended, we'll re-tick, but wont draw.
+                        if is_suspended {
+                            sub_tick = Some((id, index));
+                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
                             continue;
                         }
 
@@ -990,6 +1025,10 @@ impl PipeweaverHandler {
 
         Ok(())
     }
+
+    fn is_draw_suspended(&self) -> bool {
+        *self.draw_suspend_rx.borrow()
+    }
 }
 
 pub fn spawn_pipeweaver_handler(
@@ -997,8 +1036,9 @@ pub fn spawn_pipeweaver_handler(
     device: DeviceType,
     input_rx: Receiver<Interactions>,
     stop_rx: watch::Receiver<()>,
+    draw_suspend_rx: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
-    let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx);
+    let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, draw_suspend_rx);
     runtime().spawn(async move { handler.run_handler().await })
 }
 
