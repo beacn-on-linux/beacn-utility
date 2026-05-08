@@ -75,17 +75,17 @@ pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::comp
 
 // Next up, we define some colours, which will be used when generating components
 pub(crate) static TEXT_COLOUR: Rgba<u8> = Rgba([180, 180, 180, 255]);
-pub(crate) static BG_COLOUR: Rgba<u8> = Rgba([42, 48, 45, 255]);
+pub(crate) static BG_COLOUR: Rgba<u8> = Rgba([27, 30, 41, 255]);
 
 pub(crate) static DIAL_INACTIVE: Rgba<u8> = Rgba([37, 41, 39, 255]);
 
-pub(crate) static MIX_A_DIAL: Rgba<u8> = Rgba([89, 177, 182, 255]);
-pub(crate) static MIX_B_DIAL: Rgba<u8> = Rgba([224, 124, 36, 255]);
-pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([79, 215, 255, 255]);
-pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([252, 153, 56, 255]); // adjust as needed
+pub(crate) static MIX_A_DIAL: Rgba<u8> = Rgba([79, 215, 255, 255]);
+pub(crate) static MIX_B_DIAL: Rgba<u8> = Rgba([252, 153, 56, 255]);
+pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([174, 255, 255, 255]);
+pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([255, 248, 151, 255]); // adjust as needed
 
-pub(crate) static CHANNEL_BORDER_COLOUR: Rgba<u8> = Rgba([101, 101, 101, 255]);
-pub(crate) static CHANNEL_INNER_COLOUR: Rgba<u8> = Rgba([51, 55, 53, 255]);
+pub(crate) static CHANNEL_BORDER_COLOUR: Rgba<u8> = Rgba([100, 100, 100, 255]);
+pub(crate) static CHANNEL_INNER_COLOUR: Rgba<u8> = Rgba([43, 60, 71, 255]);
 
 // Ok, so for positions and sizing, start with the basic draw area for a channel
 pub(crate) static CHANNEL_DIMENSIONS: Dimension = (
@@ -182,8 +182,8 @@ pub(crate) static MUTE_LOCAL_POSITION_B: Position = (
 );
 pub(crate) static MUTE_B_BORDER: BorderThickness = BorderThickness(2, 0, 0, 0);
 
-pub(crate) static MUTE_COLOUR_OFF: Rgba<u8> = Rgba([80, 80, 80, 220]);
-pub(crate) static MUTE_COLOUR_ON: Rgba<u8> = Rgba([255, 0, 0, 100]);
+pub(crate) static MUTE_COLOUR_OFF: Rgba<u8> = Rgba([25, 33, 43, 220]);
+pub(crate) static MUTE_COLOUR_ON: Rgba<u8> = Rgba([120, 0, 0, 255]);
 
 static MUTE_UNMUTED_ICON_BYTES: &[u8] =
     include_bytes!("../../../resources/ui/icons/volume-high-solid.png");
