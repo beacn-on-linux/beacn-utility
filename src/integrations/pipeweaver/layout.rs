@@ -12,6 +12,7 @@ use once_cell::sync::Lazy;
 use pipeweaver_shared::Mix;
 use std::collections::HashMap;
 use std::f32::consts::PI;
+use std::fs;
 use std::fs::File;
 use std::io::ErrorKind::UnexpectedEof;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
@@ -34,6 +35,10 @@ pub(crate) static JPEG_QUALITY: u8 = 70;
 // Now, for sanity's sake, we're going to define some basic types
 pub(crate) type Dimension = (u32, u32);
 pub(crate) type Position = (u32, u32);
+
+// Cache helpers
+pub(crate) const CACHE_VERSION: u16 = 1;
+pub(crate) const CACHE_PATH: &str = "pipeweaver_mixer_cache.bin";
 
 // These types are used for rendering the Dials, and are mostly related to precaching images
 // in memory to allow 'quick switching' without the need for costly regeneration
@@ -582,16 +587,31 @@ impl DialHandler {
     pub fn composite_dials() -> EnumMap<Mix, HashMap<u8, Vec<u8>>> {
         let start = Instant::now();
 
-        let file_name = "image_cache.bin".to_string();
+        let file_name = CACHE_PATH.to_string();
         let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
+
+        // Attempt to delete old cache files if it exists
+        let old_file_name = "image_cache.bin".to_string(); // whatever the old name was
+        if let Some(old_file) = xdg_dirs.find_cache_file(old_file_name) {
+            if let Err(e) = fs::remove_file(&old_file) {
+                warn!("Failed to remove old cache file: {e}");
+            } else {
+                debug!("Removed old cache file: {old_file:?}");
+            }
+        }
+
+        // Attempt to Load the Cache file
         let cache_file = xdg_dirs.find_cache_file(file_name.clone());
         debug!("Attempting to load Cache from {cache_file:?}");
         if let Some(file) = cache_file {
-            if let Ok(map) = Self::load_cache(file) {
-                info!("Loaded Cache in {:?}", start.elapsed());
-                return map;
-            } else {
-                warn!("Cache Load Failed, Regenerating");
+            match Self::load_cache(file) {
+                Ok(map) => {
+                    info!("Loaded Cache in {:?}", start.elapsed());
+                    return map;
+                }
+                Err(e) => {
+                    warn!("Cache Load Failed: {e}");
+                }
             }
         }
 
@@ -753,6 +773,8 @@ impl DialHandler {
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
+        writer.write_all(&CACHE_VERSION.to_le_bytes())?;
+
         for (mix, volume_map) in map.iter() {
             let mix_id = mix as u8;
             for (&volume, data) in volume_map {
@@ -769,6 +791,13 @@ impl DialHandler {
         let file = File::open(&path)?;
         let mut reader = BufReader::new(file);
         let mut map: EnumMap<Mix, HashMap<u8, Vec<u8>>> = EnumMap::default();
+
+        let mut version_bytes = [0u8; 2];
+        reader.read_exact(&mut version_bytes)?;
+        let version = u16::from_le_bytes(version_bytes);
+        if version != CACHE_VERSION {
+            bail!("Cache version mismatch: expected {CACHE_VERSION}, got {version}");
+        }
 
         loop {
             let mut header = [0u8; 6];
