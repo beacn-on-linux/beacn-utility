@@ -172,12 +172,12 @@ fn main() -> Result<()> {
         let mut last_error = Instant::now();
         let mut attempts = 0;
 
-        loop {
-            let mut event_loop = EventLoop::<UserEvent>::with_user_event()
-                .with_any_thread(true)
-                .build()
-                .expect("Failed to create event loop");
+        let mut event_loop = EventLoop::<UserEvent>::with_user_event()
+            .with_any_thread(true)
+            .build()
+            .expect("Failed to create event loop");
 
+        loop {
             // Create the Window Runner
             let runner = WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
 
