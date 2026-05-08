@@ -322,31 +322,31 @@ pub fn spawn_device_manager(
 
     // Stop any control devices which may be active
     for device in receiver_map.iter_mut() {
-        if let DeviceMap::Control(dev, _, rx, stop, task) = device {
-            if stop.send(()).is_ok() {
-                // This is kinda ugly, but we need to continue processing images until the task
-                // is finished, so we can shut down the device cleanly.
-                runtime().block_on(async {
-                    loop {
-                        if task.is_finished() {
-                            break;
-                        }
-                        match rx.try_recv() {
-                            Ok(msg) => match msg {
-                                ControlMessage::SendImage(img, x, y, tx) => {
-                                    let _ = tx.send(dev.set_image(x, y, &img));
-                                }
-                                ControlMessage::ButtonColour(button, colour, tx) => {
-                                    let _ = tx.send(dev.set_button_colour(button, colour));
-                                }
-                                _ => {}
-                            },
-                            Err(TryRecvError::Empty) => sleep(Duration::from_millis(10)).await,
-                            Err(TryRecvError::Disconnected) => break,
-                        }
+        if let DeviceMap::Control(dev, _, rx, stop, task) = device
+            && stop.send(()).is_ok()
+        {
+            // This is kinda ugly, but we need to continue processing images until the task
+            // is finished, so we can shut down the device cleanly.
+            runtime().block_on(async {
+                loop {
+                    if task.is_finished() {
+                        break;
                     }
-                });
-            }
+                    match rx.try_recv() {
+                        Ok(msg) => match msg {
+                            ControlMessage::SendImage(img, x, y, tx) => {
+                                let _ = tx.send(dev.set_image(x, y, &img));
+                            }
+                            ControlMessage::ButtonColour(button, colour, tx) => {
+                                let _ = tx.send(dev.set_button_colour(button, colour));
+                            }
+                            _ => {}
+                        },
+                        Err(TryRecvError::Empty) => sleep(Duration::from_millis(10)).await,
+                        Err(TryRecvError::Disconnected) => break,
+                    }
+                }
+            });
         }
     }
 
