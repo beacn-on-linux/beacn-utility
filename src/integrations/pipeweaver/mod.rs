@@ -637,6 +637,11 @@ impl PipeweaverHandler {
                 maybe_msg = interaction_rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
+                            if self.is_draw_suspended() {
+                                // If we're suspended, we shouldn't handle interactions
+                                continue;
+                            }
+
                             match self.device_type {
                                 DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                                     match msg {
