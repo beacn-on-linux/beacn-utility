@@ -24,16 +24,20 @@ use log::{debug, info, warn};
 use pipeweaver_ipc::client::Client;
 use pipeweaver_ipc::clients::ipc::ipc_client::IPCClient;
 use pipeweaver_ipc::clients::ipc::ipc_socket::Socket;
-use pipeweaver_ipc::commands::APICommand::SetSourceVolume;
+use pipeweaver_ipc::commands::APICommand::{SetSourceVolume, SetTargetVolume};
 use pipeweaver_ipc::commands::DaemonRequest::GetStatus;
 use pipeweaver_ipc::commands::{
     APICommand, DaemonCommand, DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest,
     WebsocketResponse,
 };
-use pipeweaver_profile::{PhysicalSourceDevice, SourceDevices, VirtualSourceDevice};
-use pipeweaver_shared::{Mix, MuteTarget, OrderGroup};
+use pipeweaver_profile::{
+    PhysicalSourceDevice, PhysicalTargetDevice, SourceDevices, TargetDevices, VirtualSourceDevice,
+    VirtualTargetDevice,
+};
+use pipeweaver_shared::{Mix, MuteState, MuteTarget, OrderGroup};
 use serde::Deserialize;
 use serde_json::Value;
+use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::PathBuf;
@@ -141,8 +145,16 @@ struct MeterMessage {
 // them is the same regardless, and ChannelRenderer has From<> for Both
 #[derive(Debug)]
 enum DeviceRef<'a> {
-    Physical(&'a PhysicalSourceDevice),
-    Virtual(&'a VirtualSourceDevice),
+    PhysicalSource(&'a PhysicalSourceDevice),
+    VirtualSource(&'a VirtualSourceDevice),
+    PhysicalTarget(&'a PhysicalTargetDevice),
+    VirtualTarget(&'a VirtualTargetDevice),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChannelType {
+    Source,
+    Target,
 }
 
 type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
@@ -164,6 +176,7 @@ struct PipeweaverHandler {
     status: DaemonStatus,
 
     active_page: u8,
+    channel_type: ChannelType,
     active_mix: Mix,
     devices_shown: Vec<Ulid>,
     renderers: Renderers,
@@ -193,6 +206,7 @@ impl PipeweaverHandler {
             status: DaemonStatus::default(),
 
             active_page: 0,
+            channel_type: ChannelType::Source,
             active_mix: Mix::A,
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
@@ -454,6 +468,7 @@ impl PipeweaverHandler {
 
                             // Check whether the channel list has changed
                             let sources = &self.status.audio.profile.devices.sources;
+                            let targets = &self.status.audio.profile.devices.targets;
                             let devices = self.get_channels_on_page();
 
                             if devices != self.devices_shown {
@@ -469,12 +484,18 @@ impl PipeweaverHandler {
                                 for (index, device) in self.devices_shown.iter().enumerate() {
                                     let mut refresh_button_colour = false;
 
-                                    let dev_ref = self.get_device_ref(device, sources)?;
+                                    let dev_ref = match self.channel_type {
+                                        ChannelType::Source => self.get_source_device_ref(device, sources)?,
+                                        ChannelType::Target => self.get_target_device_ref(device, targets)?
+                                    };
+
                                     let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
 
                                     let update = match dev_ref {
-                                        DeviceRef::Physical(d) => render.update_from(d.clone()),
-                                        DeviceRef::Virtual(d) => render.update_from(d.clone()),
+                                        DeviceRef::PhysicalSource(d) => render.update_from(d.clone()),
+                                        DeviceRef::VirtualSource(d) => render.update_from(d.clone()),
+                                        DeviceRef::PhysicalTarget(d) => render.update_from(d.clone()),
+                                        DeviceRef::VirtualTarget(d) => render.update_from(d.clone()),
                                     };
 
                                     for part in update {
@@ -794,10 +815,15 @@ impl PipeweaverHandler {
     }
 
     fn load_mix_button_colours(&self) -> Result<()> {
-        let colour = match self.active_mix {
-            Mix::A => COLOUR_MIX_B,
-            Mix::B => COLOUR_MIX_A,
+        let colour = match self.channel_type {
+            ChannelType::Source => match self.active_mix {
+                Mix::A => COLOUR_MIX_B,
+                Mix::B => COLOUR_MIX_A,
+            },
+
+            ChannelType::Target => COLOUR_BLACK,
         };
+
         self.set_button_colour(ButtonLighting::Mix, colour)?;
         Ok(())
     }
@@ -837,11 +863,17 @@ impl PipeweaverHandler {
 
     fn get_channel_renderer(&self, device: &Ulid) -> Result<ChannelRenderer> {
         let sources = &self.status.audio.profile.devices.sources;
-        let dev = self.get_device_ref(device, sources)?;
+        let targets = &self.status.audio.profile.devices.targets;
+        let dev = match self.channel_type {
+            ChannelType::Source => self.get_source_device_ref(device, sources)?,
+            ChannelType::Target => self.get_target_device_ref(device, targets)?,
+        };
 
         let mut renderer = match dev {
-            DeviceRef::Physical(d) => ChannelRenderer::from(d.clone()),
-            DeviceRef::Virtual(d) => ChannelRenderer::from(d.clone()),
+            DeviceRef::PhysicalSource(d) => ChannelRenderer::from(d.clone()),
+            DeviceRef::VirtualSource(d) => ChannelRenderer::from(d.clone()),
+            DeviceRef::PhysicalTarget(d) => ChannelRenderer::from(d.clone()),
+            DeviceRef::VirtualTarget(d) => ChannelRenderer::from(d.clone()),
         };
         renderer.set_beacn_device(self.device_type);
         Ok(renderer)
@@ -855,7 +887,10 @@ impl PipeweaverHandler {
     }
 
     fn get_page_count(&self) -> u8 {
-        let order = &self.status.audio.profile.devices.sources.device_order;
+        let order = match self.channel_type {
+            ChannelType::Source => &self.status.audio.profile.devices.sources.device_order,
+            ChannelType::Target => &self.status.audio.profile.devices.targets.device_order,
+        };
 
         // If we can't display any other channels because we're populated with pins, send 1 page.
         if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() {
@@ -868,7 +903,11 @@ impl PipeweaverHandler {
     }
 
     fn get_channels_on_page(&self) -> Vec<Ulid> {
-        let order = &self.status.audio.profile.devices.sources.device_order;
+        let order = match self.channel_type {
+            ChannelType::Source => &self.status.audio.profile.devices.sources.device_order,
+            ChannelType::Target => &self.status.audio.profile.devices.targets.device_order,
+        };
+
         let mut channels = Vec::with_capacity(4);
 
         // This is a little complicated, we need to check the pinned channels and add them first
@@ -916,7 +955,7 @@ impl PipeweaverHandler {
 
         channels
     }
-    fn get_device_ref<'a>(
+    fn get_source_device_ref<'a>(
         &self,
         device: &Ulid,
         sources: &'a SourceDevices,
@@ -924,11 +963,29 @@ impl PipeweaverHandler {
         sources
             .physical_devices
             .iter()
-            .map(DeviceRef::Physical)
-            .chain(sources.virtual_devices.iter().map(DeviceRef::Virtual))
+            .map(DeviceRef::PhysicalSource)
+            .chain(sources.virtual_devices.iter().map(DeviceRef::VirtualSource))
             .find(|dev| match dev {
-                DeviceRef::Physical(d) => d.description.id == *device,
-                DeviceRef::Virtual(d) => d.description.id == *device,
+                DeviceRef::PhysicalSource(d) => d.description.id == *device,
+                DeviceRef::VirtualSource(d) => d.description.id == *device,
+                _ => false,
+            })
+            .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
+    }
+    fn get_target_device_ref<'a>(
+        &self,
+        device: &Ulid,
+        targets: &'a TargetDevices,
+    ) -> Result<DeviceRef<'a>> {
+        targets
+            .physical_devices
+            .iter()
+            .map(DeviceRef::PhysicalTarget)
+            .chain(targets.virtual_devices.iter().map(DeviceRef::VirtualTarget))
+            .find(|dev| match dev {
+                DeviceRef::PhysicalTarget(d) => d.description.id == *device,
+                DeviceRef::VirtualTarget(d) => d.description.id == *device,
+                _ => false,
             })
             .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
     }
@@ -945,6 +1002,11 @@ impl PipeweaverHandler {
     async fn handle_button(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
         match button {
             Buttons::AudienceMix => {
+                // If we're set to target mode, we shouldn't handle this.
+                if self.channel_type == ChannelType::Target {
+                    return Ok(());
+                }
+
                 // This one is now stupidly simple
                 self.active_mix = match self.active_mix {
                     Mix::A => Mix::B,
@@ -1000,11 +1062,25 @@ impl PipeweaverHandler {
                 if let Some(device) = self.devices_shown.get(index) {
                     let error = anyhow!("Failed to get Renderer");
                     let current = self.renderers.get_mut(device).ok_or(error)?;
-                    let message = if current.mute_states[target].is_active {
-                        APICommand::DelSourceMuteTarget(*device, target)
-                    } else {
-                        APICommand::AddSourceMuteTarget(*device, target)
+
+                    let message = match current.channel_type {
+                        ChannelType::Source => {
+                            if current.mute_states[target].is_active {
+                                APICommand::DelSourceMuteTarget(*device, target)
+                            } else {
+                                APICommand::AddSourceMuteTarget(*device, target)
+                            }
+                        }
+                        ChannelType::Target => {
+                            let muted = current.mute_states[MuteTarget::TargetA].is_active;
+                            let state = match muted {
+                                true => MuteState::Unmuted,
+                                false => MuteState::Muted,
+                            };
+                            APICommand::SetTargetMuteState(*device, state)
+                        }
                     };
+
                     let command = serde_json::to_string(&WebsocketRequest {
                         id: self.get_command_index(),
                         data: DaemonRequest::Pipewire(message),
@@ -1033,13 +1109,14 @@ impl PipeweaverHandler {
             let volume = current.volumes[self.active_mix] as i16;
             let new_volume = (volume + change as i16).clamp(0, 100) as u8;
 
+            let message = match self.channel_type {
+                ChannelType::Source => SetSourceVolume(*device, self.active_mix, new_volume),
+                ChannelType::Target => SetTargetVolume(*device, new_volume),
+            };
+
             let command = serde_json::to_string(&WebsocketRequest {
                 id: command_index,
-                data: DaemonRequest::Pipewire(SetSourceVolume(
-                    *device,
-                    self.active_mix,
-                    new_volume as u8,
-                )),
+                data: DaemonRequest::Pipewire(message),
             })?;
 
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;

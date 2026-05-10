@@ -1,6 +1,7 @@
 // This struct is responsible for all the drawing, messaging, and updating of a channel on
 // the Mix / Mix Create display
 
+use crate::integrations::pipeweaver::ChannelType;
 use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, TopToBottom};
 use crate::integrations::pipeweaver::layout::*;
 use anyhow::{Result, anyhow};
@@ -9,7 +10,8 @@ use enum_map::{EnumMap, enum_map};
 use image::imageops::{crop, crop_imm};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use pipeweaver_profile::{
-    DeviceDescription, MuteStates, PhysicalSourceDevice, VirtualSourceDevice, Volumes,
+    DeviceDescription, MuteStates, PhysicalSourceDevice, PhysicalTargetDevice, VirtualSourceDevice,
+    VirtualTargetDevice, Volumes,
 };
 use pipeweaver_shared::{Mix, MuteTarget};
 use strum::IntoEnumIterator;
@@ -46,6 +48,37 @@ impl SourceDevice for VirtualSourceDevice {
     }
 }
 
+pub trait TargetDevice {
+    fn description(&self) -> &DeviceDescription;
+    fn volume(&self) -> u8;
+    fn mute_state(&self) -> &pipeweaver_shared::MuteState;
+}
+
+impl TargetDevice for PhysicalTargetDevice {
+    fn description(&self) -> &DeviceDescription {
+        &self.description
+    }
+    fn volume(&self) -> u8 {
+        self.volume
+    }
+
+    fn mute_state(&self) -> &pipeweaver_shared::MuteState {
+        &self.mute_state
+    }
+}
+
+impl TargetDevice for VirtualTargetDevice {
+    fn description(&self) -> &DeviceDescription {
+        &self.description
+    }
+    fn volume(&self) -> u8 {
+        self.volume
+    }
+    fn mute_state(&self) -> &pipeweaver_shared::MuteState {
+        &self.mute_state
+    }
+}
+
 pub(crate) trait UpdateFrom<T> {
     fn update_from(&mut self, value: T) -> Vec<ChannelChangedProperty>;
 }
@@ -71,6 +104,8 @@ pub(crate) struct ChannelRenderer {
     // Meter is the actual current value, target is how we're getting there
     pub(crate) meter: u8,
     pub(crate) meter_target: f32,
+
+    pub(crate) channel_type: ChannelType,
 
     pub(crate) mute_states: EnumMap<MuteTarget, MuteState>,
 }
@@ -103,6 +138,7 @@ impl ChannelRenderer {
             volumes: vols.volume,
             meter: 0,
             meter_target: 0.0,
+            channel_type: ChannelType::Source,
             mute_states: enum_map! {
                 MuteTarget::TargetA => MuteState {
                     is_active: mutes.mute_state.contains(&MuteTarget::TargetA),
@@ -115,12 +151,42 @@ impl ChannelRenderer {
             },
         }
     }
+    fn from_target_device(device: &impl TargetDevice) -> Self {
+        let desc = device.description();
+        let volume = device.volume();
+        let muted = device.mute_state();
+
+        let is_muted = match muted {
+            pipeweaver_shared::MuteState::Unmuted => false,
+            pipeweaver_shared::MuteState::Muted => true,
+        };
+
+        Self {
+            beacn_type: DeviceType::BeacnMixCreate,
+            title: desc.name.clone(),
+            colour: Rgba([desc.colour.red, desc.colour.green, desc.colour.blue, 255]),
+            volumes: enum_map! { Mix::A => volume, Mix::B => 0 },
+            meter: 0,
+            meter_target: 0.0,
+            channel_type: ChannelType::Target,
+            mute_states: enum_map! {
+                MuteTarget::TargetA => MuteState {
+                    is_active: is_muted,
+                    is_mute_to_all: true,
+                },
+                MuteTarget::TargetB => MuteState {
+                    is_active: false,
+                    is_mute_to_all: false,
+                }
+            },
+        }
+    }
 
     pub fn set_beacn_device(&mut self, device_type: DeviceType) {
         self.beacn_type = device_type;
     }
 
-    pub fn update_from_device(
+    pub fn update_from_source_device(
         &mut self,
         device: &impl SourceDevice,
     ) -> Vec<ChannelChangedProperty> {
@@ -162,6 +228,45 @@ impl ChannelRenderer {
                     updates.push(ChannelChangedProperty::MuteState(target));
                 }
             }
+        }
+
+        updates
+    }
+
+    pub fn update_from_target_device(
+        &mut self,
+        device: &impl TargetDevice,
+    ) -> Vec<ChannelChangedProperty> {
+        let desc = device.description();
+        let volume = device.volume();
+        let muted = device.mute_state();
+
+        let mut updates = vec![];
+        if desc.name != self.title {
+            self.title = desc.name.clone();
+            updates.push(ChannelChangedProperty::Title);
+        }
+        let colour = Rgba([desc.colour.red, desc.colour.green, desc.colour.blue, 255]);
+        if self.colour != colour {
+            self.colour = colour;
+            updates.push(ChannelChangedProperty::Colour);
+        }
+
+        // For targets, we have a single volume
+        // TODO: This should colour based on the selected mix
+        if self.volumes[Mix::A] != volume {
+            self.volumes[Mix::A] = volume;
+            updates.push(ChannelChangedProperty::Volumes(Mix::A));
+        }
+
+        let is_muted = match muted {
+            pipeweaver_shared::MuteState::Unmuted => false,
+            pipeweaver_shared::MuteState::Muted => true,
+        };
+
+        if self.mute_states[MuteTarget::TargetA].is_active != is_muted {
+            self.mute_states[MuteTarget::TargetA].is_active = is_muted;
+            updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetA));
         }
 
         updates
@@ -265,10 +370,13 @@ impl ChannelRenderer {
     }
 
     fn draw_content_box(&self) -> BeacnImage {
-        let channel_inner = match self.beacn_type {
-            DeviceType::BeacnMix => CHANNEL_INNER_DIMENSIONS_MIX,
-            DeviceType::BeacnMixCreate => CHANNEL_INNER_DIMENSIONS,
-            _ => panic!("Bad Device Type"),
+        let channel_inner = match self.channel_type {
+            ChannelType::Source => match self.beacn_type {
+                DeviceType::BeacnMixCreate => CHANNEL_INNER_DIMENSIONS,
+                DeviceType::BeacnMix => CHANNEL_INNER_DIMENSIONS_MIX,
+                _ => panic!("Bad Device Type"),
+            },
+            ChannelType::Target => CHANNEL_INNER_DIMENSIONS_MIX,
         };
 
         BeacnImage {
@@ -327,10 +435,13 @@ impl ChannelRenderer {
         colour[3] = 120;
 
         let mut gradient_base = DrawingUtils::draw_gradient(w, h, colour, BottomToTop);
-        let gradient = match self.beacn_type {
-            DeviceType::BeacnMixCreate => gradient_base,
-            DeviceType::BeacnMix => crop(&mut gradient_base, 0, 0, m1, h1).to_image(),
-            _ => panic!("Bad Device Type"),
+        let gradient = match self.channel_type {
+            ChannelType::Source => match self.beacn_type {
+                DeviceType::BeacnMixCreate => gradient_base,
+                DeviceType::BeacnMix => crop(&mut gradient_base, 0, 0, m1, h1).to_image(),
+                _ => panic!("Bad Device Type"),
+            },
+            ChannelType::Target => crop(&mut gradient_base, 0, 0, m1, h1).to_image(),
         };
 
         BeacnImage {
@@ -342,9 +453,12 @@ impl ChannelRenderer {
     pub fn draw_mute_box(&self, target: MuteTarget) -> BeacnImage {
         // Ok, first we need the mute background
         let mut background = self.draw_mute_background().image;
-        let text = match self.mute_states[target].is_mute_to_all {
-            true => "Mute to All",
-            false => "Mute To...",
+        let text = match self.channel_type {
+            ChannelType::Source => match self.mute_states[target].is_mute_to_all {
+                true => "Mute to All",
+                false => "Mute To...",
+            },
+            ChannelType::Target => "Mute",
         };
 
         let border_draw = match target {
@@ -431,7 +545,19 @@ impl From<PhysicalSourceDevice> for ChannelRenderer {
 
 impl UpdateFrom<PhysicalSourceDevice> for ChannelRenderer {
     fn update_from(&mut self, value: PhysicalSourceDevice) -> Vec<ChannelChangedProperty> {
-        self.update_from_device(&value)
+        self.update_from_source_device(&value)
+    }
+}
+
+impl From<PhysicalTargetDevice> for ChannelRenderer {
+    fn from(value: PhysicalTargetDevice) -> Self {
+        Self::from_target_device(&value)
+    }
+}
+
+impl UpdateFrom<PhysicalTargetDevice> for ChannelRenderer {
+    fn update_from(&mut self, value: PhysicalTargetDevice) -> Vec<ChannelChangedProperty> {
+        self.update_from_target_device(&value)
     }
 }
 
@@ -443,6 +569,18 @@ impl From<VirtualSourceDevice> for ChannelRenderer {
 
 impl UpdateFrom<VirtualSourceDevice> for ChannelRenderer {
     fn update_from(&mut self, value: VirtualSourceDevice) -> Vec<ChannelChangedProperty> {
-        self.update_from_device(&value)
+        self.update_from_source_device(&value)
+    }
+}
+
+impl From<VirtualTargetDevice> for ChannelRenderer {
+    fn from(value: VirtualTargetDevice) -> Self {
+        Self::from_target_device(&value)
+    }
+}
+
+impl UpdateFrom<VirtualTargetDevice> for ChannelRenderer {
+    fn update_from(&mut self, value: VirtualTargetDevice) -> Vec<ChannelChangedProperty> {
+        self.update_from_target_device(&value)
     }
 }
