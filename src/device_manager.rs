@@ -20,7 +20,7 @@ use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
 use beacn_lib::crossbeam::channel;
 use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender, TryRecvError};
+use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
@@ -329,33 +329,38 @@ pub fn spawn_device_manager(
 
     // Stop any control devices which may be active
     for device in receiver_map.iter_mut() {
-        if let DeviceMap::Control(dev, _, rx, stop, _, task) = device
-            && stop.send(()).is_ok()
-        {
-            // This is kinda ugly, but we need to continue processing images until the task
-            // is finished, so we can shut down the device cleanly.
-            runtime().block_on(async {
-                loop {
-                    if task.is_finished() {
-                        break;
-                    }
-                    match rx.try_recv() {
-                        Ok(msg) => match msg {
-                            ControlMessage::SendImage(img, x, y, tx) => {
-                                let _ = tx.send(dev.set_image(x, y, &img));
-                            }
-                            ControlMessage::ButtonColour(button, colour, tx) => {
-                                let _ = tx.send(dev.set_button_colour(button, colour));
-                            }
-                            _ => {}
-                        },
-                        Err(TryRecvError::Empty) => sleep(Duration::from_millis(10)).await,
-                        Err(TryRecvError::Disconnected) => break,
-                    }
-                }
-            });
+        if let DeviceMap::Control(_, _, _, stop, _, _) = device {
+            let _ = stop.send(());
         }
     }
+
+    // Drain the devices until they're finished.
+    runtime().block_on(async {
+        loop {
+            let all_done = receiver_map.iter().all(|d| match d {
+                DeviceMap::Control(_, _, _, _, _, task) => task.is_finished(),
+                _ => true,
+            });
+            if all_done {
+                break;
+            }
+
+            for device in receiver_map.iter_mut() {
+                if let DeviceMap::Control(dev, _, rx, _, _, _) = device {
+                    match rx.try_recv() {
+                        Ok(ControlMessage::SendImage(img, x, y, tx)) => {
+                            let _ = tx.send(dev.set_image(x, y, &img));
+                        }
+                        Ok(ControlMessage::ButtonColour(button, colour, tx)) => {
+                            let _ = tx.send(dev.set_button_colour(button, colour));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    });
 
     // For some reason, we're stopping. If the manager channel is still open, tell it to stop.
     if manage_tx.is_ready() {
