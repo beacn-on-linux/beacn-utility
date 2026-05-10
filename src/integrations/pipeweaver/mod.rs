@@ -42,7 +42,7 @@ use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
@@ -54,6 +54,8 @@ use tokio::{select, time};
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 use ulid::Ulid;
+
+const HELD_TIME: Duration = Duration::from_millis(500);
 
 const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
 const PIPEWEAVER_APP_NAME: &str = "PipeWeaver";
@@ -142,6 +144,15 @@ struct MeterMessage {
     percent: u8,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+struct ButtonHoldState {
+    pub(crate) press_time: Option<Instant>,
+
+    pub(crate) skip_hold: bool,
+    pub(crate) skip_release: bool,
+    pub(crate) hold_handled: bool,
+}
+
 // This is so we can more cleanly Map Physical / Virtual devices, because the data we need from
 // them is the same regardless, and ChannelRenderer has From<> for Both
 #[derive(Debug)]
@@ -181,6 +192,7 @@ struct PipeweaverHandler {
     active_mix: Mix,
     devices_shown: Vec<Ulid>,
     renderers: Renderers,
+    button_down_states: EnumMap<Buttons, Option<ButtonHoldState>>,
 }
 
 impl PipeweaverHandler {
@@ -211,6 +223,7 @@ impl PipeweaverHandler {
             active_mix: Mix::A,
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
+            button_down_states: EnumMap::default(),
         }
     }
 
@@ -441,6 +454,8 @@ impl PipeweaverHandler {
         let suspend_sleep = tokio::time::sleep(Duration::MAX);
         tokio::pin!(suspend_sleep);
 
+        let mut ticker = time::interval(Duration::from_millis(20));
+
         debug!("Starting Pipeweaver Message Loop");
         loop {
             let is_suspended = self.is_suspended();
@@ -503,8 +518,8 @@ impl PipeweaverHandler {
                                     let mut refresh_button_colour = false;
 
                                     let dev_ref = match self.channel_type {
-                                        ChannelType::Source => self.get_source_device_ref(device, &sources)?,
-                                        ChannelType::Target => self.get_target_device_ref(device, &targets)?
+                                        ChannelType::Source => self.get_source_device_ref(device, sources)?,
+                                        ChannelType::Target => self.get_target_device_ref(device, targets)?
                                     };
 
                                     let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
@@ -708,8 +723,9 @@ impl PipeweaverHandler {
                                 DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
                                     match msg {
                                         Interactions::ButtonPress(button, state) => {
-                                            if state == ButtonState::Release {
-                                                self.handle_button(button, stream).await?;
+                                            match state {
+                                                ButtonState::Press => self.on_button_down(button).await?,
+                                                ButtonState::Release => self.on_button_up(button, stream).await?,
                                             }
                                         }
                                         Interactions::DialChanged(dial, change) => {
@@ -727,6 +743,10 @@ impl PipeweaverHandler {
                     let (tx,rx) = oneshot::channel();
                     self.sender.send(ControlMessage::KeepAlive(tx))?;
                     rx.recv()??;
+                }
+
+                _ = ticker.tick() => {
+                    self.check_held().await?;
                 }
             }
         }
@@ -1019,6 +1039,103 @@ impl PipeweaverHandler {
         let message = ButtonColour(button, colour, tx);
         self.sender.send(message)?;
         rx.recv()??;
+        Ok(())
+    }
+
+    async fn on_button_down(&mut self, button: Buttons) -> Result<()> {
+        debug!("Button Down: {:?}", button);
+
+        // Register this button down, assume normal behaviour
+        self.button_down_states[button].replace(ButtonHoldState {
+            press_time: Some(Instant::now()),
+            skip_hold: false,
+            skip_release: false,
+            hold_handled: false,
+        });
+
+        Ok(())
+    }
+
+    async fn on_button_up(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
+        debug!("Button Up: {:?}", button);
+
+        // Have we been instructed to skip release behaviour for this button?
+        if let Some(state) = self.button_down_states[button]
+            && state.skip_release
+        {
+            debug!("State: {:?}", state);
+            debug!("Skipping Release Behaviour for Button: {:?}", button);
+
+            // Take the handler, and return.
+            self.button_down_states[button].take();
+            return Ok(());
+        }
+
+        debug!("Button Up handling normally: {}..", button);
+
+        // Handle the button up normally
+        self.handle_button(button, stream).await?;
+        if self.button_down_states[button].is_some() {
+            self.button_down_states[button].take();
+        }
+
+        Ok(())
+    }
+
+    async fn on_button_held(&mut self, button: Buttons) -> Result<()> {
+        debug!("Button Held: {:?}", button);
+
+        // Handle holding should only occur once per button press, so regardless of what happens
+        // below, flag this as handled so we don't try to handle it again, and if it's already
+        // been handled, we can just return.
+        if let Some(state) = &mut self.button_down_states[button] {
+            if state.hold_handled {
+                return Ok(());
+            } else {
+                state.hold_handled = true;
+            }
+        }
+
+        // Button has been held, handle hold behaviour here.
+        match button {
+            Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4 => {
+                // Switch from Sources to Targets
+                self.channel_type = match self.channel_type {
+                    ChannelType::Source => ChannelType::Target,
+                    ChannelType::Target => ChannelType::Source,
+                };
+
+                // We need to reload from scratch, so load the new initial state
+                self.active_page = 0;
+                self.active_mix = Mix::A;
+
+                let _ = self.load_initial_state().await;
+
+                // Don't handle the release for this button, it's already handled.
+                if let Some(state) = &mut self.button_down_states[button] {
+                    state.skip_release = true;
+                }
+            }
+            _ => {}
+        }
+
+        // If this isn't handled, do nothing.
+        Ok(())
+    }
+
+    async fn check_held(&mut self) -> Result<()> {
+        for button in Buttons::iter() {
+            if let Some(state) = self.button_down_states[button] {
+                // If we don't have a press time, there's nothing to handle.
+                if let Some(time) = state.press_time
+                    && !state.hold_handled
+                    && !state.skip_hold
+                    && time.elapsed() > HELD_TIME
+                {
+                    self.on_button_held(button).await?;
+                }
+            }
+        }
         Ok(())
     }
 
