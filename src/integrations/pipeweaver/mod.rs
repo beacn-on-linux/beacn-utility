@@ -15,6 +15,7 @@ use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use directories::BaseDirs;
+use enum_map::EnumMap;
 use futures_util::{SinkExt, StreamExt};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
@@ -430,6 +431,9 @@ impl PipeweaverHandler {
         self.sender.send(ControlMessage::Enabled(true, tx))?;
         rx.recv()??;
 
+        let mut last_seen_sources_count = 0;
+        let mut last_seen_targets_count = 0;
+
         // These are half-tick messages, sent every 50ms to better smooth meter updates
         let mut sub_tick: Option<(Ulid, usize)> = None;
         let sub_sleep = tokio::time::sleep(Duration::MAX);
@@ -466,11 +470,30 @@ impl PipeweaverHandler {
                             json_patch::patch(&mut self.raw_status, &patch)?;
                             self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
 
-                            // Check whether the channel list has changed
+                            let (sources_count, targets_count) = {
+                                let sources = &self.status.audio.profile.devices.sources;
+                                let targets = &self.status.audio.profile.devices.targets;
+                                (
+                                    sources.virtual_devices.len() + sources.physical_devices.len(),
+                                    targets.virtual_devices.len() + targets.physical_devices.len(),
+                                )
+                            };
+
+                            if sources_count != last_seen_sources_count || targets_count != last_seen_targets_count
+                            {
+                                last_seen_sources_count = sources_count;
+                                last_seen_targets_count = targets_count;
+
+                                // Redraw the pages colours
+                                self.load_page_button()?;
+                            }
+
+                            // Re-borrow these
                             let sources = &self.status.audio.profile.devices.sources;
                             let targets = &self.status.audio.profile.devices.targets;
-                            let devices = self.get_channels_on_page();
 
+
+                            let devices = self.get_channels_on_page();
                             if devices != self.devices_shown {
                                 self.devices_shown = devices.clone();
 
@@ -485,8 +508,8 @@ impl PipeweaverHandler {
                                     let mut refresh_button_colour = false;
 
                                     let dev_ref = match self.channel_type {
-                                        ChannelType::Source => self.get_source_device_ref(device, sources)?,
-                                        ChannelType::Target => self.get_target_device_ref(device, targets)?
+                                        ChannelType::Source => self.get_source_device_ref(device, &sources)?,
+                                        ChannelType::Target => self.get_target_device_ref(device, &targets)?
                                     };
 
                                     let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
@@ -714,10 +737,10 @@ impl PipeweaverHandler {
         }
     }
 
-    fn perform_full_refresh(&self) -> Result<()> {
+    fn perform_full_refresh(&mut self) -> Result<()> {
         self.perform_full_redraw()?;
         self.load_all_dial_button_colours()?;
-        self.load_page_button_colours()?;
+        self.load_page_button()?;
         self.load_mix_button_colours()?;
 
         Ok(())
@@ -792,7 +815,12 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    fn load_page_button_colours(&self) -> Result<()> {
+    fn load_page_button(&mut self) -> Result<()> {
+        let pages = self.get_page_count();
+        if self.active_page >= pages {
+            self.active_page = pages - 1;
+        }
+
         let left_colour = match self.active_page == 0 {
             true => COLOUR_BLACK,
             false => COLOUR_WHITE,
@@ -887,10 +915,7 @@ impl PipeweaverHandler {
     }
 
     fn get_page_count(&self) -> u8 {
-        let order = match self.channel_type {
-            ChannelType::Source => &self.status.audio.profile.devices.sources.device_order,
-            ChannelType::Target => &self.status.audio.profile.devices.targets.device_order,
-        };
+        let order = self.get_channel_order();
 
         // If we can't display any other channels because we're populated with pins, send 1 page.
         if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() {
@@ -903,11 +928,7 @@ impl PipeweaverHandler {
     }
 
     fn get_channels_on_page(&self) -> Vec<Ulid> {
-        let order = match self.channel_type {
-            ChannelType::Source => &self.status.audio.profile.devices.sources.device_order,
-            ChannelType::Target => &self.status.audio.profile.devices.targets.device_order,
-        };
-
+        let order = self.get_channel_order();
         let mut channels = Vec::with_capacity(4);
 
         // This is a little complicated, we need to check the pinned channels and add them first
@@ -955,6 +976,14 @@ impl PipeweaverHandler {
 
         channels
     }
+
+    fn get_channel_order(&self) -> &EnumMap<OrderGroup, Vec<Ulid>> {
+        match self.channel_type {
+            ChannelType::Source => &self.status.audio.profile.devices.sources.device_order,
+            ChannelType::Target => &self.status.audio.profile.devices.targets.device_order,
+        }
+    }
+
     fn get_source_device_ref<'a>(
         &self,
         device: &Ulid,
