@@ -570,15 +570,6 @@ impl PipeweaverHandler {
                                     continue;
                                 }
 
-                                // Don't redraw if nothing has changed
-                                let current = renderer.meter;
-                                let new = renderer.tick_meter(0.1);
-                                if current == new {
-                                    sub_tick = Some((result.id, index));
-                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                                    continue;
-                                }
-
                                 if is_suspended {
                                     // We'll tick the subtick, but wont draw this time
                                     sub_tick = Some((result.id, index));
