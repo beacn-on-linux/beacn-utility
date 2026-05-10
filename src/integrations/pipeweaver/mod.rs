@@ -154,6 +154,7 @@ struct PipeweaverHandler {
     input_rx: Receiver<Interactions>,
     stop_rx: watch::Receiver<()>,
     suspended_rx: watch::Receiver<bool>,
+    temporary_active: bool,
 
     has_connected: bool,
     displaying_error: bool,
@@ -182,6 +183,7 @@ impl PipeweaverHandler {
             input_rx,
             stop_rx,
             suspended_rx,
+            temporary_active: false,
 
             has_connected: false,
             displaying_error: false,
@@ -419,6 +421,9 @@ impl PipeweaverHandler {
         let sub_sleep = tokio::time::sleep(Duration::MAX);
         tokio::pin!(sub_sleep);
 
+        let suspend_sleep = tokio::time::sleep(Duration::MAX);
+        tokio::pin!(suspend_sleep);
+
         debug!("Starting Pipeweaver Message Loop");
         loop {
             let is_suspended = self.is_suspended();
@@ -519,7 +524,7 @@ impl PipeweaverHandler {
                                             }
                                         };
 
-                                        if is_suspended {
+                                        if is_suspended && !self.temporary_active {
                                             // Everything is up to date, but we dont draw
                                             continue;
                                         }
@@ -570,7 +575,7 @@ impl PipeweaverHandler {
                                     continue;
                                 }
 
-                                if is_suspended {
+                                if is_suspended && !self.temporary_active {
                                     // We'll tick the subtick, but wont draw this time
                                     sub_tick = Some((result.id, index));
                                     sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
@@ -608,7 +613,7 @@ impl PipeweaverHandler {
                         }
 
                         // Drawing is suspended, we'll re-tick, but wont draw.
-                        if is_suspended {
+                        if is_suspended && !self.temporary_active {
                             sub_tick = Some((id, index));
                             sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
                             continue;
@@ -634,12 +639,30 @@ impl PipeweaverHandler {
                     }
                 }
 
+                _ = &mut suspend_sleep, if self.is_suspended() => {
+                    // We should be sleeping, and something woke us up, so put us back to sleep
+                    let (tx, rx) = oneshot::channel();
+                    self.sender.send(ControlMessage::Enabled(false, tx))?;
+                    rx.recv()??;
+
+                    self.temporary_active = false;
+                }
+
                 maybe_msg = interaction_rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
-                            if self.is_suspended() {
-                                // If we're suspended, we shouldn't handle interactions
-                                continue;
+                            if is_suspended {
+                                // Reset the timer in all cases
+                                suspend_sleep.as_mut().reset(time::Instant::now() + Duration::from_secs(5));
+
+                                if !self.temporary_active {
+                                    // Wake the device up, and flag as temporarily active
+                                    let (tx, rx) = oneshot::channel();
+                                    self.sender.send(ControlMessage::Enabled(true, tx))?;
+                                    rx.recv()??;
+
+                                    self.temporary_active = true;
+                                }
                             }
 
                             match self.device_type {
@@ -946,7 +969,7 @@ impl PipeweaverHandler {
 
                 self.active_page = self.active_page.wrapping_add_signed(change);
 
-                if !self.is_suspended() {
+                if !self.is_suspended() || self.temporary_active {
                     self.refresh_page()?;
                 }
             }
