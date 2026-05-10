@@ -219,7 +219,7 @@ impl PipeweaverHandler {
             status: DaemonStatus::default(),
 
             active_page: 0,
-            channel_type: ChannelType::Target,
+            channel_type: ChannelType::Source,
             active_mix: Mix::A,
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
