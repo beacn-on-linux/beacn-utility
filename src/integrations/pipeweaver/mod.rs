@@ -207,7 +207,7 @@ impl PipeweaverHandler {
             status: DaemonStatus::default(),
 
             active_page: 0,
-            channel_type: ChannelType::Source,
+            channel_type: ChannelType::Target,
             active_mix: Mix::A,
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
@@ -431,8 +431,7 @@ impl PipeweaverHandler {
         self.sender.send(ControlMessage::Enabled(true, tx))?;
         rx.recv()??;
 
-        let mut last_seen_sources_count = 0;
-        let mut last_seen_targets_count = 0;
+        let mut last_channel_count = 0;
 
         // These are half-tick messages, sent every 50ms to better smooth meter updates
         let mut sub_tick: Option<(Ulid, usize)> = None;
@@ -470,25 +469,21 @@ impl PipeweaverHandler {
                             json_patch::patch(&mut self.raw_status, &patch)?;
                             self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
 
-                            let (sources_count, targets_count) = {
-                                let sources = &self.status.audio.profile.devices.sources;
-                                let targets = &self.status.audio.profile.devices.targets;
-                                (
-                                    sources.virtual_devices.len() + sources.physical_devices.len(),
-                                    targets.virtual_devices.len() + targets.physical_devices.len(),
-                                )
+                            // Count all channels that aren't hidden
+                            let count = {
+                                let order = self.get_channel_order();
+                                    order
+                                    .iter()
+                                    .filter(|(group, _)| *group != OrderGroup::Hidden)
+                                    .map(|(_, v)| v.len())
+                                    .sum::<usize>()
                             };
 
-                            if sources_count != last_seen_sources_count || targets_count != last_seen_targets_count
-                            {
-                                last_seen_sources_count = sources_count;
-                                last_seen_targets_count = targets_count;
-
-                                // Redraw the pages colours
+                            if count != last_channel_count {
+                                last_channel_count = count;
                                 self.load_page_button()?;
                             }
 
-                            // Re-borrow these
                             let sources = &self.status.audio.profile.devices.sources;
                             let targets = &self.status.audio.profile.devices.targets;
 
