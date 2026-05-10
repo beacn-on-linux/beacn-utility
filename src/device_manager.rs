@@ -209,14 +209,14 @@ pub fn spawn_device_manager(
 
                                 let (tx, rx) = channel::unbounded();
                                 let (stop_tx, stop_rx) = watch::channel(());
-                                let (draw_suspend_tx, draw_suspend_rx) = watch::channel(false);
+                                let (suspended_tx, suspended_rx) = watch::channel(false);
                                 let img_tx = tx.clone();
                                 let task = spawn_pipeweaver_handler(
                                     img_tx,
                                     device_type,
                                     input_rx,
                                     stop_rx,
-                                    draw_suspend_rx,
+                                    suspended_rx,
                                 );
 
                                 if let Some(device) = device {
@@ -225,7 +225,7 @@ pub fn spawn_device_manager(
                                         data.clone(),
                                         rx,
                                         stop_tx,
-                                        draw_suspend_tx,
+                                        suspended_tx,
                                         task,
                                     ));
                                 }

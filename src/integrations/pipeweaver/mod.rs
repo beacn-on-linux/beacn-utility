@@ -153,7 +153,7 @@ struct PipeweaverHandler {
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
     stop_rx: watch::Receiver<()>,
-    draw_suspend_rx: watch::Receiver<bool>,
+    suspended_rx: watch::Receiver<bool>,
 
     has_connected: bool,
     displaying_error: bool,
@@ -174,14 +174,14 @@ impl PipeweaverHandler {
         sender: Sender<ControlMessage>,
         input_rx: Receiver<Interactions>,
         stop_rx: watch::Receiver<()>,
-        draw_suspend_rx: watch::Receiver<bool>,
+        suspended_rx: watch::Receiver<bool>,
     ) -> Self {
         Self {
             device_type,
             sender,
             input_rx,
             stop_rx,
-            draw_suspend_rx,
+            suspended_rx,
 
             has_connected: false,
             displaying_error: false,
@@ -421,16 +421,16 @@ impl PipeweaverHandler {
 
         debug!("Starting Pipeweaver Message Loop");
         loop {
-            let is_suspended = self.is_draw_suspended();
+            let is_suspended = self.is_suspended();
             select! {
                 Ok(_) = self.stop_rx.changed() => {
                     // Trigger a safe exit
                     return Ok(());
                 }
 
-                Ok(_) = self.draw_suspend_rx.changed() => {
+                Ok(_) = self.suspended_rx.changed() => {
                     // We've woken up from a suspension, so redraw everything
-                    if !self.is_draw_suspended() {
+                    if !self.is_suspended() {
                         self.refresh_page()?;
                     }
 
@@ -637,7 +637,7 @@ impl PipeweaverHandler {
                 maybe_msg = interaction_rx.recv() => {
                     match maybe_msg {
                         Some(msg) => {
-                            if self.is_draw_suspended() {
+                            if self.is_suspended() {
                                 // If we're suspended, we shouldn't handle interactions
                                 continue;
                             }
@@ -946,7 +946,7 @@ impl PipeweaverHandler {
 
                 self.active_page = self.active_page.wrapping_add_signed(change);
 
-                if !self.is_draw_suspended() {
+                if !self.is_suspended() {
                     self.refresh_page()?;
                 }
             }
@@ -1025,8 +1025,8 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    fn is_draw_suspended(&self) -> bool {
-        *self.draw_suspend_rx.borrow()
+    fn is_suspended(&self) -> bool {
+        *self.suspended_rx.borrow()
     }
 }
 
@@ -1035,9 +1035,9 @@ pub fn spawn_pipeweaver_handler(
     device: DeviceType,
     input_rx: Receiver<Interactions>,
     stop_rx: watch::Receiver<()>,
-    draw_suspend_rx: watch::Receiver<bool>,
+    suspended_rx: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
-    let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, draw_suspend_rx);
+    let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, suspended_rx);
     runtime().spawn(async move { handler.run_handler().await })
 }
 
