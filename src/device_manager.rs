@@ -119,7 +119,7 @@ pub fn spawn_device_manager(
             }
             i if i == hotplug_index => match operation.recv(&plug_rx) {
                 Ok(m) => match m {
-                    HotPlugMessage::DeviceAttached(location, device_type) => {
+                    HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
                         match device_type {
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                 let (device, state) = match open_audio_device(location) {
@@ -170,27 +170,26 @@ pub fn spawn_device_manager(
                                 // connection and management.
                                 let (input_tx, input_rx) = channel::unbounded();
 
-                                let (device, state) =
-                                    match open_control_device(location, Some(input_tx)) {
-                                        Ok(d) => (Some(d), DefinitionState::Running),
-                                        Err(e) => (
-                                            None,
-                                            DefinitionState::Error(match e {
-                                                BeacnError::Usb(UsbError::Access) => {
-                                                    ErrorType::PermissionDenied
-                                                }
-                                                BeacnError::Usb(UsbError::Busy) => {
-                                                    ErrorType::ResourceBusy
-                                                }
-                                                BeacnError::Usb(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                                BeacnError::Other(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                            }),
-                                        ),
-                                    };
+                                let (device, state) = match open_control_device(
+                                    location,
+                                    Some(input_tx),
+                                    health_tx,
+                                ) {
+                                    Ok(d) => (Some(d), DefinitionState::Running),
+                                    Err(e) => (
+                                        None,
+                                        DefinitionState::Error(match e {
+                                            BeacnError::Usb(UsbError::Access) => {
+                                                ErrorType::PermissionDenied
+                                            }
+                                            BeacnError::Usb(UsbError::Busy) => {
+                                                ErrorType::ResourceBusy
+                                            }
+                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                                        }),
+                                    ),
+                                };
 
                                 let (serial, version) = match &device {
                                     Some(d) => (d.get_serial(), d.get_version()),

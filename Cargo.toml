@@ -39,8 +39,8 @@ egui_glow = "0.34.2"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main" }
-#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.8" }
+#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main" }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.9" }
 #beacn-lib = { path = "../beacn-lib" }
 
 # Used for Lazy Initialisation
