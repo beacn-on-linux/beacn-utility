@@ -54,6 +54,9 @@ pub fn spawn_device_manager(
     spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
     thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
 
+    let mut suspended = false;
+    let mut pending_attachments: Vec<(DeviceLocation, DeviceType, Sender<()>)> = vec![];
+
     loop {
         let mut selector = Select::new();
         // Ok, so when you add a receiver to a selector, it gets an index. This index lets us
@@ -97,11 +100,25 @@ pub fn spawn_device_manager(
                     // Do nothing until we have a full impl
                     match msg {
                         LoginEventTriggers::Sleep(tx) => {
+                            suspended = true;
                             set_pipeweaver_draw_suspended(&receiver_map, true);
                             enable_devices(&receiver_map, false);
                             let _ = tx.send(());
                         }
                         LoginEventTriggers::Wake(tx) => {
+                            suspended = false;
+                            for (location, device_type, health_tx) in pending_attachments.drain(..)
+                            {
+                                handle_device_attached(
+                                    location,
+                                    device_type,
+                                    health_tx,
+                                    &mut receiver_map,
+                                    &event_tx,
+                                    &self_tx,
+                                );
+                            }
+
                             set_pipeweaver_draw_suspended(&receiver_map, false);
                             enable_devices(&receiver_map, true);
                             let _ = tx.send(());
@@ -120,141 +137,23 @@ pub fn spawn_device_manager(
             i if i == hotplug_index => match operation.recv(&plug_rx) {
                 Ok(m) => match m {
                     HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
-                        match device_type {
-                            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                                let (device, state) = match open_audio_device(location) {
-                                    Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => {
-                                        error!("Failed to open audio device: {e}");
-                                        (
-                                            None,
-                                            DefinitionState::Error(match e {
-                                                BeacnError::Usb(UsbError::Access) => {
-                                                    ErrorType::PermissionDenied
-                                                }
-                                                BeacnError::Usb(UsbError::Busy) => {
-                                                    ErrorType::ResourceBusy
-                                                }
-                                                BeacnError::Usb(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                                BeacnError::Other(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                            }),
-                                        )
-                                    }
-                                };
-
-                                let (serial, version) = match &device {
-                                    Some(d) => (d.get_serial(), d.get_version()),
-                                    None => ("Unknown".to_string(), VersionNumber(0, 0, 0, 0)),
-                                };
-
-                                // Firstly, build the device definition
-                                let data = DeviceDefinition {
-                                    state,
-                                    location,
-                                    device_type,
-                                    device_info: DeviceInfo { serial, version },
-                                };
-
-                                // Create a Message Bus for it
-                                let (tx, rx) = channel::unbounded();
-
-                                // Add this into our receiver array
-                                if let Some(device) = device {
-                                    receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
-                                }
-
-                                let arrived = DeviceArriveMessage::Audio(data, tx);
-                                let message = DeviceMessage::DeviceArrived(arrived);
-                                let _ = event_tx.send(message);
-                            }
-                            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                                // This is relatively similar, but the code paths are different. In
-                                // the future, we'd be setting up button handlers, a pipeweaver
-                                // connection and management.
-                                let (input_tx, input_rx) = channel::unbounded();
-
-                                let (device, state) = match open_control_device(
-                                    location,
-                                    Some(input_tx),
-                                    health_tx,
-                                ) {
-                                    Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => {
-                                        error!("Failed to open control device: {e}");
-
-                                        (
-                                            None,
-                                            DefinitionState::Error(match e {
-                                                BeacnError::Usb(UsbError::Access) => {
-                                                    ErrorType::PermissionDenied
-                                                }
-                                                BeacnError::Usb(UsbError::Busy) => {
-                                                    ErrorType::ResourceBusy
-                                                }
-                                                BeacnError::Usb(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                                BeacnError::Other(e) => {
-                                                    ErrorType::Other(e.to_string())
-                                                }
-                                            }),
-                                        )
-                                    }
-                                };
-
-                                let (serial, version) = match &device {
-                                    Some(d) => (d.get_serial(), d.get_version()),
-                                    None => ("Unknown".to_string(), "Unknown".to_string()),
-                                };
-
-                                let data = DeviceDefinition {
-                                    state,
-                                    location,
-                                    device_type,
-                                    device_info: DeviceInfo {
-                                        serial,
-                                        version: VersionNumber::from(version),
-                                    },
-                                };
-
-                                let (tx, rx) = channel::unbounded();
-                                let (stop_tx, stop_rx) = watch::channel(());
-                                let (suspended_tx, suspended_rx) = watch::channel(false);
-                                let img_tx = tx.clone();
-                                let task = spawn_pipeweaver_handler(
-                                    img_tx,
-                                    device_type,
-                                    input_rx,
-                                    stop_rx,
-                                    suspended_rx,
-                                );
-
-                                if let Some(device) = device {
-                                    receiver_map.push(DeviceMap::Control(
-                                        device,
-                                        data.clone(),
-                                        rx,
-                                        stop_tx,
-                                        suspended_tx,
-                                        task,
-                                    ));
-                                }
-
-                                // Use the async runtime for this
-                                debug!("Starting PipeWeaver Handler");
-
-                                let arrived = DeviceArriveMessage::Control(data, tx);
-                                let message = DeviceMessage::DeviceArrived(arrived);
-                                let _ = event_tx.send(message);
-                            }
+                        if suspended {
+                            pending_attachments.push((location, device_type, health_tx));
+                        } else {
+                            handle_device_attached(
+                                location,
+                                device_type,
+                                health_tx,
+                                &mut receiver_map,
+                                &event_tx,
+                                &self_tx,
+                            );
                         }
-                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
                     HotPlugMessage::DeviceRemoved(location) => {
+                        // Drop any pending attachment for this location before it's ever opened
+                        pending_attachments.retain(|(loc, _, _)| *loc != location);
+
                         let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
                         receiver_map.retain(|e| match e {
                             DeviceMap::Audio(_, d, _) => d.location != location,
@@ -382,6 +281,124 @@ pub fn spawn_device_manager(
     }
 
     debug!("Device Manager Stopped");
+}
+
+fn handle_device_attached(
+    location: DeviceLocation,
+    device_type: DeviceType,
+    health_tx: Sender<()>,
+    receiver_map: &mut Vec<DeviceMap>,
+    event_tx: &Sender<DeviceMessage>,
+    self_tx: &Sender<ToMainMessages>,
+) {
+    match device_type {
+        DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+            let (device, state) = match open_audio_device(location) {
+                Ok(d) => (Some(d), DefinitionState::Running),
+                Err(e) => {
+                    error!("Failed to open audio device: {e}");
+                    (
+                        None,
+                        DefinitionState::Error(match e {
+                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
+                            BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
+                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                        }),
+                    )
+                }
+            };
+
+            let (serial, version) = match &device {
+                Some(d) => (d.get_serial(), d.get_version()),
+                None => ("Unknown".to_string(), VersionNumber(0, 0, 0, 0)),
+            };
+
+            // Firstly, build the device definition
+            let data = DeviceDefinition {
+                state,
+                location,
+                device_type,
+                device_info: DeviceInfo { serial, version },
+            };
+
+            // Create a Message Bus for it
+            let (tx, rx) = channel::unbounded();
+
+            // Add this into our receiver array
+            if let Some(device) = device {
+                receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
+            }
+
+            let arrived = DeviceArriveMessage::Audio(data, tx);
+            let message = DeviceMessage::DeviceArrived(arrived);
+            let _ = event_tx.send(message);
+        }
+        DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+            // This is relatively similar, but the code paths are different. In
+            // the future, we'd be setting up button handlers, a pipeweaver
+            // connection and management.
+            let (input_tx, input_rx) = channel::unbounded();
+
+            let (device, state) = match open_control_device(location, Some(input_tx), health_tx) {
+                Ok(d) => (Some(d), DefinitionState::Running),
+                Err(e) => {
+                    error!("Failed to open control device: {e}");
+
+                    (
+                        None,
+                        DefinitionState::Error(match e {
+                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
+                            BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
+                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                        }),
+                    )
+                }
+            };
+
+            let (serial, version) = match &device {
+                Some(d) => (d.get_serial(), d.get_version()),
+                None => ("Unknown".to_string(), "Unknown".to_string()),
+            };
+
+            let data = DeviceDefinition {
+                state,
+                location,
+                device_type,
+                device_info: DeviceInfo {
+                    serial,
+                    version: VersionNumber::from(version),
+                },
+            };
+
+            let (tx, rx) = channel::unbounded();
+            let (stop_tx, stop_rx) = watch::channel(());
+            let (suspended_tx, suspended_rx) = watch::channel(false);
+            let img_tx = tx.clone();
+            let task =
+                spawn_pipeweaver_handler(img_tx, device_type, input_rx, stop_rx, suspended_rx);
+
+            if let Some(device) = device {
+                receiver_map.push(DeviceMap::Control(
+                    device,
+                    data.clone(),
+                    rx,
+                    stop_tx,
+                    suspended_tx,
+                    task,
+                ));
+            }
+
+            // Use the async runtime for this
+            debug!("Starting PipeWeaver Handler");
+
+            let arrived = DeviceArriveMessage::Control(data, tx);
+            let message = DeviceMessage::DeviceArrived(arrived);
+            let _ = event_tx.send(message);
+        }
+    }
+    let _ = self_tx.send(ToMainMessages::RequestRedraw);
 }
 
 #[allow(unused)]
