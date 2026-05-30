@@ -27,7 +27,7 @@ use beacn_lib::manager::{
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use log::debug;
+use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
@@ -124,19 +124,26 @@ pub fn spawn_device_manager(
                             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
                                 let (device, state) = match open_audio_device(location) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (
-                                        None,
-                                        DefinitionState::Error(match e {
-                                            BeacnError::Usb(UsbError::Access) => {
-                                                ErrorType::PermissionDenied
-                                            }
-                                            BeacnError::Usb(UsbError::Busy) => {
-                                                ErrorType::ResourceBusy
-                                            }
-                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
-                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
-                                        }),
-                                    ),
+                                    Err(e) => {
+                                        error!("Failed to open audio device: {e}");
+                                        (
+                                            None,
+                                            DefinitionState::Error(match e {
+                                                BeacnError::Usb(UsbError::Access) => {
+                                                    ErrorType::PermissionDenied
+                                                }
+                                                BeacnError::Usb(UsbError::Busy) => {
+                                                    ErrorType::ResourceBusy
+                                                }
+                                                BeacnError::Usb(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                                BeacnError::Other(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                            }),
+                                        )
+                                    }
                                 };
 
                                 let (serial, version) = match &device {
@@ -176,19 +183,27 @@ pub fn spawn_device_manager(
                                     health_tx,
                                 ) {
                                     Ok(d) => (Some(d), DefinitionState::Running),
-                                    Err(e) => (
-                                        None,
-                                        DefinitionState::Error(match e {
-                                            BeacnError::Usb(UsbError::Access) => {
-                                                ErrorType::PermissionDenied
-                                            }
-                                            BeacnError::Usb(UsbError::Busy) => {
-                                                ErrorType::ResourceBusy
-                                            }
-                                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
-                                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
-                                        }),
-                                    ),
+                                    Err(e) => {
+                                        error!("Failed to open control device: {e}");
+
+                                        (
+                                            None,
+                                            DefinitionState::Error(match e {
+                                                BeacnError::Usb(UsbError::Access) => {
+                                                    ErrorType::PermissionDenied
+                                                }
+                                                BeacnError::Usb(UsbError::Busy) => {
+                                                    ErrorType::ResourceBusy
+                                                }
+                                                BeacnError::Usb(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                                BeacnError::Other(e) => {
+                                                    ErrorType::Other(e.to_string())
+                                                }
+                                            }),
+                                        )
+                                    }
                                 };
 
                                 let (serial, version) = match &device {
