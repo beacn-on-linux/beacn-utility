@@ -11,6 +11,7 @@ use egui::{Context, Id, Ui};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
 use egui_winit::winit;
+use egui_winit::winit::event::StartCause;
 use egui_winit::winit::event_loop::EventLoopProxy;
 use egui_winit::winit::platform::run_on_demand::EventLoopExtRunOnDemand;
 use egui_winit::winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -29,6 +30,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{env, fs};
 
+const FRAME_TIME: std::time::Duration = std::time::Duration::from_micros(16_667);
+
+// Test @ 240fps for comparison :D
+//const FRAME_TIME: std::time::Duration = std::time::Duration::from_micros(4_167);
 const EVENT_PROXY: &str = "event_proxy";
 
 // These are events we can send into winit to trigger an update
@@ -68,6 +73,10 @@ pub struct WindowRunner {
     window_attributes: WindowAttributes,
 
     sender: Sender<ToMainMessages>,
+
+    // Redraw Scheduling
+    last_render: Option<Instant>,
+    redraw_pending: bool,
 }
 
 struct GlowRenderer {
@@ -99,6 +108,9 @@ impl WindowRunner {
             window_attributes: attributes,
 
             sender,
+
+            last_render: None,
+            redraw_pending: false,
         }
     }
 
@@ -125,6 +137,8 @@ impl WindowRunner {
     }
 
     fn render_frame(&mut self) {
+        self.last_render = Some(Instant::now());
+
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             let mut raw_input = renderer.winit_state.take_egui_input(window);
             raw_input.time = Some(self.app_start_time.elapsed().as_secs_f64());
@@ -201,6 +215,21 @@ impl WindowRunner {
         self.renderer = None;
         self.app.on_close();
     }
+
+    fn schedule_redraw(&mut self, event_loop: &ActiveEventLoop) {
+        if self.redraw_pending {
+            return; // already scheduled, don't reset the deadline
+        }
+        self.redraw_pending = true;
+
+        let next_frame = self
+            .last_render
+            .map(|t| t + FRAME_TIME)
+            .filter(|&deadline| deadline > Instant::now()) // discard stale deadlines
+            .unwrap_or_else(|| Instant::now() + FRAME_TIME); // always wait at least one frame
+
+        event_loop.set_control_flow(ControlFlow::WaitUntil(next_frame));
+    }
 }
 
 // This is a helper function which lets the app send a UserEvent into the context
@@ -224,8 +253,8 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
         match event {
             UserEvent::RequestRedraw => {
-                if let Some(window) = &self.window {
-                    window.request_redraw();
+                if self.window.is_some() {
+                    self.schedule_redraw(event_loop);
                 }
             }
             UserEvent::FocusWindow => {
@@ -344,14 +373,34 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
         }
     }
 
-    fn window_event(&mut self, _: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, _: StartCause) {
+        if self.redraw_pending {
+            let now = Instant::now();
+            let next_frame = self.last_render.map(|t| t + FRAME_TIME).unwrap_or(now);
+
+            if now >= next_frame {
+                // Time to actually paint
+                self.redraw_pending = false;
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                // Go back to blocking wait until something new happens
+                event_loop.set_control_flow(ControlFlow::Wait);
+            }
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
+    ) {
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             let response = renderer.winit_state.on_window_event(window, &event);
 
             // Request redraw if egui wants it AND we're not already a RedrawRequested event
-            if response.repaint && !matches!(&event, WindowEvent::RedrawRequested) {
-                window.request_redraw();
-            }
+            let needs_repaint = response.repaint && !matches!(&event, WindowEvent::RedrawRequested);
 
             match event {
                 WindowEvent::RedrawRequested => {
@@ -390,6 +439,10 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                         debug!("Unhandled Window Event: {event:?}")
                     }
                 }
+            }
+
+            if needs_repaint {
+                self.schedule_redraw(event_loop);
             }
         }
     }
