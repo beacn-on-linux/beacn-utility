@@ -12,7 +12,7 @@ build = "build.rs"
 
 [dependencies]
 # Logging
-log = "0.4.29"
+log = "0.4.33"
 simplelog = "0.12.2"
 file-rotate = "0.8.0"
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
@@ -29,22 +29,19 @@ enum-map = "2.7.3"
 oneshot = { version = "0.2.1", features = ["std"] }
 
 # Used for SIMD EQ calculations
-wide = "1.1.1"
+wide = "1.5.0"
 
 # UI Framework and Window Management
-egui = "0.34.2"
-egui_extras = { version = "0.34.2", features = ["svg"] }
-egui-winit = "0.34.2"
-egui_glow = "0.34.2"
+egui = "0.35.0"
+egui_extras = { version = "0.35.0", features = ["svg"] }
+egui-winit = "0.35.0"
+egui_glow = "0.35.0"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main" }
 beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.9" }
 #beacn-lib = { path = "../beacn-lib" }
-
-# Used for Lazy Initialisation
-once_cell = "1.21.3"
 
 # Tray Handler
 ksni = { version = "0.3.4", features = ["blocking"] }
@@ -63,10 +60,10 @@ xdg = "3.0.0"
 
 # Profile Loading / Saving
 serde = "1.0.228"
-serde_json = "1.0.149"
+serde_json = "1.0.150"
 
 # Sleep Management
-zbus = "5.15.0"
+zbus = "5.16.0"
 
 # Signal Handling
 signal-hook = "0.4.4"

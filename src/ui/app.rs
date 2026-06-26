@@ -11,9 +11,9 @@ use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
-use egui::ahash::HashMap;
 use egui::{Context, Ui};
 use log::debug;
+use std::collections::HashMap;
 
 pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
@@ -82,7 +82,7 @@ impl App for BeacnMicApp {
 
         // Is our Device List empty?
         if self.device_list.is_empty() {
-            egui::CentralPanel::default().show_inside(ui, |ui: &mut Ui| {
+            egui::CentralPanel::default().show(ui, |ui: &mut Ui| {
                 ui.add_sized(ui.available_size(), |ui: &mut Ui| {
                     ui.label("No Devices Detected")
                 });
@@ -93,7 +93,7 @@ impl App for BeacnMicApp {
         egui::Panel::left("left_panel")
             .resizable(false)
             .default_size(80.0)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(5.0);
                     let pipeweaver_btn = pipeweaver_button(ui, "pipeweaver", self.mixer_active);
@@ -316,14 +316,14 @@ impl BeacnMicApp {
         }
 
         if self.mixer_active {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 pipeweaver_ui(ui);
             });
             return;
         }
 
         if self.settings_active {
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 settings_ui(ui);
             });
             return;
@@ -352,7 +352,7 @@ impl BeacnMicApp {
                     }
                 }
 
-                egui::CentralPanel::default().show_inside(ui, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
                     self.audio_pages[self.active_page].ui(ui, settings);
                 });
             }
@@ -363,7 +363,7 @@ impl BeacnMicApp {
                 }
 
                 let settings = settings.unwrap();
-                egui::CentralPanel::default().show_inside(ui, |ui| {
+                egui::CentralPanel::default().show(ui, |ui| {
                     self.control_pages[self.active_page].ui(ui, settings);
                 });
             }

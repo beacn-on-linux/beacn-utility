@@ -8,7 +8,6 @@ use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage, load_from_memory};
 use log::{debug, info, warn};
-use once_cell::sync::Lazy;
 use pipeweaver_shared::Mix;
 use rayon::prelude::*;
 use std::collections::HashMap;
@@ -18,6 +17,7 @@ use std::fs::File;
 use std::io::ErrorKind::UnexpectedEof;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::time::Instant;
 use strum::IntoEnumIterator;
 use xdg::BaseDirectories;
@@ -40,6 +40,8 @@ pub(crate) type Position = (u32, u32);
 // Cache helpers
 pub(crate) const CACHE_VERSION: u16 = 1;
 pub(crate) const CACHE_PATH: &str = "pipeweaver_mixer_cache.bin";
+
+type Lazy<T> = LazyLock<T>;
 
 // These types are used for rendering the Dials, and are mostly related to precaching images
 // in memory to allow 'quick switching' without the need for costly regeneration

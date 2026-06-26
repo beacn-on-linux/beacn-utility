@@ -1,6 +1,6 @@
-use egui::ahash::HashMap;
 use egui::{ImageSource, include_image};
-use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::LazyLock;
 
 pub(crate) mod app;
 mod audio_pages;
@@ -12,7 +12,7 @@ mod states;
 mod widgets;
 
 // SVG Images
-pub static SVG: Lazy<HashMap<&'static str, ImageSource>> = Lazy::new(|| {
+pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| {
     let mut map = HashMap::default();
     map.insert(
         "mic",
