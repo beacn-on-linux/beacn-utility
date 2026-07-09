@@ -475,146 +475,152 @@ impl PipeweaverHandler {
                     continue;
                }
 
-                Some(message) = stream.next() => {
-                    let message = message?;
-                    if message.is_text() {
-                        let result = serde_json::from_str::<WebsocketResponse>(message.to_text()?)?;
-                        if let DaemonResponse::Patch(patch) = result.data {
-                            // Update the raw status for the change
-                            json_patch::patch(&mut self.raw_status, &patch)?;
-                            self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
+                message = stream.next() => {
+                    match message {
+                        Some(Ok(Message::Text(text))) => {
+                            let result = serde_json::from_str::<WebsocketResponse>(&text)?;
+                            if let DaemonResponse::Patch(patch) = result.data {
+                                // Update the raw status for the change
+                                json_patch::patch(&mut self.raw_status, &patch)?;
+                                self.status = serde_json::from_value::<DaemonStatus>(self.raw_status.clone())?;
 
-                            // Count all channels that aren't hidden
-                            let count = {
-                                let order = self.get_channel_order();
-                                    order
-                                    .iter()
-                                    .filter(|(group, _)| *group != OrderGroup::Hidden)
-                                    .map(|(_, v)| v.len())
-                                    .sum::<usize>()
-                            };
+                                // Count all channels that aren't hidden
+                                let count = {
+                                    let order = self.get_channel_order();
+                                        order
+                                        .iter()
+                                        .filter(|(group, _)| *group != OrderGroup::Hidden)
+                                        .map(|(_, v)| v.len())
+                                        .sum::<usize>()
+                                };
 
-                            if count != last_channel_count {
-                                last_channel_count = count;
-                                self.load_page_button()?;
-                            }
+                                if count != last_channel_count {
+                                    last_channel_count = count;
+                                    self.load_page_button()?;
+                                }
 
-                            let sources = &self.status.audio.profile.devices.sources;
-                            let targets = &self.status.audio.profile.devices.targets;
+                                let sources = &self.status.audio.profile.devices.sources;
+                                let targets = &self.status.audio.profile.devices.targets;
 
+                                let devices = self.get_channels_on_page();
+                                if devices != self.devices_shown {
+                                    self.devices_shown = devices.clone();
 
-                            let devices = self.get_channels_on_page();
-                            if devices != self.devices_shown {
-                                self.devices_shown = devices.clone();
+                                    self.update_renderers()?;
 
-                                self.update_renderers()?;
+                                    // Set the Button Colours
+                                    self.load_all_dial_button_colours()?;
+                                    self.perform_full_redraw()?;
+                                } else {
+                                    // Check whether any existing devices have changed
+                                    for (index, device) in self.devices_shown.iter().enumerate() {
+                                        let mut refresh_button_colour = false;
 
-                                // Set the Button Colours
-                                self.load_all_dial_button_colours()?;
-                                self.perform_full_redraw()?;
-                            } else {
-                                // Check whether any existing devices have changed
-                                for (index, device) in self.devices_shown.iter().enumerate() {
-                                    let mut refresh_button_colour = false;
-
-                                    let dev_ref = match self.channel_type {
-                                        ChannelType::Source => self.get_source_device_ref(device, sources)?,
-                                        ChannelType::Target => self.get_target_device_ref(device, targets)?
-                                    };
-
-                                    let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-
-                                    let update = match dev_ref {
-                                        DeviceRef::PhysicalSource(d) => render.update_from(d.clone()),
-                                        DeviceRef::VirtualSource(d) => render.update_from(d.clone()),
-                                        DeviceRef::PhysicalTarget(d) => render.update_from(d.clone()),
-                                        DeviceRef::VirtualTarget(d) => render.update_from(d.clone()),
-                                    };
-
-                                    for part in update {
-                                        let (img, x, y) = match part {
-                                            ChannelChangedProperty::Title => {
-                                                let img = render.draw_header();
-
-                                                let (x, y) = img.position;
-                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                (img, x, y)
-                                            }
-                                            ChannelChangedProperty::Colour => {
-                                                // Set the Button Colour to Refresh
-                                                refresh_button_colour = true;
-
-                                                // We need to redraw the entire channel
-                                                let img = render.full_render(self.active_mix);
-
-                                                let (x, y) = img.position;
-                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                (img, x, y)
-                                            }
-                                            ChannelChangedProperty::Volumes(mix) => {
-                                                if mix != self.active_mix {
-                                                    continue
-                                                }
-
-                                                let img = render.get_volume(self.active_mix)?;
-                                                let (x, y) = img.position;
-
-                                                (img.image, x, y)
-                                            }
-                                            ChannelChangedProperty::MuteState(target) => {
-                                                // Don't draw MixB Mute updates on the Beacn Mix
-                                                if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix {
-                                                    continue;
-                                                }
-
-                                                let img = render.draw_mute_box(target);
-
-                                                let (x, y) = img.position;
-                                                let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                (img, x, y)
-                                            }
+                                        let dev_ref = match self.channel_type {
+                                            ChannelType::Source => self.get_source_device_ref(device, sources)?,
+                                            ChannelType::Target => self.get_target_device_ref(device, targets)?
                                         };
 
-                                        if is_suspended && !self.temporary_active {
-                                            // Everything is up to date, but we dont draw
-                                            continue;
+                                        let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
+
+                                        let update = match dev_ref {
+                                            DeviceRef::PhysicalSource(d) => render.update_from(d.clone()),
+                                            DeviceRef::VirtualSource(d) => render.update_from(d.clone()),
+                                            DeviceRef::PhysicalTarget(d) => render.update_from(d.clone()),
+                                            DeviceRef::VirtualTarget(d) => render.update_from(d.clone()),
+                                        };
+
+                                        for part in update {
+                                            let (img, x, y) = match part {
+                                                ChannelChangedProperty::Title => {
+                                                    let img = render.draw_header();
+
+                                                    let (x, y) = img.position;
+                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                    (img, x, y)
+                                                }
+                                                ChannelChangedProperty::Colour => {
+                                                    // Set the Button Colour to Refresh
+                                                    refresh_button_colour = true;
+
+                                                    // We need to redraw the entire channel
+                                                    let img = render.full_render(self.active_mix);
+
+                                                    let (x, y) = img.position;
+                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                    (img, x, y)
+                                                }
+                                                ChannelChangedProperty::Volumes(mix) => {
+                                                    if mix != self.active_mix {
+                                                        continue
+                                                    }
+
+                                                    let img = render.get_volume(self.active_mix)?;
+                                                    let (x, y) = img.position;
+
+                                                    (img.image, x, y)
+                                                }
+                                                ChannelChangedProperty::MuteState(target) => {
+                                                    // Don't draw MixB Mute updates on the Beacn Mix
+                                                    if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix {
+                                                        continue;
+                                                    }
+
+                                                    let img = render.draw_mute_box(target);
+
+                                                    let (x, y) = img.position;
+                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
+
+                                                    (img, x, y)
+                                                }
+                                            };
+
+                                            if is_suspended && !self.temporary_active {
+                                                // Everything is up to date, but we dont draw
+                                                continue;
+                                            }
+
+                                            // Determine the 'start' position of this channel
+                                            let (ch_w, _) = CHANNEL_DIMENSIONS;
+                                            let base_x = ch_w * index as u32;
+
+                                            // Get the position relative to the main image root
+                                            let (root_x, root_y) = POSITION_ROOT;
+                                            let x = base_x + x + root_x;
+                                            let y = y + root_y;
+
+                                            // Send it
+                                            let (tx,rx) = oneshot::channel();
+                                            self.sender.send(SendImage(img, x, y, tx))?;
+                                            rx.recv()??;
+                                        };
+
+                                        // We split this out because there's a lot of borrowing going on
+                                        // inside the loops regards the renderer, which makes executing
+                                        // earlier more difficult :D
+                                        if refresh_button_colour {
+                                            self.load_dial_button_colour(index)?;
                                         }
-
-                                        // Determine the 'start' position of this channel
-                                        let (ch_w, _) = CHANNEL_DIMENSIONS;
-                                        let base_x = ch_w * index as u32;
-
-                                        // Get the position relative to the main image root
-                                        let (root_x, root_y) = POSITION_ROOT;
-                                        let x = base_x + x + root_x;
-                                        let y = y + root_y;
-
-                                        // Send it
-                                        let (tx,rx) = oneshot::channel();
-                                        self.sender.send(SendImage(img, x, y, tx))?;
-                                        rx.recv()??;
-                                    };
-
-                                    // We split this out because there's a lot of borrowing going on
-                                    // inside the loops regards the renderer, which makes executing
-                                    // earlier more difficult :D
-                                    if refresh_button_colour {
-                                        self.load_dial_button_colour(index)?;
                                     }
                                 }
                             }
                         }
-                    } else {
-                        bail!("Received non-text message from Websocket!")
+                        Some(Ok(Message::Close(frame))) => {
+                            bail!("Server closed websocket: {:?}", frame);
+                        }
+                        Some(Ok(other)) => {
+                            debug!("Ignoring websocket message: {:?}", other);
+                        }
+                        Some(Err(e)) => return Err(e.into()),
+                        None => bail!("Websocket Closed"),
                     }
                 }
-                Some(msg) = meter.next() => {
-                    let msg = msg?;
-                    if msg.is_text() {
-                        let result = serde_json::from_str::<MeterMessage>(msg.to_text()?)?;
+                message = meter.next() => {
+                    match message {
+                        Some(Ok(Message::Text(text))) => {
+                        let result = serde_json::from_str::<MeterMessage>(&text)?;
 
                         if let Some(index) = self.devices_shown.iter().position(|id| *id == result.id) &&
                             let Some(renderer) = self.renderers.get_mut(&result.id) {
@@ -652,7 +658,16 @@ impl PipeweaverHandler {
 
                                 sub_tick = Some((result.id, index));
                                 sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                            }
                         }
+                        Some(Ok(Message::Close(frame))) => {
+                            bail!("Server closed websocket: {:?}", frame);
+                        }
+                        Some(Ok(other)) => {
+                            debug!("Ignoring websocket message: {:?}", other);
+                        }
+                        Some(Err(e)) => return Err(e.into()),
+                        None => bail!("Websocket Closed"),
                     }
                 }
                 _ = &mut sub_sleep, if sub_tick.is_some() => {
