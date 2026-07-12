@@ -378,10 +378,8 @@ impl PipeweaverHandler {
         // There are occasionally patch messages which could occur before the status response,
         // so we'll loop here until we get the answer we're looking for
         loop {
-            let message = stream.next().await;
-            if let Some(message) = message {
-                let message = message?;
-                if let Message::Text(msg) = message {
+            match stream.next().await {
+                Some(Ok(Message::Text(msg))) => {
                     let value = serde_json::from_str::<Value>(msg.as_str())?;
 
                     // This should be a WebSocketResponse object
@@ -403,6 +401,22 @@ impl PipeweaverHandler {
                         self.status = serde_json::from_value::<DaemonStatus>(raw)?;
                         break;
                     }
+                }
+
+                Some(Ok(Message::Close(frame))) => {
+                    bail!("Pipeweaver closed websocket: {:?}", frame);
+                }
+
+                Some(Ok(other)) => {
+                    debug!("Ignoring websocket message during status load: {:?}", other);
+                }
+
+                Some(Err(e)) => {
+                    return Err(e.into());
+                }
+
+                None => {
+                    bail!("Pipeweaver websocket closed while loading status");
                 }
             }
         }
