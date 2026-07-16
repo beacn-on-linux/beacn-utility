@@ -1,7 +1,7 @@
 pub(crate) mod compressor;
-pub(crate) mod equaliser;
 pub(crate) mod expander;
 pub(crate) mod headphones;
+pub(crate) mod mic_equaliser;
 pub(crate) mod mic_setup;
 pub(crate) mod suppressor;
 

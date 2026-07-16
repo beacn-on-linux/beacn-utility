@@ -1,7 +1,7 @@
-use crate::ui::audio_pages::config_pages::equaliser::eq_common::{
+use crate::ui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
 };
-use crate::ui::audio_pages::config_pages::equaliser::eq_util::{BiquadCoefficient, EQUtil};
+use crate::ui::audio_pages::equaliser::eq_util::{BiquadCoefficient, EQUtil};
 use crate::ui::states::audio_state::EqualiserBandType::*;
 use crate::ui::states::audio_state::{EqualiserBand, EqualiserBandConfig};
 use egui::{

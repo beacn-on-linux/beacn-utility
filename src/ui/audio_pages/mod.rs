@@ -4,6 +4,7 @@ use egui::Ui;
 
 pub(crate) mod about;
 pub(crate) mod config;
+pub(crate) mod equaliser;
 pub(crate) mod error;
 pub(crate) mod lighting;
 pub(crate) mod link;

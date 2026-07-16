@@ -1,9 +1,9 @@
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::audio_pages::config_pages::compressor::CompressorPage;
-use crate::ui::audio_pages::config_pages::equaliser::eq_controls::ParametricEq;
 use crate::ui::audio_pages::config_pages::expander::ExpanderPage;
 use crate::ui::audio_pages::config_pages::headphones::HeadphonesPage;
+use crate::ui::audio_pages::config_pages::mic_equaliser::MicEqualiser;
 use crate::ui::audio_pages::config_pages::mic_setup::MicSetupPage;
 use crate::ui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
 use crate::ui::states::audio_state::BeacnAudioState;
@@ -13,7 +13,7 @@ use beacn_lib::types::HasRange;
 use egui::{Ui, vec2};
 
 pub struct Configuration {
-    equaliser: Box<ParametricEq>,
+    equaliser: Box<MicEqualiser>,
 
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
@@ -22,7 +22,7 @@ pub struct Configuration {
 impl Configuration {
     pub fn new() -> Self {
         Self {
-            equaliser: Box::new(ParametricEq::new()),
+            equaliser: Box::new(MicEqualiser::new()),
 
             selected_tab: 0,
             tab_pages: vec![

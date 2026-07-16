@@ -1,8 +1,8 @@
 use crate::ui::SVG;
-use crate::ui::audio_pages::config_pages::equaliser::eq_common::{
+use crate::ui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
-use crate::ui::audio_pages::config_pages::equaliser::eq_drawer::EqDrawView;
+use crate::ui::audio_pages::equaliser::eq_drawer::EqDrawView;
 use crate::ui::states::audio_state::EqualiserBandType::*;
 use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand, EqualiserBandType};
 use crate::ui::widgets::draw_draggable;
@@ -16,7 +16,7 @@ use strum::IntoEnumIterator;
 
 // This is basically a replacement for the original drawer. Rather than handling everything,
 // we just manage interactions with the View and draw the buttons.
-pub struct ParametricEq {
+pub struct MicEqualiser {
     // The current serial that this EQ represents
     serial: Option<String>,
 
@@ -31,7 +31,7 @@ pub struct ParametricEq {
     active_band_drag: Option<EqualiserBand>,
 }
 
-impl ParametricEq {
+impl MicEqualiser {
     pub(crate) fn new() -> Self {
         Self {
             serial: None,
