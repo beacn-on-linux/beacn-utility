@@ -2,11 +2,8 @@ use crate::ui::audio_pages::config_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui::audio_pages::config_pages::equaliser::eq_util::{BiquadCoefficient, EQUtil};
-use crate::ui::states::audio_state::EqualiserBand;
-use beacn_lib::audio::messages::equaliser::EQBand;
-use beacn_lib::audio::messages::equaliser::EQBandType::{
-    BellBand, HighPassFilter, HighShelf, LowPassFilter, LowShelf, NotSet, NotchFilter,
-};
+use crate::ui::states::audio_state::EqualiserBandType::*;
+use crate::ui::states::audio_state::{EqualiserBand, EqualiserBandConfig};
 use egui::{
     Color32, CornerRadius, FontId, Mesh, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind,
     Ui, Vec2, pos2, vec2,
@@ -63,8 +60,8 @@ pub struct EqViewOutput {
 /// that's the job of whatever owns it (see `eq_controls::ParametricEq`).
 pub struct EqDrawView {
     // A cache of the frequency responses and drawn mesh
-    band_freq_response: EnumMap<EQBand, Option<Vec<f32>>>,
-    band_mesh: EnumMap<EQBand, Option<Arc<Mesh>>>,
+    band_freq_response: EnumMap<EqualiserBand, Option<Vec<f32>>>,
+    band_mesh: EnumMap<EqualiserBand, Option<Arc<Mesh>>>,
 
     // Cache of the main curve, and rect size (used to know when to
     // invalidate the caches above on resize)
@@ -102,7 +99,7 @@ impl EqDrawView {
 
     /// Drop cached geometry for a single band, e.g. after its frequency,
     /// gain, Q or type has changed.
-    pub fn invalidate_band(&mut self, band: EQBand) {
+    pub fn invalidate_band(&mut self, band: EqualiserBand) {
         self.band_freq_response[band] = None;
         self.band_mesh[band] = None;
         self.curve_mesh = None;
@@ -116,7 +113,7 @@ impl EqDrawView {
         ui: &mut Ui,
         desired_size: Vec2,
         bands: &Bands,
-        active_band: Option<EQBand>,
+        active_band: Option<EqualiserBand>,
     ) -> EqViewOutput {
         let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
 
@@ -144,13 +141,13 @@ impl EqDrawView {
         rect: Rect,
         plot_rect: Rect,
         bands: &Bands,
-        active_band: Option<EQBand>,
+        active_band: Option<EqualiserBand>,
     ) {
         // Draw grid and axes
         self.draw_grid(ui.painter(), rect, plot_rect);
 
         // Draw the background for the individual bands
-        for (index, band) in EQBand::iter().enumerate() {
+        for (index, band) in EqualiserBand::iter().enumerate() {
             // Only draw it if it's enabled
             if bands[band].enabled {
                 let colour = EQ_TRANSPARENT_COLOURS[index % EQ_TRANSPARENT_COLOURS.len()];
@@ -223,7 +220,7 @@ impl EqDrawView {
 
         let curve_color = Color32::from_rgb(255, 255, 255);
 
-        let sources: Vec<Vec<f32>> = EQBand::iter()
+        let sources: Vec<Vec<f32>> = EqualiserBand::iter()
             .filter(|&band| bands[band].enabled)
             .map(|band| self.get_eq_frequency_response(plot_rect, band, bands, EQ_CURVE_RESOLUTION))
             .collect();
@@ -288,7 +285,7 @@ impl EqDrawView {
     fn draw_eq_individual(
         &mut self,
         painter: &egui::Painter,
-        band: EQBand,
+        band: EqualiserBand,
         rect: Rect,
         colour: Color32,
         bands: &Bands,
@@ -424,7 +421,7 @@ impl EqDrawView {
     fn get_eq_curve_points(
         &mut self,
         rect: Rect,
-        band: EQBand,
+        band: EqualiserBand,
         bands: &Bands,
         steps: usize,
     ) -> Vec<Pos2> {
@@ -444,7 +441,7 @@ impl EqDrawView {
     fn get_eq_frequency_response(
         &mut self,
         rect: Rect,
-        band: EQBand,
+        band: EqualiserBand,
         bands: &Bands,
         steps: usize,
     ) -> Vec<f32> {
@@ -514,7 +511,7 @@ impl EqDrawView {
         painter: &egui::Painter,
         rect: Rect,
         bands: &Bands,
-        active_band: Option<EQBand>,
+        active_band: Option<EqualiserBand>,
     ) {
         let db0 = EqGeometry::db_to_y(0.0, rect);
         for (index, (band, value)) in bands.iter().enumerate() {
@@ -543,12 +540,12 @@ impl EqDrawView {
     }
 
     /// Calculate the gain for a band at a specific frequency
-    fn eq_gain(freq: f32, band: EQBand, bands: &Bands) -> f32 {
+    fn eq_gain(freq: f32, band: EqualiserBand, bands: &Bands) -> f32 {
         let coefficient = Self::get_coefficient(&bands[band]);
         EQUtil::freq_response_scalar(freq, &coefficient)
     }
 
-    fn eq_gain_simd(frequencies: &[f32], band: EQBand, bands: &Bands) -> Vec<f32> {
+    fn eq_gain_simd(frequencies: &[f32], band: EqualiserBand, bands: &Bands) -> Vec<f32> {
         let mut gains = vec![0.0; frequencies.len()];
         let chunks = frequencies.chunks_exact(8);
         let remainder = chunks.remainder();
@@ -571,7 +568,7 @@ impl EqDrawView {
         gains
     }
 
-    fn get_coefficient(band: &EqualiserBand) -> BiquadCoefficient {
+    fn get_coefficient(band: &EqualiserBandConfig) -> BiquadCoefficient {
         match band.band_type {
             LowShelf => EQUtil::low_shelf_coefficient(band.frequency as f32, band.gain, band.q),
             HighShelf => EQUtil::high_shelf_coefficient(band.frequency as f32, band.gain, band.q),

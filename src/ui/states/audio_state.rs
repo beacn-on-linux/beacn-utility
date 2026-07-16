@@ -12,7 +12,7 @@ use beacn_lib::audio::messages::lighting::{
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
-use enum_map::EnumMap;
+use enum_map::{Enum, EnumMap};
 
 use crate::device_manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
@@ -33,6 +33,7 @@ use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::crossbeam::channel::Sender;
 use beacn_lib::manager::DeviceType;
 use log::debug;
+use strum_macros::EnumIter;
 
 type Rgb = [u8; 3];
 
@@ -91,13 +92,13 @@ pub struct Lighting {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Equaliser {
     pub mode: EQMode,
-    pub bands: EnumMap<EQMode, EnumMap<EQBand, EqualiserBand>>,
+    pub bands: EnumMap<EQMode, EnumMap<EqualiserBand, EqualiserBandConfig>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub struct EqualiserBand {
+pub struct EqualiserBandConfig {
     pub enabled: bool,
-    pub band_type: EQBandType,
+    pub band_type: EqualiserBandType,
     pub frequency: u32, // [0..=20000]Hz
     pub gain: f32,      // [-12.0..=12.0]dB
     pub q: f32,         // [0.1..=10.0]
@@ -357,19 +358,19 @@ impl BeacnAudioState {
             Message::Equaliser(e) => match e {
                 MicEqualiser::Mode(mode) => self.equaliser.mode = mode,
                 MicEqualiser::Type(mode, band, value) => {
-                    self.equaliser.bands[mode][band].band_type = value
+                    self.equaliser.bands[mode][band.into()].band_type = value.into()
                 }
                 MicEqualiser::Gain(mode, band, value) => {
-                    self.equaliser.bands[mode][band].gain = value.to_inner()
+                    self.equaliser.bands[mode][band.into()].gain = value.to_inner()
                 }
                 MicEqualiser::Frequency(mode, band, value) => {
-                    self.equaliser.bands[mode][band].frequency = value.to_inner() as u32
+                    self.equaliser.bands[mode][band.into()].frequency = value.to_inner() as u32
                 }
                 MicEqualiser::Q(mode, band, value) => {
-                    self.equaliser.bands[mode][band].q = value.to_inner()
+                    self.equaliser.bands[mode][band.into()].q = value.to_inner()
                 }
                 MicEqualiser::Enabled(mode, band, value) => {
-                    self.equaliser.bands[mode][band].enabled = value
+                    self.equaliser.bands[mode][band.into()].enabled = value
                 }
                 _ => {}
             },
@@ -459,6 +460,89 @@ impl BeacnAudioState {
                 }
                 _ => {}
             },
+        }
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, Enum, EnumIter, PartialEq)]
+pub(crate) enum EqualiserBand {
+    #[default]
+    Band1,
+    Band2,
+    Band3,
+    Band4,
+    Band5,
+    Band6,
+    Band7,
+    Band8,
+}
+
+impl From<EQBand> for EqualiserBand {
+    fn from(band: EQBand) -> Self {
+        match band {
+            EQBand::Band1 => EqualiserBand::Band1,
+            EQBand::Band2 => EqualiserBand::Band2,
+            EQBand::Band3 => EqualiserBand::Band3,
+            EQBand::Band4 => EqualiserBand::Band4,
+            EQBand::Band5 => EqualiserBand::Band5,
+            EQBand::Band6 => EqualiserBand::Band6,
+            EQBand::Band7 => EqualiserBand::Band7,
+            EQBand::Band8 => EqualiserBand::Band8,
+        }
+    }
+}
+
+impl From<EqualiserBand> for EQBand {
+    fn from(value: EqualiserBand) -> Self {
+        match value {
+            EqualiserBand::Band1 => EQBand::Band1,
+            EqualiserBand::Band2 => EQBand::Band2,
+            EqualiserBand::Band3 => EQBand::Band3,
+            EqualiserBand::Band4 => EQBand::Band4,
+            EqualiserBand::Band5 => EQBand::Band5,
+            EqualiserBand::Band6 => EQBand::Band6,
+            EqualiserBand::Band7 => EQBand::Band7,
+            EqualiserBand::Band8 => EQBand::Band8,
+        }
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, Enum, EnumIter, PartialEq)]
+pub(crate) enum EqualiserBandType {
+    #[default]
+    NotSet,
+    LowPassFilter,
+    HighPassFilter,
+    NotchFilter,
+    BellBand,
+    LowShelf,
+    HighShelf,
+}
+
+impl From<EQBandType> for EqualiserBandType {
+    fn from(value: EQBandType) -> Self {
+        match value {
+            EQBandType::NotSet => EqualiserBandType::NotSet,
+            EQBandType::LowPassFilter => EqualiserBandType::LowPassFilter,
+            EQBandType::HighPassFilter => EqualiserBandType::HighPassFilter,
+            EQBandType::NotchFilter => EqualiserBandType::NotchFilter,
+            EQBandType::BellBand => EqualiserBandType::BellBand,
+            EQBandType::LowShelf => EqualiserBandType::LowShelf,
+            EQBandType::HighShelf => EqualiserBandType::HighShelf,
+        }
+    }
+}
+
+impl From<EqualiserBandType> for EQBandType {
+    fn from(value: EqualiserBandType) -> Self {
+        match value {
+            EqualiserBandType::NotSet => EQBandType::NotSet,
+            EqualiserBandType::LowPassFilter => EQBandType::LowPassFilter,
+            EqualiserBandType::HighPassFilter => EQBandType::HighPassFilter,
+            EqualiserBandType::NotchFilter => EQBandType::NotchFilter,
+            EqualiserBandType::BellBand => EQBandType::BellBand,
+            EqualiserBandType::LowShelf => EQBandType::LowShelf,
+            EqualiserBandType::HighShelf => EQBandType::HighShelf,
         }
     }
 }

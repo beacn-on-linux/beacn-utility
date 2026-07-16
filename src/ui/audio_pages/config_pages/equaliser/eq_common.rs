@@ -1,15 +1,12 @@
-use beacn_lib::audio::messages::equaliser::EQBandType::{
-    HighPassFilter, LowPassFilter, NotchFilter,
-};
-use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType};
 use egui::{Pos2, Rect, Vec2};
 use enum_map::EnumMap;
 
-use crate::ui::states::audio_state::EqualiserBand;
+use crate::ui::states::audio_state::EqualiserBandType::*;
+use crate::ui::states::audio_state::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
 
 /// A full set of equaliser bands, keyed by `EQBand`. Shared type so the
 /// view and the controls layer agree on what they're passing around.
-pub type Bands = EnumMap<EQBand, EqualiserBand>;
+pub type Bands = EnumMap<EqualiserBand, EqualiserBandConfig>;
 
 // The frequency range to be rendered
 pub const MIN_FREQUENCY: u32 = 20;
@@ -27,7 +24,7 @@ pub const EQ_GRAB_THRESHOLD: f32 = 20.0;
 
 /// Whether this band type has a meaningful gain value (as opposed to
 /// filters like High/Low Pass or Notch, which are always drawn at 0dB).
-pub fn band_type_has_gain(band_type: EQBandType) -> bool {
+pub fn band_type_has_gain(band_type: EqualiserBandType) -> bool {
     !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
 }
 
@@ -76,7 +73,7 @@ impl EqGeometry {
     /// `EQ_GRAB_THRESHOLD` pixels. This is what click/drag/scroll handling
     /// in the controls layer is built on top of; the view itself never
     /// calls this.
-    pub fn hit_test(plot_rect: Rect, pointer: Pos2, bands: &Bands) -> Option<EQBand> {
+    pub fn hit_test(plot_rect: Rect, pointer: Pos2, bands: &Bands) -> Option<EqualiserBand> {
         let mut closest_dist = f32::MAX;
         let mut closest_band = None;
 
