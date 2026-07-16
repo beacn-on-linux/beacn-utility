@@ -1,2 +1,4 @@
-mod equaliser_util;
-pub(crate) mod parametric_eq;
+pub(crate) mod eq_common;
+pub(crate) mod eq_controls;
+pub(crate) mod eq_drawer;
+pub(crate) mod eq_util;

@@ -1,7 +1,7 @@
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::audio_pages::config_pages::compressor::CompressorPage;
-use crate::ui::audio_pages::config_pages::equaliser::parametric_eq::ParametricEq;
+use crate::ui::audio_pages::config_pages::equaliser::eq_controls::ParametricEq;
 use crate::ui::audio_pages::config_pages::expander::ExpanderPage;
 use crate::ui::audio_pages::config_pages::headphones::HeadphonesPage;
 use crate::ui::audio_pages::config_pages::mic_setup::MicSetupPage;
