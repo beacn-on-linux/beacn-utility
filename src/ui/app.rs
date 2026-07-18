@@ -50,7 +50,7 @@ impl BeacnMicApp {
                 Box::new(audio_pages::lighting::LightingPage::new()),
                 Box::new(audio_pages::link::Linked::new()),
                 Box::new(audio_pages::about::About::new()),
-                Box::new(audio_pages::hp_equaliser::HeadphoneEqualiser::new()),
+                //Box::new(audio_pages::hp_equaliser::HeadphoneEqualiser::new()),
                 Box::new(audio_pages::error::ErrorPage::new()),
             ],
 
