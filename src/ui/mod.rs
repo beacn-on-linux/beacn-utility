@@ -19,6 +19,10 @@ pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| 
         include_image!("../../resources/ui/icons/microphone.svg"),
     );
     map.insert(
+        "headphones",
+        include_image!("../../resources/ui/icons/headphones.svg"),
+    );
+    map.insert(
         "bulb",
         include_image!("../../resources/ui/icons/lightbulb.svg"),
     );
