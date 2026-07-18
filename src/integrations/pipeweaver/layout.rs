@@ -25,9 +25,9 @@ use xdg::BaseDirectories;
 // First thing we need, is to device the font used for rendering on the screen
 #[allow(unused)]
 pub(crate) static FONT: &[u8] =
-    include_bytes!("../../../resources/fonts/rubik/static/Rubik-SemiBold.ttf");
+    include_bytes!("../../../resources/fonts/noto/NotoSans-SemiBold.ttf");
 pub(crate) static FONT_BOLD: &[u8] =
-    include_bytes!("../../../resources/fonts/rubik/static/Rubik-Bold.ttf");
+    include_bytes!("../../../resources/fonts/noto/NotoSans-Bold.ttf");
 
 pub(crate) static HEADER: &[u8] = include_bytes!("../../../resources/screens/header.jpg");
 
