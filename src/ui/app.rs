@@ -11,7 +11,7 @@ use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
-use egui::{Context, Ui};
+use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
 use log::debug;
 use std::collections::HashMap;
 
@@ -50,6 +50,7 @@ impl BeacnMicApp {
                 Box::new(audio_pages::lighting::LightingPage::new()),
                 Box::new(audio_pages::link::Linked::new()),
                 Box::new(audio_pages::about::About::new()),
+                Box::new(audio_pages::hp_equaliser::HeadphoneEqualiser::new()),
                 Box::new(audio_pages::error::ErrorPage::new()),
             ],
 
@@ -71,6 +72,7 @@ impl BeacnMicApp {
 impl App for BeacnMicApp {
     fn with_context(&mut self, ctx: &Context) {
         egui_extras::install_image_loaders(ctx);
+        setup_fonts(&ctx);
     }
 
     fn update(&mut self, ui: &mut Ui) {
@@ -369,4 +371,66 @@ impl BeacnMicApp {
             }
         }
     }
+}
+
+pub fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::default();
+
+    fonts.font_data.insert(
+        "NotoSans-Regular".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-Regular.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+    fonts.font_data.insert(
+        "NotoSans-Bold".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-Bold.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+    fonts.font_data.insert(
+        "NotoSans-SemiBold".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-SemiBold.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+
+    fonts
+        .families
+        .entry(FontFamily::Proportional)
+        .or_default()
+        .insert(0, "NotoSans-Regular".to_owned());
+
+    fonts.families.insert(
+        FontFamily::Name("NotoSans-Bold".into()),
+        vec!["NotoSans-Bold".to_owned()],
+    );
+    fonts.families.insert(
+        FontFamily::Name("NotoSans-SemiBold".into()),
+        vec!["NotoSans-SemiBold".to_owned()],
+    );
+
+    ctx.set_fonts(fonts);
+}
+
+pub fn bold_text(text: impl Into<String>, size: f32) -> RichText {
+    RichText::new(text).font(FontId::new(
+        size,
+        FontFamily::Name("NotoSans-SemiBold".into()),
+    ))
 }
