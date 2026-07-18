@@ -134,7 +134,9 @@ impl MicEqualiser {
         }
 
         let desired_size = vec2(ui.available_width(), ui.available_height() - 20.0);
-        let output = self.view.ui(ui, desired_size, &bands, self.active_band);
+        let output = self
+            .view
+            .ui(ui, desired_size, &bands, self.active_band, None);
         let response = output.response;
 
         #[allow(clippy::collapsible_if)]

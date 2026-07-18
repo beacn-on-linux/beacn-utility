@@ -114,6 +114,7 @@ impl EqDrawView {
         desired_size: Vec2,
         bands: &Bands,
         active_band: Option<EqualiserBand>,
+        border_colour: Option<Color32>,
     ) -> EqViewOutput {
         let (rect, response) = ui.allocate_exact_size(desired_size, Sense::click_and_drag());
 
@@ -125,7 +126,7 @@ impl EqDrawView {
         let plot_rect = EqGeometry::plot_rect(rect);
 
         if ui.is_rect_visible(rect) {
-            self.draw_widget(ui, rect, plot_rect, bands, active_band);
+            self.draw_widget(ui, rect, plot_rect, bands, active_band, border_colour);
         }
 
         EqViewOutput {
@@ -142,9 +143,10 @@ impl EqDrawView {
         plot_rect: Rect,
         bands: &Bands,
         active_band: Option<EqualiserBand>,
+        border_colour: Option<Color32>,
     ) {
         // Draw grid and axes
-        self.draw_grid(ui.painter(), rect, plot_rect);
+        self.draw_grid(ui.painter(), rect, plot_rect, border_colour);
 
         // Draw the background for the individual bands
         for (index, band) in EqualiserBand::iter().enumerate() {
@@ -163,12 +165,20 @@ impl EqDrawView {
     }
 
     /// Draw the grid and axis labels
-    fn draw_grid(&self, painter: &egui::Painter, rect: Rect, plot_rect: Rect) {
+    fn draw_grid(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        plot_rect: Rect,
+        border_colour: Option<Color32>,
+    ) {
+        let axis_stroke_colour = border_colour.unwrap_or(Color32::from_rgb(170, 170, 170));
+
         let background = Color32::from_rgb(34, 34, 34);
         let grid_color = Color32::from_rgb(102, 102, 102);
         let text_color = Color32::from_rgb(170, 170, 170);
         let grid_stroke = Stroke::new(1.0, grid_color);
-        let axis_stroke = Stroke::new(2.0, Color32::from_rgb(170, 170, 170));
+        let axis_stroke = Stroke::new(2.0, axis_stroke_colour);
         let freq_ticks = [30, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 16000];
 
         painter.rect(
@@ -178,6 +188,7 @@ impl EqDrawView {
             axis_stroke,
             StrokeKind::Middle,
         );
+
         for &freq in &freq_ticks {
             let x = EqGeometry::freq_to_x(freq, plot_rect);
 
