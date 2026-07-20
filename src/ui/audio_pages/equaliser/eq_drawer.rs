@@ -420,18 +420,6 @@ impl EqDrawView {
     fn draw_spectrum(&self, painter: &egui::Painter, plot_rect: Rect, bins: &[f32]) {
         let colour = Color32::from_rgba_unmultiplied(180, 180, 180, 255);
 
-        // Map from raw dB range to the graph's gain range
-        let spectrum_floor = -60.0_f32;
-        let spectrum_ceil = 0.0_f32;
-
-        // 1. find peak (ignore -inf safely)
-        let peak = bins
-            .iter()
-            .copied()
-            .filter(|v| v.is_finite())
-            .fold(f32::NEG_INFINITY, f32::max);
-
-        // 2. convert to relative scale (peak = 0 dB)
         let points: Vec<Pos2> = bins
             .iter()
             .enumerate()
