@@ -2,6 +2,7 @@ use crate::ui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui::audio_pages::equaliser::eq_util::{BiquadCoefficient, EQUtil};
+use crate::ui::audio_pages::pipewire::spectrum::SpectrumData;
 use crate::ui::states::audio_state::EqualiserBandType::*;
 use crate::ui::states::audio_state::{EqualiserBand, EqualiserBandConfig};
 use egui::{
@@ -9,7 +10,7 @@ use egui::{
     Ui, Vec2, pos2, vec2,
 };
 use enum_map::EnumMap;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Mutex};
 use strum::IntoEnumIterator;
 use wide::f32x8;
 
@@ -63,7 +64,10 @@ pub struct EqDrawView {
     band_freq_response: EnumMap<EqualiserBand, Option<Vec<f32>>>,
     band_mesh: EnumMap<EqualiserBand, Option<Arc<Mesh>>>,
 
-    // Cache of the main curve, and rect size (used to know when to
+    // Spectrum data
+    spectrum: Option<Arc<Mutex<SpectrumData>>>,
+
+    // Cache of the main curve and rect size (used to know when to
     // invalidate the caches above on resize)
     curve_mesh: Option<Arc<Mesh>>,
     rect: Rect,
@@ -74,9 +78,14 @@ impl EqDrawView {
         Self {
             band_freq_response: Default::default(),
             band_mesh: Default::default(),
+            spectrum: None,
             curve_mesh: None,
             rect: Rect::NOTHING,
         }
+    }
+
+    pub fn set_spectrum(&mut self, spectrum: Arc<Mutex<SpectrumData>>) {
+        self.spectrum.replace(spectrum);
     }
 
     /// Full reset — use when switching to a completely different device /
@@ -86,6 +95,7 @@ impl EqDrawView {
         self.band_mesh = Default::default();
         self.curve_mesh = None;
         self.rect = Rect::NOTHING;
+        self.spectrum = None;
     }
 
     /// Drop cached geometry for every band (e.g. after switching between
@@ -162,6 +172,13 @@ impl EqDrawView {
 
         // Draw band control points
         self.draw_band_points(ui.painter(), plot_rect, bands, active_band);
+
+        // Draw spectrum data
+        if let Some(handle) = &self.spectrum {
+            if let Ok(data) = handle.try_lock() {
+                self.draw_spectrum(ui.painter(), plot_rect, &data.bins.clone());
+            }
+        }
     }
 
     /// Draw the grid and axis labels
@@ -397,6 +414,57 @@ impl EqDrawView {
         let mesh = Arc::new(mesh);
         self.band_mesh[band] = Some(mesh.clone());
 
+        painter.add(Shape::mesh(mesh));
+    }
+
+    fn draw_spectrum(&self, painter: &egui::Painter, plot_rect: Rect, bins: &[f32]) {
+        let colour = Color32::from_rgba_unmultiplied(180, 180, 180, 255);
+
+        // Map from raw dB range to the graph's gain range
+        let spectrum_floor = -60.0_f32;
+        let spectrum_ceil = 0.0_f32;
+
+        // 1. find peak (ignore -inf safely)
+        let peak = bins
+            .iter()
+            .copied()
+            .filter(|v| v.is_finite())
+            .fold(f32::NEG_INFINITY, f32::max);
+
+        // 2. convert to relative scale (peak = 0 dB)
+        let points: Vec<Pos2> = bins
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &db)| {
+                if !db.is_finite() {
+                    return None;
+                }
+
+                let x = plot_rect.min.x
+                    + (i as f32 / (EQ_CURVE_RESOLUTION - 1) as f32) * plot_rect.width();
+
+                let spectrum_floor = -120.0_f32;
+                let spectrum_ceil = 0.0_f32;
+
+                let db = db.clamp(spectrum_floor, spectrum_ceil);
+
+                // normalize 0..1
+                let t = (db - spectrum_floor) / (spectrum_ceil - spectrum_floor);
+
+                // map into EQ display range (-12..+12)
+                let mapped_db = MIN_GAIN + t * (MAX_GAIN - MIN_GAIN);
+
+                let y = EqGeometry::db_to_y(mapped_db, plot_rect);
+
+                Some(pos2(x, y))
+            })
+            .collect();
+
+        if points.len() < 2 {
+            return;
+        }
+
+        let mesh = Self::build_curve_mesh(&points, 1.5, colour);
         painter.add(Shape::mesh(mesh));
     }
 
