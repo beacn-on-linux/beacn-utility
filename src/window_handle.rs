@@ -27,7 +27,7 @@ use glutin::prelude::GlSurface;
 use ini::Ini;
 use log::{debug, warn};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{env, fs};
 
 const FRAME_TIME: std::time::Duration = std::time::Duration::from_micros(16_667);
@@ -43,6 +43,7 @@ pub enum UserEvent {
     FocusWindow,
     DeviceMessage(DeviceMessage),
     SetAutoStart(bool),
+    SetMinimumRefreshRate(bool),
     Quit,
 }
 
@@ -77,6 +78,9 @@ pub struct WindowRunner {
     // Redraw Scheduling
     last_render: Option<Instant>,
     redraw_pending: bool,
+
+    // Used for forcing a min 30fps repaint
+    force_refresh_rate: Option<Duration>,
 }
 
 struct GlowRenderer {
@@ -111,6 +115,8 @@ impl WindowRunner {
 
             last_render: None,
             redraw_pending: false,
+
+            force_refresh_rate: None,
         }
     }
 
@@ -136,7 +142,7 @@ impl WindowRunner {
         })
     }
 
-    fn render_frame(&mut self) {
+    fn render_frame(&mut self, event_loop: &ActiveEventLoop) {
         self.last_render = Some(Instant::now());
 
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
@@ -158,6 +164,10 @@ impl WindowRunner {
                 .gl_surface
                 .swap_buffers(&renderer.gl_context)
                 .unwrap();
+
+            if self.force_refresh_rate.is_some() {
+                self.schedule_redraw(event_loop);
+            }
         }
     }
 
@@ -222,9 +232,11 @@ impl WindowRunner {
         }
         self.redraw_pending = true;
 
+        let frame_time = self.force_refresh_rate.unwrap_or(FRAME_TIME);
+
         let next_frame = self
             .last_render
-            .map(|t| t + FRAME_TIME)
+            .map(|t| t + frame_time)
             .filter(|&deadline| deadline > Instant::now()) // discard stale deadlines
             .unwrap_or_else(|| Instant::now() + FRAME_TIME); // always wait at least one frame
 
@@ -365,6 +377,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     }
                 }
             }
+            UserEvent::SetMinimumRefreshRate(enabled) => {
+                self.force_refresh_rate = enabled.then_some(Duration::from_secs_f64(1.0 / 30.0));
+                if enabled {
+                    self.schedule_redraw(event_loop);
+                }
+            }
             UserEvent::Quit => {
                 debug!("Quit Event Received, closing window");
                 self.destroy_window();
@@ -404,7 +422,7 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
 
             match event {
                 WindowEvent::RedrawRequested => {
-                    self.render_frame();
+                    self.render_frame(event_loop);
                 }
                 WindowEvent::CloseRequested => {
                     if self.app.should_close() {
