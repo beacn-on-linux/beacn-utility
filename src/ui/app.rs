@@ -12,7 +12,6 @@ use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
 use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
-use log::debug;
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
@@ -245,7 +244,6 @@ impl App for BeacnMicApp {
 impl BeacnMicApp {
     fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
         if self.device_list.is_empty() || self.active_device.is_none() {
-            debug!("NOT DRAWING");
             return;
         }
 
@@ -424,27 +422,19 @@ impl BeacnMicApp {
     }
 
     fn open_current_page(&mut self, ctx: &Context) {
-        debug!(
-            "open_current_page: settings={}, mixer={}, active={:?}, page={}",
-            self.settings_active, self.mixer_active, self.active_device, self.active_page,
-        );
-
         if self.settings_active || self.mixer_active {
             return;
         }
 
         let Some(device) = &self.active_device else {
-            debug!("Here?");
             return;
         };
 
         match device.device_type {
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                debug!("Calling 1");
                 self.audio_pages[self.active_page].on_page_open(ctx);
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                debug!("Calling 2");
                 self.control_pages[self.active_page].on_page_open(ctx);
             }
         }
