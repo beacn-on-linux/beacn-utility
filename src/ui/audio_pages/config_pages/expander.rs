@@ -103,7 +103,7 @@ impl ConfigPage for ExpanderPage {
 
                         ui.add_space(5.);
 
-                        let s = get_slider(ui, "Attack", "ms", &mut values.attack, 0..=2000);
+                        let s = get_slider(ui, "Attack", "ms", &mut values.attack, 1..=2000);
                         if s.changed() {
                             let value = TimeFrame(values.attack as f32);
                             let message = Message::Expander(Expander::Attack(Advanced, value));
@@ -112,7 +112,7 @@ impl ConfigPage for ExpanderPage {
 
                         ui.add_space(5.);
 
-                        let s = get_slider(ui, "Release", "ms", &mut values.release, 0..=2000);
+                        let s = get_slider(ui, "Release", "ms", &mut values.release, 1..=2000);
                         if s.changed() {
                             let value = TimeFrame(values.release as f32);
                             let message = Message::Expander(Expander::Release(Advanced, value));
