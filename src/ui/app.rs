@@ -251,7 +251,7 @@ impl BeacnMicApp {
                     _ => ui.label("ERROR"),
                 };
 
-                let audio_pages = self.audio_pages.iter().enumerate();
+                let audio_pages = self.audio_pages.iter_mut().enumerate();
                 for (index, page) in audio_pages {
                     let selected = *active_device == device
                         && self.active_page == index
@@ -268,8 +268,15 @@ impl BeacnMicApp {
                     {
                         self.settings_active = false;
                         self.mixer_active = false;
-                        self.active_device = Some(device.clone());
-                        self.active_page = index;
+
+                        if self.active_device != Some(device.clone()) || self.active_page != index {
+                            page.on_page_close();
+
+                            self.active_device = Some(device.clone());
+                            self.active_page = index;
+
+                            page.on_page_open();
+                        }
                     }
                 }
                 ui.add_space(5.0);
