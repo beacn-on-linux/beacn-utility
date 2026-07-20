@@ -1,6 +1,6 @@
 use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::manager::DeviceType;
-use egui::Ui;
+use egui::{Context, Ui};
 
 pub(crate) mod about;
 pub(crate) mod config;
@@ -27,8 +27,8 @@ pub trait AudioPage {
 
     fn on_close(&mut self) {}
 
-    fn on_page_open(&mut self) {}
-    fn on_page_close(&mut self) {}
+    fn on_page_open(&mut self, ctx: &Context) {}
+    fn on_page_close(&mut self, ctx: &Context) {}
 
     fn is_studio_with_link(&self, state: &BeacnAudioState) -> bool {
         state.device_definition.device_type == DeviceType::BeacnStudio

@@ -32,6 +32,9 @@ pub struct BeacnMicApp {
     mixer_active: bool,
     settings_active: bool,
 
+    // Happens on the initial load when selecting default pages
+    needs_page_open: bool,
+
     // Toast state for Pipeweaver button
     pipeweaver_toast_timer: Option<std::time::Instant>,
 }
@@ -64,6 +67,9 @@ impl BeacnMicApp {
 
             mixer_active: false,
             settings_active: false,
+
+            needs_page_open: false,
+
             pipeweaver_toast_timer: None,
         }
     }
@@ -90,6 +96,12 @@ impl App for BeacnMicApp {
                 });
             });
             return;
+        }
+
+        // We need to trigger the page open if we need one
+        if self.needs_page_open {
+            self.open_current_page(ui.ctx());
+            self.needs_page_open = false;
         }
 
         egui::Panel::left("left_panel")
@@ -179,6 +191,7 @@ impl App for BeacnMicApp {
 
                     if self.active_device.is_none() {
                         self.active_device = Some(definition);
+                        self.needs_page_open = true;
                     }
                 }
                 DeviceArriveMessage::Control(definition, sender) => {
@@ -251,6 +264,7 @@ impl BeacnMicApp {
                     _ => ui.label("ERROR"),
                 };
 
+                let mut action = None;
                 let audio_pages = self.audio_pages.iter_mut().enumerate();
                 for (index, page) in audio_pages {
                     let selected = *active_device == device
@@ -266,19 +280,16 @@ impl BeacnMicApp {
                         && (!page.is_link_page() || page.is_studio_with_link(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
-                        self.settings_active = false;
-                        self.mixer_active = false;
-
                         if self.active_device != Some(device.clone()) || self.active_page != index {
-                            page.on_page_close();
-
-                            self.active_device = Some(device.clone());
-                            self.active_page = index;
-
-                            page.on_page_open();
+                            action = Some((device.clone(), index));
                         }
                     }
                 }
+
+                if let Some((device, index)) = action {
+                    self.change_page(ui.ctx(), device, index);
+                }
+
                 ui.add_space(5.0);
                 ui.separator();
             }
@@ -294,6 +305,7 @@ impl BeacnMicApp {
                     _ => ui.label("ERROR"),
                 };
 
+                let mut action = None;
                 let control_pages = self.control_pages.iter().enumerate();
                 for (index, page) in control_pages {
                     let selected = *active_device == device
@@ -308,12 +320,16 @@ impl BeacnMicApp {
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
-                        self.mixer_active = false;
-                        self.settings_active = false;
-                        self.active_device = Some(device.clone());
-                        self.active_page = index;
+                        if self.active_device != Some(device.clone()) || self.active_page != index {
+                            action = Some((device.clone(), index));
+                        }
                     }
                 }
+
+                if let Some((device, index)) = action {
+                    self.change_page(ui.ctx(), device, index);
+                }
+
                 ui.add_space(5.0);
                 ui.separator();
             }
@@ -375,6 +391,64 @@ impl BeacnMicApp {
                 egui::CentralPanel::default().show(ui, |ui| {
                     self.control_pages[self.active_page].ui(ui, settings);
                 });
+            }
+        }
+    }
+
+    fn change_page(&mut self, ctx: &Context, device: DeviceDefinition, page: usize) {
+        self.close_current_page(ctx);
+
+        // Update state
+        self.active_device = Some(device);
+        self.active_page = page;
+        self.settings_active = false;
+        self.mixer_active = false;
+
+        self.open_current_page(ctx);
+    }
+
+    fn close_current_page(&mut self, ctx: &Context) {
+        if self.settings_active || self.mixer_active {
+            return;
+        }
+
+        let Some(device) = &self.active_device else {
+            return;
+        };
+
+        match device.device_type {
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                self.audio_pages[self.active_page].on_page_close(ctx);
+            }
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                self.control_pages[self.active_page].on_page_close(ctx);
+            }
+        }
+    }
+
+    fn open_current_page(&mut self, ctx: &Context) {
+        debug!(
+            "open_current_page: settings={}, mixer={}, active={:?}, page={}",
+            self.settings_active, self.mixer_active, self.active_device, self.active_page,
+        );
+
+        if self.settings_active || self.mixer_active {
+            return;
+        }
+
+        let Some(device) = &self.active_device else {
+            debug!("Here?");
+            return;
+        };
+
+        match device.device_type {
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                debug!("Calling 1");
+                self.audio_pages[self.active_page].on_page_open(ctx);
+            }
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                debug!("Calling 2");
+                self.control_pages[self.active_page].on_page_open(ctx);
             }
         }
     }
