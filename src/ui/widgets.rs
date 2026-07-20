@@ -197,6 +197,7 @@ where
 }
 
 /// Create a slider which has a trail moving from a fixed position
+#[allow(unused)]
 pub fn zero_trail_slider(
     ui: &mut Ui,
     value: &mut i32,

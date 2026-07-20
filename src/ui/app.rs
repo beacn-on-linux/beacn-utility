@@ -53,7 +53,6 @@ impl BeacnMicApp {
                 Box::new(audio_pages::lighting::LightingPage::new()),
                 Box::new(audio_pages::link::Linked::new()),
                 Box::new(audio_pages::about::About::new()),
-                //Box::new(audio_pages::hp_equaliser::HeadphoneEqualiser::new()),
                 Box::new(audio_pages::error::ErrorPage::new()),
             ],
 
@@ -78,7 +77,7 @@ impl BeacnMicApp {
 impl App for BeacnMicApp {
     fn with_context(&mut self, ctx: &Context) {
         egui_extras::install_image_loaders(ctx);
-        setup_fonts(&ctx);
+        setup_fonts(ctx);
     }
 
     fn update(&mut self, ui: &mut Ui) {
@@ -279,10 +278,9 @@ impl BeacnMicApp {
                     if page.show_on_error() == error
                         && (page.should_show(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
+                        && (self.active_device != Some(device.clone()) || self.active_page != index)
                     {
-                        if self.active_device != Some(device.clone()) || self.active_page != index {
-                            action = Some((device.clone(), index));
-                        }
+                        action = Some((device.clone(), index));
                     }
                 }
 
@@ -319,10 +317,9 @@ impl BeacnMicApp {
                     );
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
+                        && (self.active_device != Some(device.clone()) || self.active_page != index)
                     {
-                        if self.active_device != Some(device.clone()) || self.active_page != index {
-                            action = Some((device.clone(), index));
-                        }
+                        action = Some((device.clone(), index));
                     }
                 }
 
@@ -509,6 +506,7 @@ pub fn setup_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+#[allow(unused)]
 pub fn bold_text(text: impl Into<String>, size: f32) -> RichText {
     RichText::new(text).font(FontId::new(
         size,

@@ -38,6 +38,7 @@ const EVENT_PROXY: &str = "event_proxy";
 
 // These are events we can send into winit to trigger an update
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub enum UserEvent {
     RequestRedraw,
     FocusWindow,

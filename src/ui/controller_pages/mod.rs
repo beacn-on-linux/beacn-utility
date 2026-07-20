@@ -9,8 +9,8 @@ pub trait ControllerPage {
     fn show_on_error(&self) -> bool;
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnControllerState);
 
-    fn on_page_open(&mut self, ctx: &Context) {}
-    fn on_page_close(&mut self, ctx: &Context) {}
+    fn on_page_open(&mut self, _: &Context) {}
+    fn on_page_close(&mut self, _: &Context) {}
 
     fn on_close(&mut self) {}
 }

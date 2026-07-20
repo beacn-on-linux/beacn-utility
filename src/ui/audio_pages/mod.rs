@@ -1,12 +1,10 @@
 use crate::ui::states::audio_state::BeacnAudioState;
-use beacn_lib::manager::DeviceType;
 use egui::{Context, Ui};
 
 pub(crate) mod about;
 pub(crate) mod config;
 pub(crate) mod equaliser;
 pub(crate) mod error;
-pub(crate) mod hp_equaliser;
 pub(crate) mod lighting;
 pub(crate) mod link;
 
