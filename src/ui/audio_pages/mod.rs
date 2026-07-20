@@ -1,3 +1,4 @@
+use crate::device_manager::DeviceDefinition;
 use crate::ui::states::audio_state::BeacnAudioState;
 use egui::{Context, Ui};
 
@@ -9,6 +10,7 @@ pub(crate) mod lighting;
 pub(crate) mod link;
 
 mod config_pages;
+pub mod pipewire;
 
 pub trait AudioPage {
     fn icon(&self) -> &'static str;
@@ -23,6 +25,6 @@ pub trait AudioPage {
 
     fn on_close(&mut self) {}
 
-    fn on_page_open(&mut self, _: &Context) {}
-    fn on_page_close(&mut self, _: &Context) {}
+    fn on_page_open(&mut self, _: &Context, _: &DeviceDefinition) {}
+    fn on_page_close(&mut self, _: &Context, _: &DeviceDefinition) {}
 }

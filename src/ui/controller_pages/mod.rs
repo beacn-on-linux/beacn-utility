@@ -1,6 +1,7 @@
 pub(crate) mod about;
 pub(crate) mod error;
 
+use crate::device_manager::DeviceDefinition;
 use crate::ui::states::controller_state::BeacnControllerState;
 use egui::{Context, Ui};
 
@@ -9,8 +10,8 @@ pub trait ControllerPage {
     fn show_on_error(&self) -> bool;
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnControllerState);
 
-    fn on_page_open(&mut self, _: &Context) {}
-    fn on_page_close(&mut self, _: &Context) {}
+    fn on_page_open(&mut self, _: &Context, _: &DeviceDefinition) {}
+    fn on_page_close(&mut self, _: &Context, _: &DeviceDefinition) {}
 
     fn on_close(&mut self) {}
 }

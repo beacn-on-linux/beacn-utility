@@ -413,10 +413,10 @@ impl BeacnMicApp {
 
         match device.device_type {
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                self.audio_pages[self.active_page].on_page_close(ctx);
+                self.audio_pages[self.active_page].on_page_close(ctx, device);
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                self.control_pages[self.active_page].on_page_close(ctx);
+                self.control_pages[self.active_page].on_page_close(ctx, device);
             }
         }
     }
@@ -432,10 +432,10 @@ impl BeacnMicApp {
 
         match device.device_type {
             DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                self.audio_pages[self.active_page].on_page_open(ctx);
+                self.audio_pages[self.active_page].on_page_open(ctx, device);
             }
             DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                self.control_pages[self.active_page].on_page_open(ctx);
+                self.control_pages[self.active_page].on_page_open(ctx, device);
             }
         }
     }
