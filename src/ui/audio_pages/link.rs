@@ -1,6 +1,7 @@
 use crate::ui::audio_pages::AudioPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::LinkChannel;
+use beacn_lib::manager::DeviceType;
 use egui::{ComboBox, Ui};
 use strum::IntoEnumIterator;
 
@@ -17,8 +18,9 @@ impl AudioPage for Linked {
         "left_right"
     }
 
-    fn is_link_page(&self) -> bool {
-        true
+    fn should_show(&self, state: &BeacnAudioState) -> bool {
+        state.device_definition.device_type == DeviceType::BeacnStudio
+            && state.headphones.studio_driverless == Some(false)
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {

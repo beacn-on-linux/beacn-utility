@@ -17,21 +17,14 @@ pub trait AudioPage {
     fn show_on_error(&self) -> bool {
         false
     }
-    fn is_link_page(&self) -> bool {
-        false
-    }
-    fn should_show(&self, state: &BeacnAudioState) -> bool {
+
+    fn should_show(&self, _: &BeacnAudioState) -> bool {
         true
     }
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
 
     fn on_close(&mut self) {}
 
-    fn on_page_open(&mut self, ctx: &Context) {}
-    fn on_page_close(&mut self, ctx: &Context) {}
-
-    fn is_studio_with_link(&self, state: &BeacnAudioState) -> bool {
-        state.device_definition.device_type == DeviceType::BeacnStudio
-            && state.headphones.studio_driverless == Some(false)
-    }
+    fn on_page_open(&mut self, _: &Context) {}
+    fn on_page_close(&mut self, _: &Context) {}
 }

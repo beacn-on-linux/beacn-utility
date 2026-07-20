@@ -277,7 +277,7 @@ impl BeacnMicApp {
                     );
 
                     if page.show_on_error() == error
-                        && (!page.is_link_page() || page.is_studio_with_link(device_state))
+                        && (page.should_show(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
                     {
                         if self.active_device != Some(device.clone()) || self.active_page != index {
