@@ -77,6 +77,11 @@ impl App for BeacnMicApp {
     fn with_context(&mut self, ctx: &Context) {
         egui_extras::install_image_loaders(ctx);
         setup_fonts(ctx);
+
+        // We may need to trigger a page open here if we have everything defined.
+        if self.active_device.is_some() {
+            self.open_current_page(ctx);
+        }
     }
 
     fn update(&mut self, ui: &mut Ui) {
