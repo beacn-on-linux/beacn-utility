@@ -80,6 +80,10 @@ ulid = "1.2.1"
 directories = "6.0.0"
 rayon = "1.12.0"
 
+# Frequency Response / FFT stuff
+rustfft = "6.4.1"
+num-complex = "0.4.6"
+
 # WINDOWS: Useful primarily for testing and comparison
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1.1.0"
