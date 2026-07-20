@@ -33,7 +33,7 @@ wide = "1.5.0"
 
 # UI Framework and Window Management
 egui = "0.35.0"
-egui_extras = { version = "0.35.0", features = ["svg"] }
+egui_extras = { version = "0.35.0", features = ["svg", "image"] }
 egui-winit = "0.35.0"
 egui_glow = "0.35.0"
 glutin = "0.32.3"
