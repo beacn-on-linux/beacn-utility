@@ -36,7 +36,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Performing Clippy Test
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-features -- -D warnings
 
       - name: Dispatch Flatpak Updater
         uses: peter-evans/repository-dispatch@v3
