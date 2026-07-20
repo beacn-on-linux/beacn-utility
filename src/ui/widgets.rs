@@ -167,8 +167,6 @@ where
         drag = drag.fixed_decimals(1);
     }
 
-    // let drag_response = ui.add_sized([75.0, 20.0], drag);
-    // drag_response.changed()
     drag
 }
 
@@ -196,4 +194,95 @@ where
         ui.add(slider)
     })
     .inner
+}
+
+/// Create a slider which has a trail moving from a fixed position
+#[allow(unused)]
+pub fn zero_trail_slider(
+    ui: &mut Ui,
+    value: &mut i32,
+    range: RangeInclusive<i32>,
+    trail_origin: i32,
+) -> Response {
+    let min = *range.start();
+    let max = *range.end();
+
+    let desired_size = egui::vec2(ui.spacing().slider_width, ui.spacing().interact_size.y);
+
+    let (rect, _) = ui.allocate_exact_size(desired_size, egui::Sense::hover());
+
+    let response = ui.put(rect, egui::Slider::new(value, range).show_value(false));
+
+    let current_value = *value;
+
+    // Use the slider response rect, not the allocation rect.
+    let slider_rect = response.rect;
+
+    let y = slider_rect.center().y;
+
+    // Match egui handle sizing.
+    let handle_radius = slider_rect.height() / 2.5;
+
+    let visuals = if response.dragged() {
+        &ui.visuals().widgets.active
+    } else if response.hovered() {
+        &ui.visuals().widgets.hovered
+    } else {
+        &ui.visuals().widgets.inactive
+    };
+
+    let handle_half_width = match ui.visuals().handle_shape {
+        egui::style::HandleShape::Circle => handle_radius,
+
+        egui::style::HandleShape::Rect { aspect_ratio } => handle_radius * aspect_ratio,
+    } + visuals.expansion;
+
+    let travel_left = slider_rect.left() + handle_half_width;
+    let travel_right = slider_rect.right() - handle_half_width;
+
+    let to_x = |v: i32| -> f32 {
+        egui::remap(
+            v as f32,
+            min as f32..=max as f32,
+            travel_left..=travel_right,
+        )
+    };
+
+    let origin_x = to_x(trail_origin);
+    let value_x = to_x(current_value);
+
+    let track_height = ui.spacing().slider_rail_height;
+
+    let trail_rect = egui::Rect::from_min_max(
+        egui::pos2(origin_x.min(value_x), y - track_height * 0.5),
+        egui::pos2(origin_x.max(value_x), y + track_height * 0.5),
+    );
+
+    let handle_left = value_x - handle_half_width;
+    let handle_right = value_x + handle_half_width;
+
+    let painter = ui.painter();
+    let color = ui.visuals().selection.bg_fill;
+
+    if current_value > trail_origin {
+        let clip =
+            egui::Rect::from_min_max(trail_rect.min, egui::pos2(handle_left, trail_rect.max.y));
+
+        if clip.width() > 0.0 {
+            painter
+                .with_clip_rect(clip)
+                .rect_filled(trail_rect, 0.0, color);
+        }
+    } else if current_value < trail_origin {
+        let clip =
+            egui::Rect::from_min_max(egui::pos2(handle_right, trail_rect.min.y), trail_rect.max);
+
+        if clip.width() > 0.0 {
+            painter
+                .with_clip_rect(clip)
+                .rect_filled(trail_rect, 0.0, color);
+        }
+    }
+
+    response
 }

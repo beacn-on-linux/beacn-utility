@@ -11,8 +11,7 @@ use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
 use beacn_lib::crossbeam::channel;
 use beacn_lib::manager::DeviceType;
-use egui::{Context, Ui};
-use log::debug;
+use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
@@ -31,6 +30,9 @@ pub struct BeacnMicApp {
     // We can probably do better here
     mixer_active: bool,
     settings_active: bool,
+
+    // Happens on the initial load when selecting default pages
+    needs_page_open: bool,
 
     // Toast state for Pipeweaver button
     pipeweaver_toast_timer: Option<std::time::Instant>,
@@ -63,6 +65,9 @@ impl BeacnMicApp {
 
             mixer_active: false,
             settings_active: false,
+
+            needs_page_open: false,
+
             pipeweaver_toast_timer: None,
         }
     }
@@ -71,6 +76,7 @@ impl BeacnMicApp {
 impl App for BeacnMicApp {
     fn with_context(&mut self, ctx: &Context) {
         egui_extras::install_image_loaders(ctx);
+        setup_fonts(ctx);
     }
 
     fn update(&mut self, ui: &mut Ui) {
@@ -88,6 +94,12 @@ impl App for BeacnMicApp {
                 });
             });
             return;
+        }
+
+        // We need to trigger the page open if we need one
+        if self.needs_page_open {
+            self.open_current_page(ui.ctx());
+            self.needs_page_open = false;
         }
 
         egui::Panel::left("left_panel")
@@ -177,6 +189,7 @@ impl App for BeacnMicApp {
 
                     if self.active_device.is_none() {
                         self.active_device = Some(definition);
+                        self.needs_page_open = true;
                     }
                 }
                 DeviceArriveMessage::Control(definition, sender) => {
@@ -231,7 +244,6 @@ impl App for BeacnMicApp {
 impl BeacnMicApp {
     fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
         if self.device_list.is_empty() || self.active_device.is_none() {
-            debug!("NOT DRAWING");
             return;
         }
 
@@ -249,7 +261,8 @@ impl BeacnMicApp {
                     _ => ui.label("ERROR"),
                 };
 
-                let audio_pages = self.audio_pages.iter().enumerate();
+                let mut action = None;
+                let audio_pages = self.audio_pages.iter_mut().enumerate();
                 for (index, page) in audio_pages {
                     let selected = *active_device == device
                         && self.active_page == index
@@ -261,15 +274,18 @@ impl BeacnMicApp {
                     );
 
                     if page.show_on_error() == error
-                        && (!page.is_link_page() || page.is_studio_with_link(device_state))
+                        && (page.should_show(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
+                        && (self.active_device != Some(device.clone()) || self.active_page != index)
                     {
-                        self.settings_active = false;
-                        self.mixer_active = false;
-                        self.active_device = Some(device.clone());
-                        self.active_page = index;
+                        action = Some((device.clone(), index));
                     }
                 }
+
+                if let Some((device, index)) = action {
+                    self.change_page(ui.ctx(), device, index);
+                }
+
                 ui.add_space(5.0);
                 ui.separator();
             }
@@ -285,6 +301,7 @@ impl BeacnMicApp {
                     _ => ui.label("ERROR"),
                 };
 
+                let mut action = None;
                 let control_pages = self.control_pages.iter().enumerate();
                 for (index, page) in control_pages {
                     let selected = *active_device == device
@@ -298,13 +315,16 @@ impl BeacnMicApp {
                     );
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
+                        && (self.active_device != Some(device.clone()) || self.active_page != index)
                     {
-                        self.mixer_active = false;
-                        self.settings_active = false;
-                        self.active_device = Some(device.clone());
-                        self.active_page = index;
+                        action = Some((device.clone(), index));
                     }
                 }
+
+                if let Some((device, index)) = action {
+                    self.change_page(ui.ctx(), device, index);
+                }
+
                 ui.add_space(5.0);
                 ui.separator();
             }
@@ -369,4 +389,117 @@ impl BeacnMicApp {
             }
         }
     }
+
+    fn change_page(&mut self, ctx: &Context, device: DeviceDefinition, page: usize) {
+        self.close_current_page(ctx);
+
+        // Update state
+        self.active_device = Some(device);
+        self.active_page = page;
+        self.settings_active = false;
+        self.mixer_active = false;
+
+        self.open_current_page(ctx);
+    }
+
+    fn close_current_page(&mut self, ctx: &Context) {
+        if self.settings_active || self.mixer_active {
+            return;
+        }
+
+        let Some(device) = &self.active_device else {
+            return;
+        };
+
+        match device.device_type {
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                self.audio_pages[self.active_page].on_page_close(ctx);
+            }
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                self.control_pages[self.active_page].on_page_close(ctx);
+            }
+        }
+    }
+
+    fn open_current_page(&mut self, ctx: &Context) {
+        if self.settings_active || self.mixer_active {
+            return;
+        }
+
+        let Some(device) = &self.active_device else {
+            return;
+        };
+
+        match device.device_type {
+            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
+                self.audio_pages[self.active_page].on_page_open(ctx);
+            }
+            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
+                self.control_pages[self.active_page].on_page_open(ctx);
+            }
+        }
+    }
+}
+
+pub fn setup_fonts(ctx: &egui::Context) {
+    let mut fonts = FontDefinitions::default();
+
+    fonts.font_data.insert(
+        "NotoSans-Regular".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-Regular.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+    fonts.font_data.insert(
+        "NotoSans-Bold".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-Bold.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+    fonts.font_data.insert(
+        "NotoSans-SemiBold".to_owned(),
+        FontData::from_static(include_bytes!(
+            "../../resources/fonts/noto/NotoSans-SemiBold.ttf"
+        ))
+        .tweak(FontTweak {
+            scale: 0.95,
+            ..Default::default()
+        })
+        .into(),
+    );
+
+    fonts
+        .families
+        .entry(FontFamily::Proportional)
+        .or_default()
+        .insert(0, "NotoSans-Regular".to_owned());
+
+    fonts.families.insert(
+        FontFamily::Name("NotoSans-Bold".into()),
+        vec!["NotoSans-Bold".to_owned()],
+    );
+    fonts.families.insert(
+        FontFamily::Name("NotoSans-SemiBold".into()),
+        vec!["NotoSans-SemiBold".to_owned()],
+    );
+
+    ctx.set_fonts(fonts);
+}
+
+#[allow(unused)]
+pub fn bold_text(text: impl Into<String>, size: f32) -> RichText {
+    RichText::new(text).font(FontId::new(
+        size,
+        FontFamily::Name("NotoSans-SemiBold".into()),
+    ))
 }

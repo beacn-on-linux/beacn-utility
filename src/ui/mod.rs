@@ -19,6 +19,10 @@ pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| 
         include_image!("../../resources/ui/icons/microphone.svg"),
     );
     map.insert(
+        "headphones",
+        include_image!("../../resources/ui/icons/headphones.svg"),
+    );
+    map.insert(
         "bulb",
         include_image!("../../resources/ui/icons/lightbulb.svg"),
     );
@@ -61,5 +65,16 @@ pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| 
         "pipeweaver",
         include_image!("../../resources/ui/pipeweaver.svg"),
     );
+
+    // Technically not SVGs, but I don't want a new struct..
+    map.insert(
+        "link",
+        include_image!("../../resources/ui/icons/linked.png"),
+    );
+    map.insert(
+        "unlink",
+        include_image!("../../resources/ui/icons/unlinked.png"),
+    );
+
     map
 });
