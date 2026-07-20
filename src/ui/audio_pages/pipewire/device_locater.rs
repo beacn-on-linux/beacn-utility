@@ -74,10 +74,10 @@ fn find_card_number(path: &Path) -> Result<Option<u8>> {
     for entry in fs::read_dir(path)? {
         let entry = entry?;
 
-        if entry.file_type()?.is_dir() {
-            if let Some(card) = find_card_number(&entry.path())? {
-                return Ok(Some(card));
-            }
+        if entry.file_type()?.is_dir()
+            && let Some(card) = find_card_number(&entry.path())?
+        {
+            return Ok(Some(card));
         }
     }
 

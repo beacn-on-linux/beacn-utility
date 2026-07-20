@@ -174,10 +174,10 @@ impl EqDrawView {
         self.draw_band_points(ui.painter(), plot_rect, bands, active_band);
 
         // Draw spectrum data
-        if let Some(handle) = &self.spectrum {
-            if let Ok(data) = handle.try_lock() {
-                self.draw_spectrum(ui.painter(), plot_rect, &data.bins.clone());
-            }
+        if let Some(handle) = &self.spectrum
+            && let Ok(data) = handle.try_lock()
+        {
+            self.draw_spectrum(ui.painter(), plot_rect, &data.bins.clone());
         }
     }
 

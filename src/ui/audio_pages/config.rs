@@ -121,17 +121,15 @@ impl AudioPage for Configuration {
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
-                if node.node_type == PipeWireNodeType::Source {
-                    if node.channels == 4 {
-                        use_node.replace(node);
-                    }
+                if node.node_type == PipeWireNodeType::Source && node.channels == 4 {
+                    use_node.replace(node);
                 }
             }
         }
 
         if let Some(node) = use_node {
             // Ok, we have a usable node, let's fire up a listener..
-            let handler = start_spectrum_analyser(&*node.name, 48000);
+            let handler = start_spectrum_analyser(&node.name, 48000);
 
             // Get the internal Spectrum Data
             let data = handler.data.clone();
