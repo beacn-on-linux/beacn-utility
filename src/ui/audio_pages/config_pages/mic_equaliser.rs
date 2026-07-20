@@ -3,6 +3,7 @@ use crate::ui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui::audio_pages::equaliser::eq_drawer::EqDrawView;
+use crate::ui::audio_pages::pipewire::spectrum::SpectrumData;
 use crate::ui::states::audio_state::EqualiserBandType::*;
 use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand, EqualiserBandType};
 use crate::ui::widgets::draw_draggable;
@@ -12,6 +13,7 @@ use beacn_lib::audio::messages::equaliser::{
 };
 use egui::{Align, Button, Color32, CornerRadius, Image, Layout, Response, Ui, vec2};
 use log::{debug, warn};
+use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 
 // This is basically a replacement for the original drawer. Rather than handling everything,
@@ -40,6 +42,10 @@ impl MicEqualiser {
             active_band: None,
             active_band_drag: None,
         }
+    }
+
+    pub(crate) fn set_spectrum(&mut self, spectrum: Arc<Mutex<SpectrumData>>) {
+        self.view.set_spectrum(spectrum);
     }
 
     pub(crate) fn clear(&mut self) {
