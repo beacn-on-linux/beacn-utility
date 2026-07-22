@@ -281,7 +281,7 @@ impl BeacnMicApp {
                     if page.show_on_error() == error
                         && (page.should_show(device_state))
                         && round_nav_button(ui, page.icon(), selected).clicked()
-                        && (self.active_device != Some(device.clone()) || self.active_page != index)
+                        && !selected
                     {
                         action = Some((device.clone(), index));
                     }
@@ -320,7 +320,7 @@ impl BeacnMicApp {
                     );
                     if page.show_on_error() == error
                         && round_nav_button(ui, page.icon(), selected).clicked()
-                        && (self.active_device != Some(device.clone()) || self.active_page != index)
+                        && !selected
                     {
                         action = Some((device.clone(), index));
                     }
