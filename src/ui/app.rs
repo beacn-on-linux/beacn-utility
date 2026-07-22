@@ -118,6 +118,8 @@ impl App for BeacnMicApp {
                             self.mixer_active = false;
                             self.pipeweaver_toast_timer = Some(std::time::Instant::now());
                         } else {
+                            self.close_current_page(ui.ctx());
+                            self.settings_active = false;
                             self.mixer_active = true;
                             self.pipeweaver_toast_timer = None;
                         }
@@ -151,6 +153,7 @@ impl App for BeacnMicApp {
                     ui.add_space(ui.available_height() - 55.0);
                     ui.separator();
                     if round_nav_button(ui, "gear", self.settings_active).clicked() {
+                        self.close_current_page(ui.ctx());
                         self.mixer_active = false;
                         self.settings_active = true;
                     }
