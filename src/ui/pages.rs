@@ -1,17 +1,32 @@
-use crate::AUTO_START_KEY;
 use crate::window_handle::{UserEvent, send_user_event};
+use crate::{AUTO_START_KEY, VERSION};
 use egui::{Id, RichText, Ui};
 
 pub(crate) fn settings_ui(ui: &mut Ui) {
-    // Get the Auto-start state from the context
+    ui.heading("About Beacn Utility");
+
+    let version = RichText::new("Version: ").strong().size(14.0);
+    let version_value = RichText::new(VERSION).size(14.0);
+
+    ui.add_space(20.0);
+    ui.horizontal(|ui| {
+        ui.label(version);
+        ui.label(version_value)
+    });
+
+    ui.add_space(10.0);
+    ui.separator();
+    ui.add_space(10.0);
+
     let id = Id::new(AUTO_START_KEY);
     let value: Option<Option<bool>> = ui.ctx().memory(|mem| mem.data.get_temp::<Option<bool>>(id));
     if let Some(lookup) = value {
         if let Some(value) = lookup {
+            const LABEL: &str = "Auto-Start the Beacn Utility on Login";
             let mut current = value;
 
             // Change AutoStart settings
-            if ui.checkbox(&mut current, "Auto Start").changed() {
+            if ui.checkbox(&mut current, LABEL).changed() {
                 send_user_event(ui.ctx(), UserEvent::SetAutoStart(current));
             }
         }
