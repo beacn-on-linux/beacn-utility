@@ -421,7 +421,7 @@ impl EqDrawView {
     }
 
     fn draw_spectrum(&self, painter: &egui::Painter, plot_rect: Rect, bins: &[f32]) {
-        let colour = Color32::from_rgba_unmultiplied(180, 180, 180, 255);
+        let colour = Color32::from_rgba_unmultiplied(180, 180, 180, 128);
 
         let points: Vec<Pos2> = bins
             .iter()
@@ -455,7 +455,7 @@ impl EqDrawView {
             return;
         }
 
-        let mesh = Self::build_curve_mesh(&points, 1.5, colour);
+        let mesh = Self::build_curve_mesh(&points, 0.75, colour);
         painter.add(Shape::mesh(mesh));
     }
 
