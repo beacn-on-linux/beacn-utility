@@ -87,6 +87,9 @@ impl EqDrawView {
     pub fn set_spectrum(&mut self, spectrum: Arc<Mutex<SpectrumData>>) {
         self.spectrum.replace(spectrum);
     }
+    pub fn clean_spectrum(&mut self) {
+        self.spectrum = None;
+    }
 
     /// Full reset — use when switching to a completely different device /
     /// context.

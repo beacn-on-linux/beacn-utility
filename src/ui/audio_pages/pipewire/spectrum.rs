@@ -40,6 +40,10 @@ impl SpectrumHandle {
         self.stop_signal.store(true, Ordering::Relaxed);
         self.thread.join().ok();
     }
+
+    pub fn has_stopped(&self) -> bool {
+        self.thread.is_finished()
+    }
 }
 
 pub fn start_spectrum_analyser(node_name: &str, sample_rate: u32) -> SpectrumHandle {

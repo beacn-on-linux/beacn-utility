@@ -50,6 +50,16 @@ impl AudioPage for Configuration {
     }
 
     fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+        // If for any reason the spectrum handler is gone, we need to clean up.
+        if let Some(handler) = self.spectrum_handler.as_mut() {
+            if handler.has_stopped() {
+                self.equaliser.clear_spectrum();
+                self.spectrum_handler = None;
+
+                send_user_event(ui.ctx(), UserEvent::SetMinimumRefreshRate(false));
+            }
+        }
+
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);
@@ -107,6 +117,13 @@ impl AudioPage for Configuration {
         });
     }
 
+    fn on_close(&mut self) {
+        if let Some(handler) = self.spectrum_handler.take() {
+            handler.stop();
+        }
+        self.equaliser.clear();
+    }
+
     fn on_page_open(&mut self, ctx: &Context, device: &DeviceDefinition) {
         if self.spectrum_handler.is_some() {
             // We already have a handler, do nothing.
@@ -147,12 +164,5 @@ impl AudioPage for Configuration {
             handler.stop();
             send_user_event(ctx, UserEvent::SetMinimumRefreshRate(false));
         }
-    }
-
-    fn on_close(&mut self) {
-        if let Some(handler) = self.spectrum_handler.take() {
-            handler.stop();
-        }
-        self.equaliser.clear();
     }
 }

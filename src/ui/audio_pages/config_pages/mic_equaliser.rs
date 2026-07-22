@@ -47,6 +47,9 @@ impl MicEqualiser {
     pub(crate) fn set_spectrum(&mut self, spectrum: Arc<Mutex<SpectrumData>>) {
         self.view.set_spectrum(spectrum);
     }
+    pub(crate) fn clear_spectrum(&mut self) {
+        self.view.clean_spectrum();
+    }
 
     pub(crate) fn clear(&mut self) {
         self.serial = None;
