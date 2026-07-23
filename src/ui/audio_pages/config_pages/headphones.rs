@@ -2,8 +2,8 @@ use crate::ui::audio_pages::config_pages::ConfigPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::draw_range;
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::headphone_equaliser::HPEQType::{Bass, Mids, Treble};
-use beacn_lib::audio::messages::headphone_equaliser::{HPEQValue, HeadphoneEQ};
+use beacn_lib::audio::messages::headphone_eq::HPEQType::{Bass, Mids, Treble};
+use beacn_lib::audio::messages::headphone_eq::{HPEQValue, HeadphoneEQ};
 use beacn_lib::audio::messages::headphones::HeadphoneTypes::{
     HighImpedance, InEarMonitors, LineLevel, NormalPower,
 };

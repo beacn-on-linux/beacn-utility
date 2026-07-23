@@ -5,7 +5,7 @@ use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
 use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
 use beacn_lib::audio::messages::expander::ExpanderMode;
-use beacn_lib::audio::messages::headphone_equaliser::HPEQType;
+use beacn_lib::audio::messages::headphone_eq::HPEQType;
 use beacn_lib::audio::messages::headphones::HeadphoneTypes;
 use beacn_lib::audio::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
@@ -24,7 +24,7 @@ use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
 use beacn_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
 use beacn_lib::audio::messages::exciter::Exciter as MicExciter;
 use beacn_lib::audio::messages::expander::Expander as MicExpander;
-use beacn_lib::audio::messages::headphone_equaliser::HeadphoneEQ as MicHeadphoneEQ;
+use beacn_lib::audio::messages::headphone_eq::HeadphoneEQ as MicHeadphoneEQ;
 use beacn_lib::audio::messages::headphones::Headphones as MicHeadphones;
 use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
 use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
