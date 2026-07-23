@@ -62,7 +62,7 @@ impl AudioPage for About {
 
         if let Some(inner) = &state.headphones.studio_driverless {
             let mut inner = *inner;
-            const LABEL: &str = "Enable PC2 Compliancy Mode";
+            const LABEL: &str = "Enable Port 2 Compliancy Mode";
             if ui.checkbox(&mut inner, LABEL).changed() {
                 state.headphones.studio_driverless = Some(inner);
 
