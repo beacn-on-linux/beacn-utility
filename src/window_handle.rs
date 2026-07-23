@@ -6,7 +6,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::background::Background;
-use beacn_lib::crossbeam::channel::Sender;
+use beacn_lib::flume::Sender;
 use egui::{Context, Id, Ui};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;

@@ -1,7 +1,7 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
 use anyhow::{Result, bail};
-use beacn_lib::crossbeam::channel::{Receiver, Sender};
-use beacn_lib::crossbeam::select;
+use beacn_lib::flume::{Receiver, Selector, Sender};
+
 use directories::BaseDirs;
 use log::{debug, warn};
 use std::io::ErrorKind;
@@ -51,48 +51,50 @@ pub fn handle_ipc(
 
     debug!("IPC listener started at {socket_path:?}");
     loop {
-        select! {
-            recv(manager_rx) -> msg => {
-                match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ManagerMessages::Quit => break,
-                        }
+        let should_quit = Selector::new()
+            .recv(&manager_rx, |msg| match msg {
+                Ok(ManagerMessages::Quit) => true,
+
+                Err(e) => {
+                    warn!("Message Handler channel Broken, bailing: {e}");
+                    true
+                }
+            })
+            .wait_timeout(poll_duration)
+            .is_ok_and(|should_quit| should_quit);
+
+        if should_quit {
+            break;
+        }
+
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let mut msg = String::new();
+
+                if let Err(e) = stream.read_to_string(&mut msg) {
+                    warn!("Failed to read message from stream: {e}");
+                    break;
+                }
+
+                match msg.as_str() {
+                    "TRIGGER" => {
+                        let _ = main_tx.send(ToMainMessages::SpawnWindow);
                     }
-                    Err(e) => {
-                        warn!("Message Handler channel Broken, bailing: {e}");
+
+                    _ => {
+                        debug!("Unknown Message, aborting: {msg}");
                         break;
                     }
                 }
             }
 
-            default(poll_duration) => {
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        let mut msg = String::new();
-                        if let Err(e) = stream.read_to_string(&mut msg) {
-                            warn!("Failed to read from message from stream: {e}");
-                            break;
-                        } else {
-                            match msg.as_str() {
-                                "TRIGGER" => {
-                                    let _ = main_tx.send(ToMainMessages::SpawnWindow);
-                                },
-                                _ => {
-                                    debug!("Unknown Message, aborting: {msg}");
-                                    break;
-                                },
-                            }
-                        }
-                    }
-                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                        // No client, do nothing
-                    }
-                    Err(e) => {
-                        warn!("Unexpected socket error: {e}");
-                        break;
-                    }
-                }
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                // No client, continue polling
+            }
+
+            Err(e) => {
+                warn!("Unexpected socket error: {e}");
+                break;
             }
         }
     }

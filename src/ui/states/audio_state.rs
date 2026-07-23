@@ -30,7 +30,7 @@ use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
 use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
-use beacn_lib::crossbeam::channel::Sender;
+use beacn_lib::flume::Sender;
 use beacn_lib::manager::DeviceType;
 use log::debug;
 use strum_macros::EnumIter;

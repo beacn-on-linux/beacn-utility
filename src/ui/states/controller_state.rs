@@ -2,7 +2,7 @@ use crate::APP_NAME;
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
-use beacn_lib::crossbeam::channel::Sender;
+use beacn_lib::flume::Sender;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;

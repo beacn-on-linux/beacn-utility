@@ -18,9 +18,7 @@ use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
-use beacn_lib::crossbeam::channel;
-use beacn_lib::crossbeam::channel::internal::SelectHandle;
-use beacn_lib::crossbeam::channel::{Receiver, Select, Sender};
+use beacn_lib::flume::{Receiver, Selector, Sender, bounded, unbounded};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
 };
@@ -28,7 +26,6 @@ use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
 use log::{debug, error};
-use std::collections::HashMap;
 use std::panic::catch_unwind;
 use std::thread;
 use std::time::Duration;
@@ -43,9 +40,9 @@ pub fn spawn_device_manager(
     self_tx: Sender<ToMainMessages>,
     event_tx: Sender<DeviceMessage>,
 ) {
-    let (plug_tx, plug_rx) = channel::unbounded();
-    let (manage_tx, manage_rx) = channel::unbounded();
-    let (login_tx, login_rx) = channel::bounded(5);
+    let (plug_tx, plug_rx) = unbounded();
+    let (manage_tx, manage_rx) = unbounded();
+    let (login_tx, login_rx) = bounded(5);
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
     // We need a hashmap that'll map a receiver to an object
@@ -58,88 +55,43 @@ pub fn spawn_device_manager(
     let mut pending_attachments: Vec<(DeviceLocation, DeviceType, Sender<()>)> = vec![];
 
     loop {
-        let mut selector = Select::new();
-        // Ok, so when you add a receiver to a selector, it gets an index. This index lets us
-        // know which receiver has triggered a message.
+        let mut selector = Selector::new();
+        selector = selector.recv(&self_rx, |msg| DeviceEvent::Manager(msg.ok()));
+        selector = selector.recv(&login_rx, |msg| DeviceEvent::Login(msg.ok()));
+        selector = selector.recv(&plug_rx, |msg| DeviceEvent::Hotplug(msg.ok()));
 
-        // First, we'll add our own handler
-        let self_index = selector.recv(&self_rx);
+        for (index, device) in receiver_map.iter().enumerate() {
+            match device {
+                DeviceMap::Audio(_, _, rx) => {
+                    selector = selector.recv(rx, move |msg| DeviceEvent::Audio(index, msg.ok()));
+                }
 
-        // Add the Lock Detector
-        let lock_index = selector.recv(&login_rx);
-
-        // Next, the hotplug receiver
-        let hotplug_index = selector.recv(&plug_rx);
-
-        // Finally, we'll follow up with the 'known' devices, we'll map the crossbeam index with
-        // their index in the receiver_map.
-        let mut device_indices: HashMap<usize, usize> = HashMap::new();
-        for (i, device) in receiver_map.iter().enumerate() {
-            let index = match device {
-                DeviceMap::Audio(_, _, rx) => selector.recv(rx),
-                DeviceMap::Control(_, _, rx, _, _, _) => selector.recv(rx),
-            };
-            device_indices.insert(index, i);
+                DeviceMap::Control(_, _, rx, _, _, _) => {
+                    selector = selector.recv(rx, move |msg| DeviceEvent::Control(index, msg.ok()));
+                }
+            }
         }
 
-        // Run the Selector
-        let operation = selector.select();
-
-        // Ok, something's triggered us in some way, find out what.
-        match operation.index() {
-            i if i == self_index => {
-                if let Ok(msg) = operation.recv(&self_rx) {
-                    match msg {
-                        ManagerMessages::Quit => break,
-                    }
-                }
+        match selector.wait() {
+            DeviceEvent::Manager(Some(ManagerMessages::Quit)) | DeviceEvent::Manager(None) => {
+                break;
             }
-            i if i == lock_index => {
-                if let Ok(msg) = operation.recv(&login_rx) {
-                    debug!("Received Login State Message: {msg:?}");
-                    // Do nothing until we have a full impl
-                    match msg {
-                        LoginEventTriggers::Sleep(tx) => {
-                            suspended = true;
-                            set_pipeweaver_draw_suspended(&receiver_map, true);
-                            enable_devices(&receiver_map, false);
-                            let _ = tx.send(());
-                        }
-                        LoginEventTriggers::Wake(tx) => {
-                            suspended = false;
-                            for (location, device_type, health_tx) in pending_attachments.drain(..)
-                            {
-                                handle_device_attached(
-                                    location,
-                                    device_type,
-                                    health_tx,
-                                    &mut receiver_map,
-                                    &event_tx,
-                                    &self_tx,
-                                );
-                            }
 
-                            set_pipeweaver_draw_suspended(&receiver_map, false);
-                            enable_devices(&receiver_map, true);
-                            let _ = tx.send(());
-                        }
-                        LoginEventTriggers::Lock => {
-                            set_pipeweaver_draw_suspended(&receiver_map, true);
-                            enable_devices(&receiver_map, false);
-                        }
-                        LoginEventTriggers::Unlock => {
-                            set_pipeweaver_draw_suspended(&receiver_map, false);
-                            enable_devices(&receiver_map, true);
-                        }
+            DeviceEvent::Login(Some(msg)) => {
+                debug!("Received Login State Message: {msg:?}");
+
+                match msg {
+                    LoginEventTriggers::Sleep(tx) => {
+                        suspended = true;
+                        set_pipeweaver_draw_suspended(&receiver_map, true);
+                        enable_devices(&receiver_map, false);
+                        let _ = tx.send(());
                     }
-                }
-            }
-            i if i == hotplug_index => match operation.recv(&plug_rx) {
-                Ok(m) => match m {
-                    HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
-                        if suspended {
-                            pending_attachments.push((location, device_type, health_tx));
-                        } else {
+
+                    LoginEventTriggers::Wake(tx) => {
+                        suspended = false;
+
+                        for (location, device_type, health_tx) in pending_attachments.drain(..) {
                             handle_device_attached(
                                 location,
                                 device_type,
@@ -149,90 +101,145 @@ pub fn spawn_device_manager(
                                 &self_tx,
                             );
                         }
-                    }
-                    HotPlugMessage::DeviceRemoved(location) => {
-                        // Drop any pending attachment for this location before it's ever opened
-                        pending_attachments.retain(|(loc, _, _)| *loc != location);
 
-                        let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
-                        receiver_map.retain(|e| match e {
-                            DeviceMap::Audio(_, d, _) => d.location != location,
-                            DeviceMap::Control(_, d, _, _, _, _) => d.location != location,
-                        });
-
-                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
+                        set_pipeweaver_draw_suspended(&receiver_map, false);
+                        enable_devices(&receiver_map, true);
+                        let _ = tx.send(());
                     }
-                    HotPlugMessage::ThreadStopped => break,
-                },
-                Err(_) => break,
+
+                    LoginEventTriggers::Lock => {
+                        set_pipeweaver_draw_suspended(&receiver_map, true);
+                        enable_devices(&receiver_map, false);
+                    }
+
+                    LoginEventTriggers::Unlock => {
+                        set_pipeweaver_draw_suspended(&receiver_map, false);
+                        enable_devices(&receiver_map, true);
+                    }
+                }
+            }
+
+            DeviceEvent::Login(None) => {
+                break;
+            }
+
+            DeviceEvent::Hotplug(Some(msg)) => match msg {
+                HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
+                    if suspended {
+                        pending_attachments.push((location, device_type, health_tx));
+                    } else {
+                        handle_device_attached(
+                            location,
+                            device_type,
+                            health_tx,
+                            &mut receiver_map,
+                            &event_tx,
+                            &self_tx,
+                        );
+                    }
+                }
+
+                HotPlugMessage::DeviceRemoved(location) => {
+                    pending_attachments.retain(|(loc, _, _)| *loc != location);
+
+                    let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
+
+                    receiver_map.retain(|device| match device {
+                        DeviceMap::Audio(_, definition, _) => definition.location != location,
+
+                        DeviceMap::Control(_, definition, _, _, _, _) => {
+                            definition.location != location
+                        }
+                    });
+
+                    let _ = self_tx.send(ToMainMessages::RequestRedraw);
+                }
+
+                HotPlugMessage::ThreadStopped => {
+                    break;
+                }
             },
-            i => {
-                // Find the specific device for this index
-                #[allow(clippy::collapsible_if)]
-                if let Some(device) = device_indices.get(&i) {
-                    if let Some(device) = receiver_map.get(*device) {
-                        match device {
-                            DeviceMap::Audio(dev, _, rx) => {
-                                if let Ok(msg) = operation.recv(rx) {
-                                    match msg {
-                                        AudioMessage::Handle(msg, resp) => {
-                                            let response = catch_unwind(|| dev.handle_message(msg));
-                                            if let Err(panic) = response {
-                                                // Downcast this to a standard error
-                                                let error = panic
-                                                    .downcast_ref::<String>()
-                                                    .cloned()
-                                                    .unwrap_or(String::from("Unknown Error"));
-                                                let _ = resp.send(Err(anyhow!(error).into()));
-                                            } else {
-                                                // Send back the original response
-                                                let _ = resp.send(response.unwrap());
-                                            }
-                                        }
-                                        AudioMessage::Linked(command) => {
-                                            // This code doesn't panic, just fails.
-                                            match command {
-                                                LinkedCommands::GetLinked(tx) => {
-                                                    let _ = tx.send(dev.get_linked_app_list());
-                                                }
-                                                LinkedCommands::SetLinked(app, tx) => {
-                                                    let _ = tx.send(dev.set_linked_app(app));
-                                                }
-                                            }
-                                        }
-                                    }
+
+            DeviceEvent::Hotplug(None) => {
+                break;
+            }
+
+            DeviceEvent::Audio(index, Some(msg)) => {
+                if let Some(DeviceMap::Audio(dev, _, _)) = receiver_map.get(index) {
+                    match msg {
+                        AudioMessage::Handle(msg, resp) => {
+                            let response = catch_unwind(|| dev.handle_message(msg));
+
+                            match response {
+                                Ok(result) => {
+                                    let _ = resp.send(result);
                                 }
-                            }
-                            DeviceMap::Control(dev, _, rx, _, _, _) => {
-                                if let Ok(msg) = operation.recv(rx) {
-                                    match msg {
-                                        ControlMessage::SendImage(img, x, y, tx) => {
-                                            let _ = tx.send(dev.set_image(x, y, &img));
-                                        }
-                                        ControlMessage::DisplayBrightness(brightness, tx) => {
-                                            let _ = tx.send(dev.set_display_brightness(brightness));
-                                        }
-                                        ControlMessage::ButtonBrightness(brightness, tx) => {
-                                            let _ = tx.send(dev.set_button_brightness(brightness));
-                                        }
-                                        ControlMessage::DimTimeout(timeout, tx) => {
-                                            let _ = tx.send(dev.set_dim_timeout(timeout));
-                                        }
-                                        ControlMessage::ButtonColour(button, colour, tx) => {
-                                            let _ = tx.send(dev.set_button_colour(button, colour));
-                                        }
-                                        ControlMessage::Enabled(enabled, tx) => {
-                                            let _ = tx.send(dev.set_enabled(enabled));
-                                        }
-                                        ControlMessage::KeepAlive(tx) => {
-                                            let _ = tx.send(dev.send_keepalive());
-                                        }
-                                    };
+
+                                Err(panic) => {
+                                    let error = panic
+                                        .downcast_ref::<String>()
+                                        .cloned()
+                                        .unwrap_or_else(|| "Unknown Error".to_string());
+
+                                    let _ = resp.send(Err(anyhow!(error).into()));
                                 }
                             }
                         }
+
+                        AudioMessage::Linked(command) => match command {
+                            LinkedCommands::GetLinked(tx) => {
+                                let _ = tx.send(dev.get_linked_app_list());
+                            }
+
+                            LinkedCommands::SetLinked(app, tx) => {
+                                let _ = tx.send(dev.set_linked_app(app));
+                            }
+                        },
                     }
                 }
+            }
+
+            DeviceEvent::Audio(_, None) => {
+                // Same behaviour as previous crossbeam implementation:
+                // ignore closed device channels.
+            }
+
+            DeviceEvent::Control(index, Some(msg)) => {
+                if let Some(DeviceMap::Control(dev, _, _, _, _, _)) = receiver_map.get(index) {
+                    match msg {
+                        ControlMessage::SendImage(img, x, y, tx) => {
+                            let _ = tx.send(dev.set_image(x, y, &img));
+                        }
+
+                        ControlMessage::DisplayBrightness(brightness, tx) => {
+                            let _ = tx.send(dev.set_display_brightness(brightness));
+                        }
+
+                        ControlMessage::ButtonBrightness(brightness, tx) => {
+                            let _ = tx.send(dev.set_button_brightness(brightness));
+                        }
+
+                        ControlMessage::DimTimeout(timeout, tx) => {
+                            let _ = tx.send(dev.set_dim_timeout(timeout));
+                        }
+
+                        ControlMessage::ButtonColour(button, colour, tx) => {
+                            let _ = tx.send(dev.set_button_colour(button, colour));
+                        }
+
+                        ControlMessage::Enabled(enabled, tx) => {
+                            let _ = tx.send(dev.set_enabled(enabled));
+                        }
+
+                        ControlMessage::KeepAlive(tx) => {
+                            let _ = tx.send(dev.send_keepalive());
+                        }
+                    }
+                }
+            }
+
+            DeviceEvent::Control(_, None) => {
+                // Ignore closed device channels.
             }
         }
     }
@@ -276,10 +283,7 @@ pub fn spawn_device_manager(
     });
 
     // For some reason, we're stopping. If the manager channel is still open, tell it to stop.
-    if manage_tx.is_ready() {
-        let _ = manage_tx.send(HotPlugThreadManagement::Quit);
-    }
-
+    let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     debug!("Device Manager Stopped");
 }
 
@@ -323,7 +327,7 @@ fn handle_device_attached(
             };
 
             // Create a Message Bus for it
-            let (tx, rx) = channel::unbounded();
+            let (tx, rx) = unbounded();
 
             // Add this into our receiver array
             if let Some(device) = device {
@@ -338,7 +342,7 @@ fn handle_device_attached(
             // This is relatively similar, but the code paths are different. In
             // the future, we'd be setting up button handlers, a pipeweaver
             // connection and management.
-            let (input_tx, input_rx) = channel::unbounded();
+            let (input_tx, input_rx) = unbounded();
 
             let (device, state) = match open_control_device(location, Some(input_tx), health_tx) {
                 Ok(d) => (Some(d), DefinitionState::Running),
@@ -372,7 +376,7 @@ fn handle_device_attached(
                 },
             };
 
-            let (tx, rx) = channel::unbounded();
+            let (tx, rx) = unbounded();
             let (stop_tx, stop_rx) = watch::channel(());
             let (suspended_tx, suspended_rx) = watch::channel(false);
             let img_tx = tx.clone();
@@ -420,6 +424,14 @@ fn set_pipeweaver_draw_suspended(receiver_map: &Vec<DeviceMap>, suspended: bool)
             let _ = draw_suspend.send(suspended);
         }
     }
+}
+
+enum DeviceEvent {
+    Manager(Option<ManagerMessages>),
+    Login(Option<LoginEventTriggers>),
+    Hotplug(Option<HotPlugMessage>),
+    Audio(usize, Option<AudioMessage>),
+    Control(usize, Option<ControlMessage>),
 }
 
 enum DeviceMap {

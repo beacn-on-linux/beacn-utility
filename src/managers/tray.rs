@@ -1,7 +1,6 @@
 use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
 use anyhow::Result;
-use beacn_lib::crossbeam::channel::{Receiver, Sender};
-use beacn_lib::crossbeam::{channel, select};
+use beacn_lib::flume::{Receiver, Selector, Sender, bounded};
 use image::GenericImageView;
 use ksni::blocking::TrayMethods;
 use ksni::menu::StandardItem;
@@ -36,54 +35,47 @@ pub fn handle_tray(
         warn!("Unable to remove existing icon, using whatever is already there..");
     }
 
-    let (icon_tx, icon_rx) = channel::bounded(20);
+    let (icon_tx, icon_rx) = bounded(20);
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
     let handle = icon
         .disable_dbus_name(ashpd::is_sandboxed())
         .assume_sni_available(true)
         .spawn()?;
 
-    loop {
-        select! {
-            recv(icon_rx) -> msg => {
+    let mut running = true;
+    while running {
+        running = !Selector::new()
+            .recv(&icon_rx, |msg| {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            TrayMessages::Activate => {
-                                // Tell the Main Thread to spawn a new window
-                                let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
-                                debug!("Activate Triggered");
-                            },
-                            TrayMessages::Quit => {
-                                // If we have an active window, we need to close it first.
-                                // Tell the parent to immediately quit
-                                let _ = tray_main_tx.send(ToMainMessages::Quit);
-                            }
-                        }
+                    Ok(TrayMessages::Activate) => {
+                        // Tell the Main Thread to spawn a new window
+                        let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
+                        debug!("Activate Triggered");
+                        false
                     }
-                    Err(e) => {
-                        warn!("Icon receiver channel broken, bailing: {e}");
-                        break;
-                    }
-                }
-            }
-            recv(tray_manager) -> msg => {
-                match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ManagerMessages::Quit => {
-                                break;
-                            }
-                        }
+
+                    Ok(TrayMessages::Quit) => {
+                        // If we have an active window, we need to close it first.
+                        // Tell the parent to immediately quit
+                        let _ = tray_main_tx.send(ToMainMessages::Quit);
+                        true
                     }
 
                     Err(e) => {
-                        warn!("Message Handler channel Broken, bailing: {e}");
-                        break;
+                        warn!("Icon receiver channel broken, bailing: {e}");
+                        true
                     }
                 }
-            }
-        }
+            })
+            .recv(&tray_manager, |msg| match msg {
+                Ok(ManagerMessages::Quit) => true,
+
+                Err(e) => {
+                    warn!("Message Handler channel Broken, bailing: {e}");
+                    true
+                }
+            })
+            .wait();
     }
 
     debug!("Stopping Tray");

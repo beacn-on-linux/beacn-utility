@@ -12,7 +12,7 @@
 */
 
 use anyhow::Result;
-use beacn_lib::crossbeam;
+use beacn_lib::flume::Sender;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::env;
@@ -61,7 +61,7 @@ pub enum LoginEventTriggers {
 }
 
 pub fn spawn_login_handler(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
+    tx: Sender<LoginEventTriggers>,
     stop_rx: tokio_mpsc::Receiver<()>,
 ) -> Result<()> {
     debug!("Starting Sleep Handler with dedicated runtime..");
@@ -76,7 +76,7 @@ pub fn spawn_login_handler(
 }
 
 async fn run_internal(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
+    tx: Sender<LoginEventTriggers>,
     mut stop_rx: tokio_mpsc::Receiver<()>,
 ) -> Result<()> {
     let mut inhibitor = None;

@@ -10,8 +10,7 @@ use crate::integrations::pipeweaver::layout::{
 use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
-use beacn_lib::crossbeam;
-use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
+use beacn_lib::flume::{Receiver, Selector, Sender, TryRecvError, bounded};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use directories::BaseDirs;
@@ -285,7 +284,7 @@ impl PipeweaverHandler {
             let sync_receiver = self.input_rx.clone();
             let (interaction_tx, mut interaction_rx) = channel(10);
 
-            let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
+            let (stop_tx, stop_rx) = bounded::<()>(0);
             runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
             // Create a loop which handles things like incoming messages and stopping
@@ -449,7 +448,7 @@ impl PipeweaverHandler {
         let sync_receiver = self.input_rx.clone();
         let (interaction_tx, mut interaction_rx) = channel(10);
 
-        let (_stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
+        let (_stop_tx, stop_rx) = bounded::<()>(0);
         runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
@@ -1328,20 +1327,30 @@ fn sync_to_async(
     cancel: Receiver<()>,
 ) -> Result<()> {
     debug!("Running Up Receiver..");
-    loop {
-        crossbeam::select! {
-            recv(rx) -> msg => match msg {
-                Ok(val) => tx.blocking_send(val)?,
-                Err(_) => {
-                    debug!("Crossbeam channel disconnected, stopping sync wrapper");
-                    break;
+
+    let mut result = Ok(());
+
+    while !Selector::new()
+        .recv(&rx, |msg| match msg {
+            Ok(val) => {
+                if let Err(e) = tx.blocking_send(val) {
+                    result = Err(e.into());
+                    true
+                } else {
+                    false
                 }
-            },
-            recv(cancel) -> _ => {
-                // We don't care about the result, we just want to stop the loop
-                break;
             }
-        }
-    }
-    Ok(())
+            Err(_) => {
+                debug!("Crossbeam channel disconnected, stopping sync wrapper");
+                true
+            }
+        })
+        .recv(&cancel, |_| {
+            // We don't care about the result, we just want to stop the loop.
+            true
+        })
+        .wait()
+    {}
+
+    result
 }
