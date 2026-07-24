@@ -24,7 +24,7 @@ use beacn_lib::manager::{
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
-use beacn_lib::{BeacnError, UsbError};
+use beacn_lib::{BeacnError, MaybeFuture, UsbError};
 use log::{debug, error};
 use std::panic::catch_unwind;
 use std::thread;
@@ -168,7 +168,7 @@ pub fn spawn_device_manager(
                 if let Some(DeviceMap::Audio(dev, _, _)) = receiver_map.get(index) {
                     match msg {
                         AudioMessage::Handle(msg, resp) => {
-                            let response = catch_unwind(|| dev.handle_message(msg));
+                            let response = catch_unwind(|| dev.handle_message(msg).wait());
 
                             match response {
                                 Ok(result) => {
@@ -188,11 +188,11 @@ pub fn spawn_device_manager(
 
                         AudioMessage::Linked(command) => match command {
                             LinkedCommands::GetLinked(tx) => {
-                                let _ = tx.send(dev.get_linked_app_list());
+                                let _ = tx.send(dev.get_linked_app_list().wait());
                             }
 
                             LinkedCommands::SetLinked(app, tx) => {
-                                let _ = tx.send(dev.set_linked_app(app));
+                                let _ = tx.send(dev.set_linked_app(app).wait());
                             }
                         },
                     }
