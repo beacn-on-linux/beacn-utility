@@ -127,8 +127,8 @@ async fn main() -> Result<()> {
     // Ok, spawn up the Tray Handler
     let (tray_tx, tray_rx) = unbounded();
     let tray_main_tx = main_tx.clone();
-    let tray = thread::spawn(|| {
-        if let Err(e) = handle_tray(tray_rx, tray_main_tx) {
+    let tray = task::spawn(async move {
+        if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
             error!("Failed to Spawn Tray: {e}");
         }
     });
@@ -266,10 +266,9 @@ async fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     let _ = window.join();
-    let _ = tray.join();
     let _ = device_manager.join();
 
-    let _ = join!(ipc);
+    let _ = join!(ipc, tray);
 
     debug!("Shutdown Complete");
 

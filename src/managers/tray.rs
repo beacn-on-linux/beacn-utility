@@ -1,10 +1,9 @@
 use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
 use anyhow::Result;
-use beacn_lib::flume::{Receiver, Selector, Sender, bounded};
+use beacn_lib::flume::{Receiver, Sender, bounded};
 use image::GenericImageView;
-use ksni::blocking::TrayMethods;
 use ksni::menu::StandardItem;
-use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray};
+use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray, TrayMethods};
 use log::{debug, warn};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -15,7 +14,7 @@ enum TrayMessages {
     Quit,
 }
 
-pub fn handle_tray(
+pub async fn handle_tray(
     tray_manager: Receiver<ManagerMessages>,
     tray_main_tx: Sender<ToMainMessages>,
 ) -> Result<()> {
@@ -40,42 +39,51 @@ pub fn handle_tray(
     let handle = icon
         .disable_dbus_name(ashpd::is_sandboxed())
         .assume_sni_available(true)
-        .spawn()?;
+        .spawn()
+        .await;
 
-    let mut running = true;
-    while running {
-        running = !Selector::new()
-            .recv(&icon_rx, |msg| {
+    let handle = match handle {
+        Ok(handle) => handle,
+        Err(e) => {
+            fs::remove_file(&tmp_file_path)?;
+            warn!("Unable to Spawn the Tray Handler: {}", e);
+            return Ok(());
+        }
+    };
+
+    loop {
+        tokio::select! {
+            msg = icon_rx.recv_async() => {
                 match msg {
                     Ok(TrayMessages::Activate) => {
-                        // Tell the Main Thread to spawn a new window
                         let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
-                        debug!("Activate Triggered");
-                        false
                     }
 
                     Ok(TrayMessages::Quit) => {
-                        // If we have an active window, we need to close it first.
-                        // Tell the parent to immediately quit
                         let _ = tray_main_tx.send(ToMainMessages::Quit);
-                        true
+                        break;
                     }
 
                     Err(e) => {
                         warn!("Icon receiver channel broken, bailing: {e}");
-                        true
+                        break;
                     }
                 }
-            })
-            .recv(&tray_manager, |msg| match msg {
-                Ok(ManagerMessages::Quit) => true,
+            }
 
-                Err(e) => {
-                    warn!("Message Handler channel Broken, bailing: {e}");
-                    true
+            msg = tray_manager.recv_async() => {
+                match msg {
+                    Ok(ManagerMessages::Quit) => {
+                        break;
+                    }
+
+                    Err(e) => {
+                        warn!("Message Handler channel Broken, bailing: {e}");
+                        break;
+                    }
                 }
-            })
-            .wait();
+            }
+        }
     }
 
     debug!("Stopping Tray");
