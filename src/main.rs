@@ -15,8 +15,6 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info};
 use managers::tray::handle_tray;
-use signal_hook::consts::{SIGINT, SIGTERM};
-use signal_hook::iterator::Signals;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
@@ -25,6 +23,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
+use tokio::signal::unix::{SignalKind, signal};
 use xdg::BaseDirectories;
 
 mod device_manager;
@@ -55,9 +54,6 @@ pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Register Signal Handler
-    let mut signals = Signals::new([SIGINT, SIGTERM])?;
-
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
 
@@ -118,15 +114,9 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Setup Signal Handling
-    let (signal_tx, signal_rx) = unbounded::<i32>();
-    thread::spawn(move || {
-        for sig in signals.forever() {
-            // We don't need any kind of clean shutdown here, this thread will bail when
-            // the main loop terminates.
-            let _ = signal_tx.send(sig);
-        }
-    });
+    // Register Signal Handler
+    let mut sigint = signal(SignalKind::interrupt())?;
+    let mut sigterm = signal(SignalKind::terminate())?;
 
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = unbounded();
@@ -256,27 +246,14 @@ async fn main() -> Result<()> {
                 }
             }
 
-            sig = signal_rx.recv_async() => {
-                match sig {
-                    Ok(SIGINT) => {
-                        println!("Caught Ctrl+C");
-                        break;
-                    }
+            _ = sigint.recv() => {
+                println!("Caught Ctrl+C");
+                break;
+            }
 
-                    Ok(SIGTERM) => {
-                        println!("Caught SIGTERM");
-                        break;
-                    }
-
-                    Ok(other) => {
-                        println!("Signal: {other}");
-                    }
-
-                    Err(e) => {
-                        error!("Signal Handler Broken, bailing: {e}");
-                        break;
-                    }
-                }
+            _ = sigterm.recv() => {
+                println!("Caught SIGTERM");
+                break;
             }
         }
     }

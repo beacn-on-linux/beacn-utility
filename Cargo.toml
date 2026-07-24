@@ -51,7 +51,7 @@ image = "0.25.10"
 fontdue = "0.9.3"
 
 # Apature Science Handheld Portal Device (autostart / background)
-tokio = { version = "1.53.1", features = ["rt-multi-thread"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal"] }
 ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
 
 # For Creating .desktop files outside the flatpak runtime
@@ -64,9 +64,6 @@ serde_json = "1.0.151"
 
 # Sleep Management
 zbus = "5.18.0"
-
-# Signal Handling
-signal-hook = "0.4.4"
 
 # Pipeweaver Stuff
 interprocess = { version = "2.4.2", features = ["tokio"] }
