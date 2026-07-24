@@ -4,7 +4,7 @@ use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::Result;
 use anyhow::bail;
-use beacn_lib::flume::{Selector, unbounded};
+use beacn_lib::flume::unbounded;
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
@@ -20,7 +20,6 @@ use signal_hook::iterator::Signals;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
-use std::cell::RefCell;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
@@ -216,75 +215,74 @@ async fn main() -> Result<()> {
 
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
-    let context = RefCell::new(Context::default());
-    let mut running = true;
+    let mut context = Context::default();
 
-    while running {
-        running = !Selector::new()
-            .recv(&main_rx, |msg| match msg {
-                Ok(ToMainMessages::UpdateContext(new_ctx)) => {
-                    debug!("Context Updated");
-                    *context.borrow_mut() = new_ctx;
-                    false
-                }
+    loop {
+        tokio::select! {
+            msg = main_rx.recv_async() => {
+                match msg {
+                    Ok(ToMainMessages::UpdateContext(new_ctx)) => {
+                        debug!("Context Updated");
+                        context = new_ctx;
+                    }
 
-                Ok(ToMainMessages::SpawnWindow) => {
-                    let context = context.borrow();
-                    send_user_event(&context, UserEvent::FocusWindow);
-                    false
-                }
+                    Ok(ToMainMessages::SpawnWindow) => {
+                        send_user_event(&context, UserEvent::FocusWindow);
+                    }
 
-                Ok(ToMainMessages::RequestRedraw) => {
-                    let context = context.borrow();
-                    send_user_event(&context, UserEvent::RequestRedraw);
-                    false
-                }
+                    Ok(ToMainMessages::RequestRedraw) => {
+                        send_user_event(&context, UserEvent::RequestRedraw);
+                    }
 
-                Ok(ToMainMessages::Quit) => true,
+                    Ok(ToMainMessages::Quit) => break,
 
-                Err(e) => {
-                    error!("Main Loop Broken, bailing: {e}");
-                    true
+                    Err(e) => {
+                        error!("Main Loop Broken, bailing: {e}");
+                        break;
+                    }
                 }
-            })
-            .recv(&device_rx, |msg| match msg {
-                Ok(msg) => {
-                    let context = context.borrow();
-                    send_user_event(&context, UserEvent::DeviceMessage(msg));
-                    false
-                }
+            }
 
-                Err(e) => {
-                    error!("Device Handler Broken, bailing: {e}");
-                    true
-                }
-            })
-            .recv(&signal_rx, |sig| match sig {
-                Ok(SIGINT) => {
-                    println!("Caught Ctrl+C");
-                    true
-                }
+            msg = device_rx.recv_async() => {
+                match msg {
+                    Ok(msg) => {
+                        send_user_event(&context, UserEvent::DeviceMessage(msg));
+                    }
 
-                Ok(SIGTERM) => {
-                    println!("Caught SIGTERM");
-                    true
+                    Err(e) => {
+                        error!("Device Handler Broken, bailing: {e}");
+                        break;
+                    }
                 }
+            }
 
-                Ok(other) => {
-                    println!("Signal: {}", other);
-                    false
-                }
+            sig = signal_rx.recv_async() => {
+                match sig {
+                    Ok(SIGINT) => {
+                        println!("Caught Ctrl+C");
+                        break;
+                    }
 
-                Err(e) => {
-                    error!("Signal Handler Broken, bailing: {e}");
-                    true
+                    Ok(SIGTERM) => {
+                        println!("Caught SIGTERM");
+                        break;
+                    }
+
+                    Ok(other) => {
+                        println!("Signal: {other}");
+                    }
+
+                    Err(e) => {
+                        error!("Signal Handler Broken, bailing: {e}");
+                        break;
+                    }
                 }
-            })
-            .wait();
+            }
+        }
     }
 
     debug!("Shutdown Triggered - Waiting for Threads to Terminate..");
-    send_user_event(&context.borrow(), UserEvent::Quit);
+    send_user_event(&context, UserEvent::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
