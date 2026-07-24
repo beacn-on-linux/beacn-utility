@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
 use tokio::signal::unix::{SignalKind, signal};
+use tokio::{join, task};
 use xdg::BaseDirectories;
 
 mod device_manager;
@@ -110,7 +111,7 @@ async fn main() -> Result<()> {
     let (main_tx, main_rx) = unbounded();
 
     // Check whether an existing instance is running, and bail if so
-    if handle_active_instance() {
+    if handle_active_instance().await {
         return Ok(());
     }
 
@@ -121,7 +122,7 @@ async fn main() -> Result<()> {
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = unbounded();
     let ipc_main_tx = main_tx.clone();
-    let ipc = thread::spawn(|| handle_ipc(ipc_rx, ipc_main_tx));
+    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_main_tx));
 
     // Ok, spawn up the Tray Handler
     let (tray_tx, tray_rx) = unbounded();
@@ -267,7 +268,8 @@ async fn main() -> Result<()> {
     let _ = window.join();
     let _ = tray.join();
     let _ = device_manager.join();
-    let _ = ipc.join();
+
+    let _ = join!(ipc);
 
     debug!("Shutdown Complete");
 
