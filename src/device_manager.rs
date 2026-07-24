@@ -142,7 +142,7 @@ pub fn spawn_device_manager(
                 HotPlugMessage::DeviceRemoved(location) => {
                     pending_attachments.retain(|(loc, _, _)| *loc != location);
 
-                    let _ = event_tx.send(DeviceMessage::DeviceRemoved(location));
+                    let _ = event_tx.send(DeviceMessage::DeviceRemoved(location.clone()));
 
                     receiver_map.retain(|device| match device {
                         DeviceMap::Audio(_, definition, _) => definition.location != location,
@@ -297,16 +297,18 @@ fn handle_device_attached(
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-            let (device, state) = match open_audio_device(location) {
+            let (device, state) = match open_audio_device(location.clone()) {
                 Ok(d) => (Some(d), DefinitionState::Running),
                 Err(e) => {
                     error!("Failed to open audio device: {e}");
                     (
                         None,
                         DefinitionState::Error(match e {
-                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
+                            BeacnError::Usb(UsbError::PermissionDenied) => {
+                                ErrorType::PermissionDenied
+                            }
                             BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
-                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
+                            BeacnError::Usb(e) => ErrorType::Other(format!("{:?}", e)),
                             BeacnError::Other(e) => ErrorType::Other(e.to_string()),
                         }),
                     )
@@ -344,22 +346,25 @@ fn handle_device_attached(
             // connection and management.
             let (input_tx, input_rx) = unbounded();
 
-            let (device, state) = match open_control_device(location, Some(input_tx), health_tx) {
-                Ok(d) => (Some(d), DefinitionState::Running),
-                Err(e) => {
-                    error!("Failed to open control device: {e}");
+            let (device, state) =
+                match open_control_device(location.clone(), Some(input_tx), health_tx) {
+                    Ok(d) => (Some(d), DefinitionState::Running),
+                    Err(e) => {
+                        error!("Failed to open control device: {e}");
 
-                    (
-                        None,
-                        DefinitionState::Error(match e {
-                            BeacnError::Usb(UsbError::Access) => ErrorType::PermissionDenied,
-                            BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
-                            BeacnError::Usb(e) => ErrorType::Other(e.to_string()),
-                            BeacnError::Other(e) => ErrorType::Other(e.to_string()),
-                        }),
-                    )
-                }
-            };
+                        (
+                            None,
+                            DefinitionState::Error(match e {
+                                BeacnError::Usb(UsbError::PermissionDenied) => {
+                                    ErrorType::PermissionDenied
+                                }
+                                BeacnError::Usb(UsbError::Busy) => ErrorType::ResourceBusy,
+                                BeacnError::Usb(e) => ErrorType::Other(format!("{:?}", e)),
+                                BeacnError::Other(e) => ErrorType::Other(e.to_string()),
+                            }),
+                        )
+                    }
+                };
 
             let (serial, version) = match &device {
                 Some(d) => (d.get_serial(), d.get_version()),

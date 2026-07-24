@@ -35,7 +35,8 @@ impl ControllerPage for About {
         let version_text = state.device_definition.device_info.version.to_string();
         let location_text = format!(
             "{}:{}",
-            state.device_definition.location.bus_number, state.device_definition.location.address
+            state.device_definition.location.bus_id,
+            state.device_definition.location.device_address
         );
 
         let location = RichText::new("USB Location: ").strong().size(14.0);

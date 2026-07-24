@@ -67,6 +67,7 @@ fn main() -> Result<()> {
     config.add_filter_ignore_str("winit::event_loop");
     config.add_filter_ignore_str("winit::window");
     config.add_filter_ignore_str("zbus");
+    config.add_filter_ignore_str("nusb::platform::linux_usbfs");
 
     // Setup Console Logging
     log_targets.push(TermLogger::new(

@@ -13,7 +13,7 @@ pub fn display_errors(
         |ui: &mut Ui| {
             ui.vertical(|ui| {
                 ui.heading("An error occurred while loading the device.");
-                ui.label(format!("USB Location: {}:{}", device_location.bus_number, device_location.address));
+                ui.label(format!("USB Location: {}:{}", device_location.bus_id, device_location.device_address));
                 ui.add_space(10.);
                 match load_state {
                     LoadState::PermissionDenied => {

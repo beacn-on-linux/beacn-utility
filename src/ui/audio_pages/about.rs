@@ -25,7 +25,7 @@ impl AudioPage for About {
         let version_text = state.device_definition.device_info.version.to_string();
 
         let location = &state.device_definition.location;
-        let location_text = format!("{}:{}", location.bus_number, location.address);
+        let location_text = format!("{}:{}", location.bus_id, location.device_address);
 
         match device_type {
             DeviceType::BeacnMic => ui.heading("About Beacn Mic"),
