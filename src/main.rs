@@ -54,7 +54,8 @@ pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     // Register Signal Handler
     let mut signals = Signals::new([SIGINT, SIGTERM])?;
 
