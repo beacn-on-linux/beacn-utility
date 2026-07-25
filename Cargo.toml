@@ -36,9 +36,9 @@ egui_glow = "0.35.0"
 glutin = "0.32.3"
 
 # Grab beacn-mic-lib for comms
-#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "flume-test-nusb-async" }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "flume-test-nusb-async", features = ["tokio"] }
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.11" }
-beacn-lib = { path = "../beacn-lib" }
+#beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
 # Tray Handler
 ksni = { version = "0.3.6", features = ["blocking"] }
