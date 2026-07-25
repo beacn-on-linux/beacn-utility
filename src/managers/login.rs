@@ -60,7 +60,7 @@ pub enum LoginEventTriggers {
     Unlock,
 }
 
-pub fn spawn_login_handler(
+pub async fn spawn_login_handler(
     tx: Sender<LoginEventTriggers>,
     stop_rx: tokio_mpsc::Receiver<()>,
 ) -> Result<()> {
@@ -68,11 +68,7 @@ pub fn spawn_login_handler(
 
     // Create a dedicated runtime for this thread since this is a long-running task
     // that would otherwise block your main runtime for the entire app lifetime
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .build()?;
-
-    rt.block_on(run_internal(tx, stop_rx))
+    run_internal(tx, stop_rx).await
 }
 
 async fn run_internal(

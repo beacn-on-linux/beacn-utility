@@ -57,7 +57,7 @@ pub async fn spawn_device_manager(
     // task instead of spawn_hotplug_handler, which would give us a dedicated OS thread we
     // don't need now that we're on a runtime.
     tokio::spawn(watch_hotplug_devices(plug_tx, manage_rx));
-    //thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
+    tokio::spawn(spawn_login_handler(login_tx, login_stop_rx));
 
     let mut suspended = false;
     let mut pending_attachments: Vec<(DeviceLocation, DeviceType, Sender<()>)> = vec![];
