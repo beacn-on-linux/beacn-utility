@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use std::{env, thread};
-use tokio::runtime::{Builder, Runtime};
+use tokio::runtime::Handle;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::{join, task};
 use xdg::BaseDirectories;
@@ -45,16 +45,21 @@ const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
-static TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
-pub fn runtime() -> &'static Runtime {
-    TOKIO_RUNTIME.get_or_init(|| Builder::new_multi_thread().enable_all().build().unwrap())
+static TOKIO_RUNTIME: OnceLock<Handle> = OnceLock::new();
+
+pub fn runtime() -> &'static Handle {
+    TOKIO_RUNTIME.get_or_init(Handle::current)
 }
+
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Configure the static runtime as this runtime
+    runtime();
+
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
 
