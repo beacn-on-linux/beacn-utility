@@ -9,9 +9,8 @@ use crate::integrations::pipeweaver::layout::{
 };
 use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use beacn_lib::MaybeFuture;
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
-use beacn_lib::flume::{Receiver, Selector, Sender, TryRecvError, bounded};
+use beacn_lib::flume::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use directories::BaseDirs;
@@ -46,7 +45,6 @@ use std::time::{Duration, Instant};
 use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::channel;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -235,12 +233,12 @@ impl PipeweaverHandler {
         let mut clean_stop = true;
 
         // Send the Pipeweaver Splash
-        self.draw_splash();
-        self.draw_status("Loading...");
+        self.draw_splash().await;
+        self.draw_status("Loading...").await;
 
         sleep(Duration::from_millis(250)).await;
 
-        self.disable_buttons();
+        self.disable_buttons().await;
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
@@ -254,12 +252,12 @@ impl PipeweaverHandler {
 
             if !self.displaying_error {
                 if !self.has_connected {
-                    self.draw_status("Failed to connect to Pipeweaver");
-                    self.disable_buttons();
+                    self.draw_status("Failed to connect to Pipeweaver").await;
+                    self.disable_buttons().await;
                 } else {
-                    self.draw_splash();
-                    self.draw_status("Connection to Pipeweaver lost");
-                    self.disable_buttons();
+                    self.draw_splash().await;
+                    self.draw_status("Connection to Pipeweaver lost").await;
+                    self.disable_buttons().await;
                 }
             }
             self.displaying_error = true;
@@ -281,25 +279,17 @@ impl PipeweaverHandler {
                 warn!("Pipeweaver Error: {}", e);
             }
 
-            // Spawn a sync <-> async loop so we can consume incoming messages while disconnected
-            let sync_receiver = self.input_rx.clone();
-            //let (interaction_tx, mut interaction_rx) = channel(10);
-
-            let (stop_tx, stop_rx) = bounded::<()>(0);
-            //runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
-
-            // Create a loop which handles things like incoming messages and stopping
+            // Drain (and ignore) incoming interactions while disconnected
             loop {
                 select! {
-                    // Some(_) = interaction_rx.recv() => {
-                    //     // We need to NOOP this, drain the channel so messages don't queue.
-                    // }
+                    Ok(_) = self.input_rx.recv_async() => {
+                        // We need to NOOP this, drain the channel so messages don't queue.
+                    }
                     Ok(_) = self.stop_rx.changed() => {
                         break 'connect;
                     }
                     _ = sleep(Duration::from_secs(5)) => {
                         // 5 Seconds have elapsed, break this loop to reconnect
-                        drop(stop_tx);
                         continue 'connect;
                     }
                 }
@@ -308,27 +298,20 @@ impl PipeweaverHandler {
 
         info!("Pipeweaver Manager Terminated");
         if clean_stop {
-            self.draw_splash();
-            self.draw_status("Beacn Utility Stopped");
-            self.disable_buttons();
+            self.draw_splash().await;
+            self.draw_status("Beacn Utility Stopped").await;
+            self.disable_buttons().await;
         }
     }
 
-    fn draw_splash(&self) {
-        debug!("Drawing Pipeweaver Splash");
-
+    async fn draw_splash(&self) {
         let (tx, rx) = oneshot::channel();
 
-        debug!("Sending splash into control channel");
-        let result = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
-        debug!("Splash channel send result: {:?}", result);
-
-        //let _ = rx.wait();
-
-        debug!("Pipeweaver Splash Drawn");
+        let _ = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
+        let _ = rx.await;
     }
 
-    fn draw_status(&self, text: &str) {
+    async fn draw_status(&self, text: &str) {
         let text = DrawingUtils::draw_text(
             text.into(),
             800,
@@ -345,22 +328,16 @@ impl PipeweaverHandler {
                 Ok(_) => debug!("Pipeweaver SendImage queued"),
                 Err(e) => debug!("Pipeweaver SendImage failed: {:?}", e),
             }
-
-            // let _ = self.sender.send(SendImage(img, 0, 330, tx));
-            debug!("Status Wait");
-            //let _ = rx.wait();
-
-            debug!("Pipeweaver Status Sent");
+            let _ = rx.await;
         }
     }
 
-    fn disable_buttons(&self) {
+    async fn disable_buttons(&self) {
         for button in ButtonLighting::iter() {
             let (tx, rx) = oneshot::channel();
             let _ = self.sender.send(ButtonColour(button, COLOUR_BLACK, tx));
 
-            debug!("Disable Buttons");
-            //let _ = rx.wait();
+            let _ = rx.await;
         }
     }
 
@@ -449,7 +426,7 @@ impl PipeweaverHandler {
         self.update_renderers()?;
 
         // Perform the initial screen render
-        self.perform_full_refresh()?;
+        self.perform_full_refresh().await?;
 
         Ok(())
     }
@@ -459,16 +436,8 @@ impl PipeweaverHandler {
         stream: &mut WebSocket,
         meter: &mut WebSocket,
     ) -> Result<()> {
-        debug!("Spawning Sync <-> Async Loop");
-
         const METER_HALF_TICK_MS: u64 = 50;
         const TICK_RATE: f32 = METER_HALF_TICK_MS as f32 / 1000.0;
-
-        let sync_receiver = self.input_rx.clone();
-        let (interaction_tx, mut interaction_rx) = channel(10);
-
-        let (_stop_tx, stop_rx) = bounded::<()>(0);
-        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
 
@@ -500,7 +469,7 @@ impl PipeweaverHandler {
                 Ok(_) = self.suspended_rx.changed() => {
                     // We've woken up from a suspension, so redraw everything
                     if !self.is_suspended() {
-                        self.refresh_page()?;
+                        self.refresh_page().await?;
                     }
 
                     // Restart the loop, just in case there are other redraws needed
@@ -528,7 +497,7 @@ impl PipeweaverHandler {
 
                                 if count != last_channel_count {
                                     last_channel_count = count;
-                                    self.load_page_button()?;
+                                    self.load_page_button().await?;
                                 }
 
                                 let sources = &self.status.audio.profile.devices.sources;
@@ -541,8 +510,8 @@ impl PipeweaverHandler {
                                     self.update_renderers()?;
 
                                     // Set the Button Colours
-                                    self.load_all_dial_button_colours()?;
-                                    self.perform_full_redraw()?;
+                                    self.load_all_dial_button_colours().await?;
+                                    self.perform_full_redraw().await?;
                                 } else {
                                     // Check whether any existing devices have changed
                                     for (index, device) in self.devices_shown.iter().enumerate() {
@@ -633,7 +602,7 @@ impl PipeweaverHandler {
                                         // inside the loops regards the renderer, which makes executing
                                         // earlier more difficult :D
                                         if refresh_button_colour {
-                                            self.load_dial_button_colour(index)?;
+                                            self.load_dial_button_colour(index).await?;
                                         }
                                     }
                                 }
@@ -650,8 +619,6 @@ impl PipeweaverHandler {
                     }
                 }
                 message = meter.next() => {
-                    continue;
-
                     match message {
                         Some(Ok(Message::Text(text))) => {
                         let result = serde_json::from_str::<MeterMessage>(&text)?;
@@ -705,7 +672,6 @@ impl PipeweaverHandler {
                     }
                 }
                 _ = &mut sub_sleep, if sub_tick.is_some() => {
-                    continue;
                     if let Some((id, index)) = sub_tick.take() && let Some(renderer) = self.renderers.get_mut(&id) {
                         let current = renderer.meter;
                         let new = renderer.tick_meter(TICK_RATE);
@@ -752,9 +718,9 @@ impl PipeweaverHandler {
                     self.temporary_active = false;
                 }
 
-                maybe_msg = interaction_rx.recv() => {
+                maybe_msg = self.input_rx.recv_async() => {
                     match maybe_msg {
-                        Some(msg) => {
+                        Ok(msg) => {
                             if is_suspended {
                                 // Reset the timer in all cases
                                 suspend_sleep.as_mut().reset(time::Instant::now() + Duration::from_secs(5));
@@ -786,7 +752,7 @@ impl PipeweaverHandler {
                                 t => bail!("WTF is this doing here?! {:?}", t)
                             }
                         },
-                        None => bail!("Receive Handler Closed!")
+                        Err(_) => bail!("Receive Handler Closed!")
                     }
                 }
                 _instant = keep_alive.tick() => {
@@ -802,11 +768,11 @@ impl PipeweaverHandler {
         }
     }
 
-    fn perform_full_refresh(&mut self) -> Result<()> {
-        self.perform_full_redraw()?;
-        self.load_all_dial_button_colours()?;
-        self.load_page_button()?;
-        self.load_mix_button_colours()?;
+    async fn perform_full_refresh(&mut self) -> Result<()> {
+        self.perform_full_redraw().await?;
+        self.load_all_dial_button_colours().await?;
+        self.load_page_button().await?;
+        self.load_mix_button_colours().await?;
 
         Ok(())
     }
@@ -824,7 +790,7 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    fn perform_full_redraw(&self) -> Result<()> {
+    async fn perform_full_redraw(&self) -> Result<()> {
         let (width, height) = DISPLAY_DIMENSIONS;
         let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
 
@@ -845,12 +811,12 @@ impl PipeweaverHandler {
         self.sender.send(SendImage(img, 0, 0, tx))?;
 
         debug!("Full Redraw Send");
-        //rx.wait()??;
+        rx.await??;
 
         Ok(())
     }
 
-    fn redraw_volumes(&self) -> Result<()> {
+    async fn redraw_volumes(&self) -> Result<()> {
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
             let renderer = self.renderers.get(item).ok_or(error)?;
@@ -869,22 +835,20 @@ impl PipeweaverHandler {
             // Send it
             let (tx, rx) = oneshot::channel();
             self.sender.send(SendImage(drawing.image, x, y, tx))?;
-
-            debug!("Redraw Volumes");
-            //rx.wait()??;
+            rx.await??;
         }
 
         Ok(())
     }
 
-    fn load_all_dial_button_colours(&self) -> Result<()> {
+    async fn load_all_dial_button_colours(&self) -> Result<()> {
         for index in 0..self.devices_shown.len() {
-            self.load_dial_button_colour(index)?;
+            self.load_dial_button_colour(index).await?;
         }
         Ok(())
     }
 
-    fn load_page_button(&mut self) -> Result<()> {
+    async fn load_page_button(&mut self) -> Result<()> {
         let pages = self.get_page_count();
         if self.active_page >= pages {
             self.active_page = pages - 1;
@@ -905,13 +869,15 @@ impl PipeweaverHandler {
         };
 
         // Send the page colours
-        self.set_button_colour(ButtonLighting::Left, left_colour)?;
-        self.set_button_colour(ButtonLighting::Right, right_colour)?;
+        self.set_button_colour(ButtonLighting::Left, left_colour)
+            .await?;
+        self.set_button_colour(ButtonLighting::Right, right_colour)
+            .await?;
 
         Ok(())
     }
 
-    fn load_mix_button_colours(&self) -> Result<()> {
+    async fn load_mix_button_colours(&self) -> Result<()> {
         let colour = match self.channel_type {
             ChannelType::Source => match self.active_mix {
                 Mix::A => COLOUR_MIX_B,
@@ -921,11 +887,11 @@ impl PipeweaverHandler {
             ChannelType::Target => COLOUR_BLACK,
         };
 
-        self.set_button_colour(ButtonLighting::Mix, colour)?;
+        self.set_button_colour(ButtonLighting::Mix, colour).await?;
         Ok(())
     }
 
-    fn load_dial_button_colour(&self, index: usize) -> Result<()> {
+    async fn load_dial_button_colour(&self, index: usize) -> Result<()> {
         let error = anyhow!("No Such Index");
         let device_id = self.devices_shown.get(index).ok_or(error)?;
 
@@ -948,7 +914,7 @@ impl PipeweaverHandler {
             alpha: colour[3],
         };
 
-        self.set_button_colour(dial_button, beacn_colour)?;
+        self.set_button_colour(dial_button, beacn_colour).await?;
         Ok(())
     }
 
@@ -976,10 +942,10 @@ impl PipeweaverHandler {
         Ok(renderer)
     }
 
-    fn refresh_page(&mut self) -> Result<()> {
+    async fn refresh_page(&mut self) -> Result<()> {
         self.devices_shown = self.get_channels_on_page();
         self.update_renderers()?;
-        self.perform_full_refresh()?;
+        self.perform_full_refresh().await?;
         Ok(())
     }
 
@@ -1088,13 +1054,13 @@ impl PipeweaverHandler {
             .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
     }
 
-    fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
+    async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = ButtonColour(button, colour, tx);
         self.sender.send(message)?;
 
         debug!("Set Button Colour: {:?}", button);
-        //rx.wait()??;
+        rx.await??;
         Ok(())
     }
 
@@ -1209,8 +1175,8 @@ impl PipeweaverHandler {
                     Mix::A => Mix::B,
                     Mix::B => Mix::A,
                 };
-                self.redraw_volumes()?;
-                self.load_mix_button_colours()?;
+                self.redraw_volumes().await?;
+                self.load_mix_button_colours().await?;
             }
             Buttons::PageLeft | Buttons::PageRight => {
                 let change: i8 = match button {
@@ -1229,7 +1195,7 @@ impl PipeweaverHandler {
                 self.active_page = self.active_page.wrapping_add_signed(change);
 
                 if !self.is_suspended() || self.temporary_active {
-                    self.refresh_page()?;
+                    self.refresh_page().await?;
                 }
             }
 
@@ -1347,27 +1313,4 @@ fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
         return Ok(img.into_rgba8());
     }
     bail!("Failed to load image");
-}
-
-fn sync_to_async(
-    rx: Receiver<Interactions>,
-    tx: tokio::sync::mpsc::Sender<Interactions>,
-    cancel: Receiver<()>,
-) -> Result<()> {
-    loop {
-        if cancel.try_recv().is_ok() {
-            break;
-        }
-
-        match rx.recv() {
-            Ok(msg) => {
-                if tx.blocking_send(msg).is_err() {
-                    break;
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    Ok(())
 }
