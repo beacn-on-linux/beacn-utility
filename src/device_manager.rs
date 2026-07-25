@@ -250,8 +250,8 @@ pub async fn spawn_device_manager(
 
         tokio::select! {
             Some((location, req)) = device_event_rx.recv() => {
-                if let DeviceRequest::Control(msg) = req {
-                    if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
+                if let DeviceRequest::Control(msg) = req
+                    && let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                         match msg {
                             ControlMessage::SendImage(img, x, y, tx) => {
                                 let _ = tx.send(dev.set_image(x, y, &img));
@@ -261,7 +261,7 @@ pub async fn spawn_device_manager(
                             }
                             _ => {}
                         }
-                    }
+
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(10)) => {}
@@ -273,6 +273,7 @@ pub async fn spawn_device_manager(
     debug!("Device Manager Stopped");
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_device_attached(
     location: DeviceLocation,
     device_type: DeviceType,
