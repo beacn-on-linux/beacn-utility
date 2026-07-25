@@ -13,29 +13,32 @@
 */
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::login::{LoginEventTriggers, spawn_login_handler};
-use crate::{ManagerMessages, ToMainMessages, runtime};
+use crate::{ManagerMessages, ToMainMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
-use beacn_lib::flume::{Receiver, Selector, Sender, bounded, unbounded};
+use beacn_lib::flume::{Receiver, Sender, bounded, unbounded};
 use beacn_lib::manager::{
-    DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, spawn_hotplug_handler,
+    DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, watch_hotplug_devices,
 };
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
-use beacn_lib::{BeacnError, MaybeFuture, UsbError};
+use beacn_lib::{BeacnError, UsbError};
+use futures::FutureExt;
+use futures::StreamExt;
 use log::{debug, error};
-use std::panic::catch_unwind;
+use std::collections::HashMap;
+use std::panic::AssertUnwindSafe;
+use std::pin::Pin;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use strum_macros::Display;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
-//const TEMP_SPLASH: &[u8] = include_bytes!("../resources/screens/beacn-splash.jpg");
+use tokio_stream::{Stream, StreamMap};
 
-pub fn spawn_device_manager(
+pub async fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,
     self_tx: Sender<ToMainMessages>,
     event_tx: Sender<DeviceMessage>,
@@ -45,46 +48,44 @@ pub fn spawn_device_manager(
     let (login_tx, login_rx) = bounded(5);
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
-    // We need a hashmap that'll map a receiver to an object
-    let mut receiver_map: Vec<DeviceMap> = vec![];
+    // Device state, keyed by location. The actual request receivers live in
+    // `device_streams` below (StreamMap needs to own them to poll them alongside
+    // everything else); this map holds what we need to act once a request arrives.
+    let mut devices: HashMap<DeviceLocation, DeviceEntry> = HashMap::new();
 
-    spawn_hotplug_handler(plug_tx, manage_rx).expect("Failed to Spawn HotPlug Handler");
+    // A dynamically-sized set of streams we can await together, one per attached device,
+    // keyed the same way as `devices`. This is the async equivalent of the old
+    // `flume::Selector` built fresh from `receiver_map` every loop iteration -- except
+    // StreamMap handles insertion/removal of individual streams at runtime for us instead
+    // of us needing to rebuild the whole selector each pass.
+    let mut device_streams: StreamMap<DeviceLocation, DeviceRequestStream> = StreamMap::new();
+
+    // watch_hotplug_devices is beacn-lib's async-native hotplug watcher -- spawn it as a
+    // task instead of spawn_hotplug_handler, which would give us a dedicated OS thread we
+    // don't need now that we're on a runtime.
+    tokio::spawn(watch_hotplug_devices(plug_tx, manage_rx));
     thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
 
     let mut suspended = false;
     let mut pending_attachments: Vec<(DeviceLocation, DeviceType, Sender<()>)> = vec![];
 
     loop {
-        let mut selector = Selector::new();
-        selector = selector.recv(&self_rx, |msg| DeviceEvent::Manager(msg.ok()));
-        selector = selector.recv(&login_rx, |msg| DeviceEvent::Login(msg.ok()));
-        selector = selector.recv(&plug_rx, |msg| DeviceEvent::Hotplug(msg.ok()));
-
-        for (index, device) in receiver_map.iter().enumerate() {
-            match device {
-                DeviceMap::Audio(_, _, rx) => {
-                    selector = selector.recv(rx, move |msg| DeviceEvent::Audio(index, msg.ok()));
-                }
-
-                DeviceMap::Control(_, _, rx, _, _, _) => {
-                    selector = selector.recv(rx, move |msg| DeviceEvent::Control(index, msg.ok()));
+        tokio::select! {
+            msg = self_rx.recv_async() => {
+                match msg {
+                    Ok(ManagerMessages::Quit) | Err(_) => break,
                 }
             }
-        }
 
-        match selector.wait() {
-            DeviceEvent::Manager(Some(ManagerMessages::Quit)) | DeviceEvent::Manager(None) => {
-                break;
-            }
-
-            DeviceEvent::Login(Some(msg)) => {
+            msg = login_rx.recv_async() => {
+                let Ok(msg) = msg else { break };
                 debug!("Received Login State Message: {msg:?}");
 
                 match msg {
                     LoginEventTriggers::Sleep(tx) => {
                         suspended = true;
-                        set_pipeweaver_draw_suspended(&receiver_map, true);
-                        enable_devices(&receiver_map, false);
+                        set_pipeweaver_draw_suspended(&devices, true);
+                        enable_devices(&devices, false);
                         let _ = tx.send(());
                     }
 
@@ -96,208 +97,198 @@ pub fn spawn_device_manager(
                                 location,
                                 device_type,
                                 health_tx,
-                                &mut receiver_map,
+                                &mut devices,
+                                &mut device_streams,
                                 &event_tx,
                                 &self_tx,
-                            );
+                            )
+                            .await;
                         }
 
-                        set_pipeweaver_draw_suspended(&receiver_map, false);
-                        enable_devices(&receiver_map, true);
+                        set_pipeweaver_draw_suspended(&devices, false);
+                        enable_devices(&devices, true);
                         let _ = tx.send(());
                     }
 
                     LoginEventTriggers::Lock => {
-                        set_pipeweaver_draw_suspended(&receiver_map, true);
-                        enable_devices(&receiver_map, false);
+                        set_pipeweaver_draw_suspended(&devices, true);
+                        enable_devices(&devices, false);
                     }
 
                     LoginEventTriggers::Unlock => {
-                        set_pipeweaver_draw_suspended(&receiver_map, false);
-                        enable_devices(&receiver_map, true);
+                        set_pipeweaver_draw_suspended(&devices, false);
+                        enable_devices(&devices, true);
                     }
                 }
             }
 
-            DeviceEvent::Login(None) => {
-                break;
-            }
+            msg = plug_rx.recv_async() => {
+                let Ok(msg) = msg else { break };
 
-            DeviceEvent::Hotplug(Some(msg)) => match msg {
-                HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
-                    if suspended {
-                        pending_attachments.push((location, device_type, health_tx));
-                    } else {
-                        handle_device_attached(
-                            location,
-                            device_type,
-                            health_tx,
-                            &mut receiver_map,
-                            &event_tx,
-                            &self_tx,
-                        );
-                    }
-                }
-
-                HotPlugMessage::DeviceRemoved(location) => {
-                    pending_attachments.retain(|(loc, _, _)| *loc != location);
-
-                    let _ = event_tx.send(DeviceMessage::DeviceRemoved(location.clone()));
-
-                    receiver_map.retain(|device| match device {
-                        DeviceMap::Audio(_, definition, _) => definition.location != location,
-
-                        DeviceMap::Control(_, definition, _, _, _, _) => {
-                            definition.location != location
+                match msg {
+                    HotPlugMessage::DeviceAttached(location, device_type, health_tx) => {
+                        if suspended {
+                            pending_attachments.push((location, device_type, health_tx));
+                        } else {
+                            handle_device_attached(
+                                location,
+                                device_type,
+                                health_tx,
+                                &mut devices,
+                                &mut device_streams,
+                                &event_tx,
+                                &self_tx,
+                            )
+                            .await;
                         }
-                    });
+                    }
 
-                    let _ = self_tx.send(ToMainMessages::RequestRedraw);
+                    HotPlugMessage::DeviceRemoved(location) => {
+                        pending_attachments.retain(|(loc, _, _)| *loc != location);
+
+                        let _ = event_tx.send(DeviceMessage::DeviceRemoved(location.clone()));
+
+                        devices.remove(&location);
+                        device_streams.remove(&location);
+
+                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
+                    }
+
+                    HotPlugMessage::ThreadStopped => break,
                 }
-
-                HotPlugMessage::ThreadStopped => {
-                    break;
-                }
-            },
-
-            DeviceEvent::Hotplug(None) => {
-                break;
             }
 
-            DeviceEvent::Audio(index, Some(msg)) => {
-                if let Some(DeviceMap::Audio(dev, _, _)) = receiver_map.get(index) {
-                    match msg {
-                        AudioMessage::Handle(msg, resp) => {
-                            let response = catch_unwind(|| dev.handle_message(msg).wait());
+            Some((location, req)) = device_streams.next() => {
+                match req {
+                    DeviceRequest::Audio(msg) => {
+                        if let Some(DeviceEntry::Audio(dev, _)) = devices.get(&location) {
+                            match msg {
+                                AudioMessage::Handle(msg, resp) => {
+                                    let response = AssertUnwindSafe(dev.handle_message(msg))
+                                        .catch_unwind()
+                                        .await;
 
-                            match response {
-                                Ok(result) => {
-                                    let _ = resp.send(result);
+                                    match response {
+                                        Ok(result) => {
+                                            let _ = resp.send(result);
+                                        }
+
+                                        Err(panic) => {
+                                            let error = panic
+                                                .downcast_ref::<String>()
+                                                .cloned()
+                                                .unwrap_or_else(|| "Unknown Error".to_string());
+
+                                            let _ = resp.send(Err(anyhow!(error).into()));
+                                        }
+                                    }
                                 }
 
-                                Err(panic) => {
-                                    let error = panic
-                                        .downcast_ref::<String>()
-                                        .cloned()
-                                        .unwrap_or_else(|| "Unknown Error".to_string());
+                                AudioMessage::Linked(command) => match command {
+                                    LinkedCommands::GetLinked(tx) => {
+                                        let _ = tx.send(dev.get_linked_app_list().await);
+                                    }
 
-                                    let _ = resp.send(Err(anyhow!(error).into()));
+                                    LinkedCommands::SetLinked(app, tx) => {
+                                        let _ = tx.send(dev.set_linked_app(app).await);
+                                    }
+                                },
+                            }
+                        }
+                    }
+
+                    DeviceRequest::Control(msg) => {
+                        if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
+                            match msg {
+                                ControlMessage::SendImage(img, x, y, tx) => {
+                                    let result = dev.set_image(x, y, &img);
+                                    let _ = tx.send(result);
+                                }
+                                ControlMessage::DisplayBrightness(brightness, tx) => {
+                                    let _ = tx.send(dev.set_display_brightness(brightness));
+                                }
+                                ControlMessage::ButtonBrightness(brightness, tx) => {
+                                    let _ = tx.send(dev.set_button_brightness(brightness));
+                                }
+                                ControlMessage::DimTimeout(timeout, tx) => {
+                                    let _ = tx.send(dev.set_dim_timeout(timeout));
+                                }
+                                ControlMessage::ButtonColour(button, colour, tx) => {
+                                    let _ = tx.send(dev.set_button_colour(button, colour));
+                                }
+                                ControlMessage::Enabled(enabled, tx) => {
+                                    let _ = tx.send(dev.set_enabled(enabled));
+                                }
+                                ControlMessage::KeepAlive(tx) => {
+                                    let _ = tx.send(dev.send_keepalive());
                                 }
                             }
                         }
-
-                        AudioMessage::Linked(command) => match command {
-                            LinkedCommands::GetLinked(tx) => {
-                                let _ = tx.send(dev.get_linked_app_list().wait());
-                            }
-
-                            LinkedCommands::SetLinked(app, tx) => {
-                                let _ = tx.send(dev.set_linked_app(app).wait());
-                            }
-                        },
                     }
                 }
-            }
-
-            DeviceEvent::Audio(_, None) => {
-                // Same behaviour as previous crossbeam implementation:
-                // ignore closed device channels.
-            }
-
-            DeviceEvent::Control(index, Some(msg)) => {
-                if let Some(DeviceMap::Control(dev, _, _, _, _, _)) = receiver_map.get(index) {
-                    match msg {
-                        ControlMessage::SendImage(img, x, y, tx) => {
-                            let _ = tx.send(dev.set_image(x, y, &img));
-                        }
-
-                        ControlMessage::DisplayBrightness(brightness, tx) => {
-                            let _ = tx.send(dev.set_display_brightness(brightness));
-                        }
-
-                        ControlMessage::ButtonBrightness(brightness, tx) => {
-                            let _ = tx.send(dev.set_button_brightness(brightness));
-                        }
-
-                        ControlMessage::DimTimeout(timeout, tx) => {
-                            let _ = tx.send(dev.set_dim_timeout(timeout));
-                        }
-
-                        ControlMessage::ButtonColour(button, colour, tx) => {
-                            let _ = tx.send(dev.set_button_colour(button, colour));
-                        }
-
-                        ControlMessage::Enabled(enabled, tx) => {
-                            let _ = tx.send(dev.set_enabled(enabled));
-                        }
-
-                        ControlMessage::KeepAlive(tx) => {
-                            let _ = tx.send(dev.send_keepalive());
-                        }
-                    }
-                }
-            }
-
-            DeviceEvent::Control(_, None) => {
-                // Ignore closed device channels.
             }
         }
     }
 
     // Stop the dbus login handler
-    let _ = login_stop_tx.blocking_send(());
+    let _ = login_stop_tx.send(()).await;
 
     // Stop any control devices which may be active
-    for device in receiver_map.iter_mut() {
-        if let DeviceMap::Control(_, _, _, stop, _, _) = device {
+    for device in devices.values() {
+        if let DeviceEntry::Control(_, _, stop, _, _) = device {
             let _ = stop.send(());
         }
     }
 
-    // Drain the devices until they're finished.
-    runtime().block_on(async {
-        loop {
-            let all_done = receiver_map.iter().all(|d| match d {
-                DeviceMap::Control(_, _, _, _, _, task) => task.is_finished(),
-                _ => true,
-            });
-            if all_done {
-                break;
-            }
+    // Drain the devices until they're finished. No more `runtime().block_on(...)` needed
+    // here -- we're already running on the runtime, this is just the tail of the same
+    // async fn.
+    loop {
+        let all_done = devices.values().all(|d| match d {
+            DeviceEntry::Control(_, _, _, _, task) => task.is_finished(),
+            _ => true,
+        });
+        if all_done {
+            break;
+        }
 
-            for device in receiver_map.iter_mut() {
-                if let DeviceMap::Control(dev, _, rx, _, _, _) = device {
-                    match rx.try_recv() {
-                        Ok(ControlMessage::SendImage(img, x, y, tx)) => {
-                            let _ = tx.send(dev.set_image(x, y, &img));
+        tokio::select! {
+            Some((location, req)) = device_streams.next() => {
+                if let DeviceRequest::Control(msg) = req {
+                    if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
+                        match msg {
+                            ControlMessage::SendImage(img, x, y, tx) => {
+                                let _ = tx.send(dev.set_image(x, y, &img));
+                            }
+                            ControlMessage::ButtonColour(button, colour, tx) => {
+                                let _ = tx.send(dev.set_button_colour(button, colour));
+                            }
+                            _ => {}
                         }
-                        Ok(ControlMessage::ButtonColour(button, colour, tx)) => {
-                            let _ = tx.send(dev.set_button_colour(button, colour));
-                        }
-                        _ => {}
                     }
                 }
             }
-            sleep(Duration::from_millis(10)).await;
+            _ = tokio::time::sleep(Duration::from_millis(10)) => {}
         }
-    });
+    }
 
     // For some reason, we're stopping. If the manager channel is still open, tell it to stop.
     let _ = manage_tx.send(HotPlugThreadManagement::Quit);
     debug!("Device Manager Stopped");
 }
 
-fn handle_device_attached(
+async fn handle_device_attached(
     location: DeviceLocation,
     device_type: DeviceType,
     health_tx: Sender<()>,
-    receiver_map: &mut Vec<DeviceMap>,
+    devices: &mut HashMap<DeviceLocation, DeviceEntry>,
+    device_streams: &mut StreamMap<DeviceLocation, DeviceRequestStream>,
     event_tx: &Sender<DeviceMessage>,
     self_tx: &Sender<ToMainMessages>,
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-            let (device, state) = match open_audio_device(location.clone()).wait() {
+            let (device, state) = match open_audio_device(location.clone()).await {
                 Ok(d) => (Some(d), DefinitionState::Running),
                 Err(e) => {
                     error!("Failed to open audio device: {e}");
@@ -323,7 +314,7 @@ fn handle_device_attached(
             // Firstly, build the device definition
             let data = DeviceDefinition {
                 state,
-                location,
+                location: location.clone(),
                 device_type,
                 device_info: DeviceInfo { serial, version },
             };
@@ -331,9 +322,10 @@ fn handle_device_attached(
             // Create a Message Bus for it
             let (tx, rx) = unbounded();
 
-            // Add this into our receiver array
+            // Add this into our device map + the stream map we select over
             if let Some(device) = device {
-                receiver_map.push(DeviceMap::Audio(device, data.clone(), rx));
+                devices.insert(location.clone(), DeviceEntry::Audio(device, data.clone()));
+                device_streams.insert(location, box_audio_stream(rx));
             }
 
             let arrived = DeviceArriveMessage::Audio(data, tx);
@@ -347,7 +339,7 @@ fn handle_device_attached(
             let (input_tx, input_rx) = unbounded();
 
             let (device, state) =
-                match open_control_device(location.clone(), Some(input_tx), health_tx).wait() {
+                match open_control_device(location.clone(), Some(input_tx), health_tx).await {
                     Ok(d) => (Some(d), DefinitionState::Running),
                     Err(e) => {
                         error!("Failed to open control device: {e}");
@@ -373,7 +365,7 @@ fn handle_device_attached(
 
             let data = DeviceDefinition {
                 state,
-                location,
+                location: location.clone(),
                 device_type,
                 device_info: DeviceInfo {
                     serial,
@@ -389,14 +381,11 @@ fn handle_device_attached(
                 spawn_pipeweaver_handler(img_tx, device_type, input_rx, stop_rx, suspended_rx);
 
             if let Some(device) = device {
-                receiver_map.push(DeviceMap::Control(
-                    device,
-                    data.clone(),
-                    rx,
-                    stop_tx,
-                    suspended_tx,
-                    task,
-                ));
+                devices.insert(
+                    location.clone(),
+                    DeviceEntry::Control(device, data.clone(), stop_tx, suspended_tx, task),
+                );
+                device_streams.insert(location, box_control_stream(rx));
             }
 
             // Use the async runtime for this
@@ -410,45 +399,46 @@ fn handle_device_attached(
     let _ = self_tx.send(ToMainMessages::RequestRedraw);
 }
 
+/// Turn a device's request receiver into a stream of the shared `DeviceRequest` enum and
+/// box it, so audio and control device streams -- despite carrying different message
+/// types -- can live side by side in the same `StreamMap`.
+fn box_audio_stream(rx: Receiver<AudioMessage>) -> DeviceRequestStream {
+    Box::pin(rx.into_stream().map(DeviceRequest::Audio))
+}
+
+fn box_control_stream(rx: Receiver<ControlMessage>) -> DeviceRequestStream {
+    Box::pin(rx.into_stream().map(DeviceRequest::Control))
+}
+
+type DeviceRequestStream = Pin<Box<dyn Stream<Item = DeviceRequest> + Send>>;
+
+enum DeviceRequest {
+    Audio(AudioMessage),
+    Control(ControlMessage),
+}
+
 #[allow(unused)]
-fn enable_devices(receiver_map: &Vec<DeviceMap>, enabled: bool) {
-    for device in receiver_map {
-        #[allow(clippy::single_match)]
-        match device {
-            DeviceMap::Control(dev, _, _, _, _, _) => {
-                let _ = dev.set_enabled(enabled);
-            }
-            _ => {}
+fn enable_devices(devices: &HashMap<DeviceLocation, DeviceEntry>, enabled: bool) {
+    for device in devices.values() {
+        if let DeviceEntry::Control(dev, ..) = device {
+            let _ = dev.set_enabled(enabled);
         }
     }
 }
 
-fn set_pipeweaver_draw_suspended(receiver_map: &Vec<DeviceMap>, suspended: bool) {
-    for device in receiver_map {
-        if let DeviceMap::Control(_, _, _, _, draw_suspend, _) = device {
+fn set_pipeweaver_draw_suspended(devices: &HashMap<DeviceLocation, DeviceEntry>, suspended: bool) {
+    for device in devices.values() {
+        if let DeviceEntry::Control(_, _, _, draw_suspend, _) = device {
             let _ = draw_suspend.send(suspended);
         }
     }
 }
 
-enum DeviceEvent {
-    Manager(Option<ManagerMessages>),
-    Login(Option<LoginEventTriggers>),
-    Hotplug(Option<HotPlugMessage>),
-    Audio(usize, Option<AudioMessage>),
-    Control(usize, Option<ControlMessage>),
-}
-
-enum DeviceMap {
-    Audio(
-        Box<dyn BeacnAudioDevice>,
-        DeviceDefinition,
-        Receiver<AudioMessage>,
-    ),
+enum DeviceEntry {
+    Audio(Box<dyn BeacnAudioDevice>, DeviceDefinition),
     Control(
         Box<dyn BeacnControlDevice>,
         DeviceDefinition,
-        Receiver<ControlMessage>,
         watch::Sender<()>,
         watch::Sender<bool>,
         JoinHandle<()>,
@@ -467,11 +457,13 @@ pub enum DeviceArriveMessage {
     Control(DeviceDefinition, Sender<ControlMessage>),
 }
 
+#[derive(Debug)]
 pub enum AudioMessage {
     Handle(Message, oneshot::Sender<Result<Message, BeacnError>>),
     Linked(LinkedCommands),
 }
 
+#[derive(Debug)]
 pub enum LinkedCommands {
     GetLinked(oneshot::Sender<Result<Option<Vec<LinkedApp>>, BeacnError>>),
     SetLinked(LinkedApp, oneshot::Sender<Result<(), BeacnError>>),

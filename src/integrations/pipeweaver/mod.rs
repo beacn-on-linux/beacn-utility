@@ -9,6 +9,7 @@ use crate::integrations::pipeweaver::layout::{
 };
 use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
+use beacn_lib::MaybeFuture;
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::flume::{Receiver, Selector, Sender, TryRecvError, bounded};
 use beacn_lib::manager::DeviceType;
@@ -46,7 +47,7 @@ use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::channel;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
@@ -282,17 +283,17 @@ impl PipeweaverHandler {
 
             // Spawn a sync <-> async loop so we can consume incoming messages while disconnected
             let sync_receiver = self.input_rx.clone();
-            let (interaction_tx, mut interaction_rx) = channel(10);
+            //let (interaction_tx, mut interaction_rx) = channel(10);
 
             let (stop_tx, stop_rx) = bounded::<()>(0);
-            runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
+            //runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
             // Create a loop which handles things like incoming messages and stopping
             loop {
                 select! {
-                    Some(_) = interaction_rx.recv() => {
-                        // We need to NOOP this, drain the channel so messages don't queue.
-                    }
+                    // Some(_) = interaction_rx.recv() => {
+                    //     // We need to NOOP this, drain the channel so messages don't queue.
+                    // }
                     Ok(_) = self.stop_rx.changed() => {
                         break 'connect;
                     }
@@ -314,9 +315,17 @@ impl PipeweaverHandler {
     }
 
     fn draw_splash(&self) {
+        debug!("Drawing Pipeweaver Splash");
+
         let (tx, rx) = oneshot::channel();
-        let _ = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
-        let _ = rx.recv();
+
+        debug!("Sending splash into control channel");
+        let result = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
+        debug!("Splash channel send result: {:?}", result);
+
+        //let _ = rx.wait();
+
+        debug!("Pipeweaver Splash Drawn");
     }
 
     fn draw_status(&self, text: &str) {
@@ -332,8 +341,16 @@ impl PipeweaverHandler {
 
         if let Ok(img) = img_as_jpeg(text, Rgba([0, 0, 0, 255])) {
             let (tx, rx) = oneshot::channel();
-            let _ = self.sender.send(SendImage(img, 0, 330, tx));
-            let _ = rx.recv();
+            match self.sender.send(SendImage(img, 0, 330, tx)) {
+                Ok(_) => debug!("Pipeweaver SendImage queued"),
+                Err(e) => debug!("Pipeweaver SendImage failed: {:?}", e),
+            }
+
+            // let _ = self.sender.send(SendImage(img, 0, 330, tx));
+            debug!("Status Wait");
+            //let _ = rx.wait();
+
+            debug!("Pipeweaver Status Sent");
         }
     }
 
@@ -341,7 +358,9 @@ impl PipeweaverHandler {
         for button in ButtonLighting::iter() {
             let (tx, rx) = oneshot::channel();
             let _ = self.sender.send(ButtonColour(button, COLOUR_BLACK, tx));
-            let _ = rx.recv();
+
+            debug!("Disable Buttons");
+            //let _ = rx.wait();
         }
     }
 
@@ -455,7 +474,7 @@ impl PipeweaverHandler {
 
         let (tx, rx) = oneshot::channel();
         self.sender.send(ControlMessage::Enabled(true, tx))?;
-        rx.recv()??;
+        rx.await??;
 
         let mut last_channel_count = 0;
 
@@ -607,7 +626,7 @@ impl PipeweaverHandler {
                                             // Send it
                                             let (tx,rx) = oneshot::channel();
                                             self.sender.send(SendImage(img, x, y, tx))?;
-                                            rx.recv()??;
+                                            rx.await??;
                                         };
 
                                         // We split this out because there's a lot of borrowing going on
@@ -631,6 +650,8 @@ impl PipeweaverHandler {
                     }
                 }
                 message = meter.next() => {
+                    continue;
+
                     match message {
                         Some(Ok(Message::Text(text))) => {
                         let result = serde_json::from_str::<MeterMessage>(&text)?;
@@ -667,7 +688,7 @@ impl PipeweaverHandler {
 
                                 let (tx, rx) = oneshot::channel();
                                 self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                                rx.recv()??;
+                                rx.await??;
 
                                 sub_tick = Some((result.id, index));
                                 sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
@@ -684,6 +705,7 @@ impl PipeweaverHandler {
                     }
                 }
                 _ = &mut sub_sleep, if sub_tick.is_some() => {
+                    continue;
                     if let Some((id, index)) = sub_tick.take() && let Some(renderer) = self.renderers.get_mut(&id) {
                         let current = renderer.meter;
                         let new = renderer.tick_meter(TICK_RATE);
@@ -711,7 +733,7 @@ impl PipeweaverHandler {
 
                         let (tx, rx) = oneshot::channel();
                         self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                        rx.recv()??;
+                        rx.await??;
 
                         // Keep ticking until meter hits zero
                         if renderer.meter > 0 {
@@ -725,7 +747,7 @@ impl PipeweaverHandler {
                     // We should be sleeping, and something woke us up, so put us back to sleep
                     let (tx, rx) = oneshot::channel();
                     self.sender.send(ControlMessage::Enabled(false, tx))?;
-                    rx.recv()??;
+                    rx.await??;
 
                     self.temporary_active = false;
                 }
@@ -741,7 +763,7 @@ impl PipeweaverHandler {
                                     // Wake the device up, and flag as temporarily active
                                     let (tx, rx) = oneshot::channel();
                                     self.sender.send(ControlMessage::Enabled(true, tx))?;
-                                    rx.recv()??;
+                                    rx.await??;
 
                                     self.temporary_active = true;
                                 }
@@ -770,7 +792,7 @@ impl PipeweaverHandler {
                 _instant = keep_alive.tick() => {
                     let (tx,rx) = oneshot::channel();
                     self.sender.send(ControlMessage::KeepAlive(tx))?;
-                    rx.recv()??;
+                    rx.await??;
                 }
 
                 _ = ticker.tick() => {
@@ -821,7 +843,9 @@ impl PipeweaverHandler {
         let (tx, rx) = oneshot::channel();
         let img = img_as_jpeg(base, BG_COLOUR)?;
         self.sender.send(SendImage(img, 0, 0, tx))?;
-        rx.recv()??;
+
+        debug!("Full Redraw Send");
+        //rx.wait()??;
 
         Ok(())
     }
@@ -845,7 +869,9 @@ impl PipeweaverHandler {
             // Send it
             let (tx, rx) = oneshot::channel();
             self.sender.send(SendImage(drawing.image, x, y, tx))?;
-            rx.recv()??;
+
+            debug!("Redraw Volumes");
+            //rx.wait()??;
         }
 
         Ok(())
@@ -1066,7 +1092,9 @@ impl PipeweaverHandler {
         let (tx, rx) = oneshot::channel();
         let message = ButtonColour(button, colour, tx);
         self.sender.send(message)?;
-        rx.recv()??;
+
+        debug!("Set Button Colour: {:?}", button);
+        //rx.wait()??;
         Ok(())
     }
 
@@ -1326,31 +1354,20 @@ fn sync_to_async(
     tx: tokio::sync::mpsc::Sender<Interactions>,
     cancel: Receiver<()>,
 ) -> Result<()> {
-    debug!("Running Up Receiver..");
+    loop {
+        if cancel.try_recv().is_ok() {
+            break;
+        }
 
-    let mut result = Ok(());
-
-    while !Selector::new()
-        .recv(&rx, |msg| match msg {
-            Ok(val) => {
-                if let Err(e) = tx.blocking_send(val) {
-                    result = Err(e.into());
-                    true
-                } else {
-                    false
+        match rx.recv() {
+            Ok(msg) => {
+                if tx.blocking_send(msg).is_err() {
+                    break;
                 }
             }
-            Err(_) => {
-                debug!("Crossbeam channel disconnected, stopping sync wrapper");
-                true
-            }
-        })
-        .recv(&cancel, |_| {
-            // We don't care about the result, we just want to stop the loop.
-            true
-        })
-        .wait()
-    {}
+            Err(_) => break,
+        }
+    }
 
-    result
+    Ok(())
 }

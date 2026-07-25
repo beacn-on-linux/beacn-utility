@@ -18,6 +18,7 @@ use crate::device_manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
 };
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
+use beacn_lib::MaybeFuture;
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -34,6 +35,7 @@ use beacn_lib::flume::Sender;
 use beacn_lib::manager::DeviceType;
 use log::debug;
 use strum_macros::EnumIter;
+use tokio::sync::oneshot;
 
 type Rgb = [u8; 3];
 
@@ -197,7 +199,7 @@ impl BeacnAudioState {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
-                let message = rx.recv()?;
+                let message = rx.wait()?;
 
                 // Quickly intercept the message, and set our local value
                 if let Ok(message) = message {
@@ -217,7 +219,7 @@ impl BeacnAudioState {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
-                let message = rx.recv()?;
+                let message = rx.wait()?;
 
                 debug!("Result: {message:?}");
 
@@ -240,7 +242,7 @@ impl BeacnAudioState {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
-                let message = rx.recv()?;
+                let message = rx.wait()?;
 
                 debug!("Result: {message:?}");
             }

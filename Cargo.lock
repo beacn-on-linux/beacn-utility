@@ -458,7 +458,6 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "beacn-lib"
 version = "0.1.11"
-source = "git+https://github.com/beacn-on-linux/beacn-lib.git?branch=flume-test-nusb-async#28e5f66cd8e4678b03a59940c532f8cc071048a5"
 dependencies = [
  "anyhow",
  "async-io",
@@ -490,6 +489,7 @@ dependencies = [
  "enum-map",
  "file-rotate",
  "fontdue",
+ "futures",
  "futures-util",
  "glutin",
  "image",
@@ -498,7 +498,6 @@ dependencies = [
  "ksni",
  "log",
  "log-panics",
- "oneshot",
  "pipeweaver-ipc",
  "pipeweaver-profile",
  "pipeweaver-shared",
@@ -510,6 +509,7 @@ dependencies = [
  "strum",
  "strum_macros",
  "tokio",
+ "tokio-stream",
  "tokio-tungstenite",
  "uds_windows",
  "ulid",
@@ -3028,12 +3028,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "oneshot"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe21416a02c693fb9f980befcb230ecc70b0b3d1cc4abf88b9675c4c1457f0c"
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4398,6 +4392,17 @@ dependencies = [
  "pin-project",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3d06f0b082ba57c26b79407372e57cf2a1e28124f78e9479fe80322cf53420b"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

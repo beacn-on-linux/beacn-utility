@@ -145,7 +145,9 @@ async fn main() -> Result<()> {
     // This one sends and receives messages when devices are attached and removed
     let (device_tx, device_rx) = unbounded();
     let dev_main_tx = main_tx.clone();
-    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
+    let device_manager = task::spawn(spawn_device_manager(manage_rx, dev_main_tx, device_tx));
+
+    //let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
@@ -271,9 +273,8 @@ async fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     let _ = window.join();
-    let _ = device_manager.join();
 
-    let _ = join!(ipc, tray);
+    let _ = join!(ipc, tray, device_manager);
 
     debug!("Shutdown Complete");
 

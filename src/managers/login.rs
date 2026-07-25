@@ -16,7 +16,7 @@ use beacn_lib::flume::Sender;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::env;
-use tokio::sync::mpsc as tokio_mpsc;
+use tokio::sync::{mpsc as tokio_mpsc, oneshot};
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
 use zbus::{Connection, proxy};
@@ -147,7 +147,7 @@ async fn run_internal(
                         debug!("Sleep Message Sent, awaiting completion..");
 
                         // Use spawn_blocking to wait for the sync channel
-                        let _ = sleep_rx.recv();
+                        let _ = sleep_rx.await;
                     }
 
                     debug!("Sleep Handling Complete, Attempting to Drop Inhibitor");
@@ -165,7 +165,7 @@ async fn run_internal(
                         debug!("Wake Message Sent, awaiting completion..");
 
                         // Use spawn_blocking to wait for the sync channel
-                        let _ = wake_rx.recv();
+                        let _ = wake_rx.await;
                     }
 
                     debug!("Wake Handling Complete, Attempting to replace Inhibitor");
