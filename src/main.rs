@@ -147,8 +147,6 @@ async fn main() -> Result<()> {
     let dev_main_tx = main_tx.clone();
     let device_manager = task::spawn(spawn_device_manager(manage_rx, dev_main_tx, device_tx));
 
-    //let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
-
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
     let resource_class = format!("{APP_TLD}.{APP_NAME}");
@@ -163,53 +161,57 @@ async fn main() -> Result<()> {
     // Ok, spawn up the thread responsible for the UI
     let device_rx_inner = device_rx.clone();
     let window_main_tx = main_tx.clone();
-    let window = thread::spawn(move || {
-        let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
-        let mut hide_initial = hide_initial;
 
-        // This is used for trying to respawn the window on error
-        let mut last_error = Instant::now();
-        let mut attempts = 0;
+    let window = thread::Builder::new()
+        .name("beacn-util-ui".to_string())
+        .spawn(move || {
+            let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
+            let mut hide_initial = hide_initial;
 
-        let mut event_loop = EventLoop::<UserEvent>::with_user_event()
-            .with_any_thread(true)
-            .build()
-            .expect("Failed to create event loop");
+            // This is used for trying to respawn the window on error
+            let mut last_error = Instant::now();
+            let mut attempts = 0;
 
-        loop {
-            // Create the Window Runner
-            let runner = WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
+            let mut event_loop = EventLoop::<UserEvent>::with_user_event()
+                .with_any_thread(true)
+                .build()
+                .expect("Failed to create event loop");
 
-            // Run and check for return
-            match runner.run(&mut event_loop, hide_initial) {
-                Ok(()) => break,
-                Err((recovered_app, was_hidden, e)) => {
-                    error!("UI has Crashed: {e}");
+            loop {
+                // Create the Window Runner
+                let runner =
+                    WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
 
-                    // Something crashed it, could be wayland, or X11, either way, we're lost.
-                    // Check the last time this happened (have we successfully respawned before?)
-                    if last_error.elapsed() < Duration::from_secs(5) {
-                        attempts = 0;
+                // Run and check for return
+                match runner.run(&mut event_loop, hide_initial) {
+                    Ok(()) => break,
+                    Err((recovered_app, was_hidden, e)) => {
+                        error!("UI has Crashed: {e}");
+
+                        // Something crashed it, could be wayland, or X11, either way, we're lost.
+                        // Check the last time this happened (have we successfully respawned before?)
+                        if last_error.elapsed() < Duration::from_secs(5) {
+                            attempts = 0;
+                        }
+
+                        // Refresh the last error time, increment the attempt account
+                        last_error = Instant::now();
+                        attempts += 1;
+
+                        // Yea, there's nothing we can do here, we're just going to have to bail.
+                        // TODO: This should probably quit the app
+                        if attempts > 3 {
+                            error!("Failed to recover UI after {attempts} attempts, bailing");
+                            break;
+                        }
+
+                        app = recovered_app;
+                        hide_initial = was_hidden;
+                        thread::sleep(Duration::from_millis(500));
                     }
-
-                    // Refresh the last error time, increment the attempt account
-                    last_error = Instant::now();
-                    attempts += 1;
-
-                    // Yea, there's nothing we can do here, we're just going to have to bail.
-                    // TODO: This should probably quit the app
-                    if attempts > 3 {
-                        error!("Failed to recover UI after {attempts} attempts, bailing");
-                        break;
-                    }
-
-                    app = recovered_app;
-                    hide_initial = was_hidden;
-                    thread::sleep(Duration::from_millis(500));
                 }
             }
-        }
-    });
+        })?;
 
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
@@ -273,7 +275,6 @@ async fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     let _ = window.join();
-
     let _ = join!(ipc, tray, device_manager);
 
     debug!("Shutdown Complete");
