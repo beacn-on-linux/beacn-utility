@@ -297,7 +297,7 @@ fn handle_device_attached(
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-            let (device, state) = match open_audio_device(location.clone()) {
+            let (device, state) = match open_audio_device(location.clone()).wait() {
                 Ok(d) => (Some(d), DefinitionState::Running),
                 Err(e) => {
                     error!("Failed to open audio device: {e}");
@@ -347,7 +347,7 @@ fn handle_device_attached(
             let (input_tx, input_rx) = unbounded();
 
             let (device, state) =
-                match open_control_device(location.clone(), Some(input_tx), health_tx) {
+                match open_control_device(location.clone(), Some(input_tx), health_tx).wait() {
                     Ok(d) => (Some(d), DefinitionState::Running),
                     Err(e) => {
                         error!("Failed to open control device: {e}");
