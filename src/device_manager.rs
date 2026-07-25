@@ -158,7 +158,7 @@ pub async fn spawn_device_manager(
             Some((location, req)) = device_event_rx.recv() => {
                 match req {
                     DeviceRequest::Audio(msg) => {
-                        if let Some(DeviceEntry::Audio(dev, _)) = devices.get(&location) {
+                        if let Some(DeviceEntry::Audio(dev)) = devices.get(&location) {
                             match msg {
                                 AudioMessage::Handle(msg, resp) => {
                                     let response = AssertUnwindSafe(dev.handle_message(msg))
@@ -231,7 +231,7 @@ pub async fn spawn_device_manager(
 
     // Stop any control devices which may be active
     for device in devices.values() {
-        if let DeviceEntry::Control(_, _, stop, _, _) = device {
+        if let DeviceEntry::Control(_, stop, _, _) = device {
             let _ = stop.send(());
         }
     }
@@ -241,7 +241,7 @@ pub async fn spawn_device_manager(
     // async fn.
     loop {
         let all_done = devices.values().all(|d| match d {
-            DeviceEntry::Control(_, _, _, _, task) => task.is_finished(),
+            DeviceEntry::Control(_, _, _, task) => task.is_finished(),
             _ => true,
         });
         if all_done {
@@ -321,7 +321,7 @@ async fn handle_device_attached(
 
             // Add this into our device map, and spawn a task to forward its requests
             if let Some(device) = device {
-                devices.insert(location.clone(), DeviceEntry::Audio(device, data.clone()));
+                devices.insert(location.clone(), DeviceEntry::Audio(device));
                 forwarders.insert(
                     location.clone(),
                     spawn_forwarder(location, rx, device_event_tx.clone(), DeviceRequest::Audio),
@@ -383,7 +383,7 @@ async fn handle_device_attached(
             if let Some(device) = device {
                 devices.insert(
                     location.clone(),
-                    DeviceEntry::Control(device, data.clone(), stop_tx, suspended_tx, task),
+                    DeviceEntry::Control(device, stop_tx, suspended_tx, task),
                 );
                 forwarders.insert(
                     location.clone(),
@@ -443,17 +443,16 @@ fn enable_devices(devices: &HashMap<DeviceLocation, DeviceEntry>, enabled: bool)
 
 fn set_pipeweaver_draw_suspended(devices: &HashMap<DeviceLocation, DeviceEntry>, suspended: bool) {
     for device in devices.values() {
-        if let DeviceEntry::Control(_, _, _, draw_suspend, _) = device {
+        if let DeviceEntry::Control(_, _, draw_suspend, _) = device {
             let _ = draw_suspend.send(suspended);
         }
     }
 }
 
 enum DeviceEntry {
-    Audio(Box<dyn BeacnAudioDevice>, DeviceDefinition),
+    Audio(Box<dyn BeacnAudioDevice>),
     Control(
         Box<dyn BeacnControlDevice>,
-        DeviceDefinition,
         watch::Sender<()>,
         watch::Sender<bool>,
         JoinHandle<()>,
