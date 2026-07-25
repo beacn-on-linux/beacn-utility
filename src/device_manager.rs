@@ -26,17 +26,14 @@ use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
 use futures::FutureExt;
-use futures::StreamExt;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
-use std::pin::Pin;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use strum_macros::Display;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
-use tokio_stream::{Stream, StreamMap};
 
 pub async fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,
@@ -48,23 +45,19 @@ pub async fn spawn_device_manager(
     let (login_tx, login_rx) = bounded(5);
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
-    // Device state, keyed by location. The actual request receivers live in
-    // `device_streams` below (StreamMap needs to own them to poll them alongside
-    // everything else); this map holds what we need to act once a request arrives.
+    // Device state, keyed by location.
     let mut devices: HashMap<DeviceLocation, DeviceEntry> = HashMap::new();
 
-    // A dynamically-sized set of streams we can await together, one per attached device,
-    // keyed the same way as `devices`. This is the async equivalent of the old
-    // `flume::Selector` built fresh from `receiver_map` every loop iteration -- except
-    // StreamMap handles insertion/removal of individual streams at runtime for us instead
-    // of us needing to rebuild the whole selector each pass.
-    let mut device_streams: StreamMap<DeviceLocation, DeviceRequestStream> = StreamMap::new();
+    // Small List of forwarding tasks
+    let (device_event_tx, mut device_event_rx) =
+        unbounded_channel::<(DeviceLocation, DeviceRequest)>();
+    let mut forwarders: HashMap<DeviceLocation, JoinHandle<()>> = HashMap::new();
 
     // watch_hotplug_devices is beacn-lib's async-native hotplug watcher -- spawn it as a
     // task instead of spawn_hotplug_handler, which would give us a dedicated OS thread we
     // don't need now that we're on a runtime.
     tokio::spawn(watch_hotplug_devices(plug_tx, manage_rx));
-    thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
+    //thread::spawn(|| spawn_login_handler(login_tx, login_stop_rx));
 
     let mut suspended = false;
     let mut pending_attachments: Vec<(DeviceLocation, DeviceType, Sender<()>)> = vec![];
@@ -98,7 +91,8 @@ pub async fn spawn_device_manager(
                                 device_type,
                                 health_tx,
                                 &mut devices,
-                                &mut device_streams,
+                                &mut forwarders,
+                                &device_event_tx,
                                 &event_tx,
                                 &self_tx,
                             )
@@ -135,7 +129,8 @@ pub async fn spawn_device_manager(
                                 device_type,
                                 health_tx,
                                 &mut devices,
-                                &mut device_streams,
+                                &mut forwarders,
+                                &device_event_tx,
                                 &event_tx,
                                 &self_tx,
                             )
@@ -149,7 +144,9 @@ pub async fn spawn_device_manager(
                         let _ = event_tx.send(DeviceMessage::DeviceRemoved(location.clone()));
 
                         devices.remove(&location);
-                        device_streams.remove(&location);
+                        if let Some(forwarder) = forwarders.remove(&location) {
+                            forwarder.abort();
+                        }
 
                         let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
@@ -158,7 +155,7 @@ pub async fn spawn_device_manager(
                 }
             }
 
-            Some((location, req)) = device_streams.next() => {
+            Some((location, req)) = device_event_rx.recv() => {
                 match req {
                     DeviceRequest::Audio(msg) => {
                         if let Some(DeviceEntry::Audio(dev, _)) = devices.get(&location) {
@@ -201,8 +198,7 @@ pub async fn spawn_device_manager(
                         if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                             match msg {
                                 ControlMessage::SendImage(img, x, y, tx) => {
-                                    let result = dev.set_image(x, y, &img);
-                                    let _ = tx.send(result);
+                                    let _ = tx.send(dev.set_image(x, y, &img));
                                 }
                                 ControlMessage::DisplayBrightness(brightness, tx) => {
                                     let _ = tx.send(dev.set_display_brightness(brightness));
@@ -253,7 +249,7 @@ pub async fn spawn_device_manager(
         }
 
         tokio::select! {
-            Some((location, req)) = device_streams.next() => {
+            Some((location, req)) = device_event_rx.recv() => {
                 if let DeviceRequest::Control(msg) = req {
                     if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                         match msg {
@@ -282,7 +278,8 @@ async fn handle_device_attached(
     device_type: DeviceType,
     health_tx: Sender<()>,
     devices: &mut HashMap<DeviceLocation, DeviceEntry>,
-    device_streams: &mut StreamMap<DeviceLocation, DeviceRequestStream>,
+    forwarders: &mut HashMap<DeviceLocation, JoinHandle<()>>,
+    device_event_tx: &UnboundedSender<(DeviceLocation, DeviceRequest)>,
     event_tx: &Sender<DeviceMessage>,
     self_tx: &Sender<ToMainMessages>,
 ) {
@@ -322,10 +319,13 @@ async fn handle_device_attached(
             // Create a Message Bus for it
             let (tx, rx) = unbounded();
 
-            // Add this into our device map + the stream map we select over
+            // Add this into our device map, and spawn a task to forward its requests
             if let Some(device) = device {
                 devices.insert(location.clone(), DeviceEntry::Audio(device, data.clone()));
-                device_streams.insert(location, box_audio_stream(rx));
+                forwarders.insert(
+                    location.clone(),
+                    spawn_forwarder(location, rx, device_event_tx.clone(), DeviceRequest::Audio),
+                );
             }
 
             let arrived = DeviceArriveMessage::Audio(data, tx);
@@ -385,7 +385,15 @@ async fn handle_device_attached(
                     location.clone(),
                     DeviceEntry::Control(device, data.clone(), stop_tx, suspended_tx, task),
                 );
-                device_streams.insert(location, box_control_stream(rx));
+                forwarders.insert(
+                    location.clone(),
+                    spawn_forwarder(
+                        location,
+                        rx,
+                        device_event_tx.clone(),
+                        DeviceRequest::Control,
+                    ),
+                );
             }
 
             // Use the async runtime for this
@@ -399,18 +407,25 @@ async fn handle_device_attached(
     let _ = self_tx.send(ToMainMessages::RequestRedraw);
 }
 
-/// Turn a device's request receiver into a stream of the shared `DeviceRequest` enum and
-/// box it, so audio and control device streams -- despite carrying different message
-/// types -- can live side by side in the same `StreamMap`.
-fn box_audio_stream(rx: Receiver<AudioMessage>) -> DeviceRequestStream {
-    Box::pin(rx.into_stream().map(DeviceRequest::Audio))
+/// Spawn a small task that just loops on `rx` and forwards everything it receives into
+/// the shared `device_event_tx`, tagged with `location` and wrapped into the common
+/// `DeviceRequest` enum via `wrap` (`DeviceRequest::Audio` / `DeviceRequest::Control`).
+/// Exits on its own once `rx`'s channel closes; also explicitly `.abort()`ed on device
+/// removal so it doesn't linger.
+fn spawn_forwarder<M: Send + 'static>(
+    location: DeviceLocation,
+    rx: Receiver<M>,
+    device_event_tx: UnboundedSender<(DeviceLocation, DeviceRequest)>,
+    wrap: impl Fn(M) -> DeviceRequest + Send + 'static,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Ok(msg) = rx.recv_async().await {
+            if device_event_tx.send((location.clone(), wrap(msg))).is_err() {
+                break;
+            }
+        }
+    })
 }
-
-fn box_control_stream(rx: Receiver<ControlMessage>) -> DeviceRequestStream {
-    Box::pin(rx.into_stream().map(DeviceRequest::Control))
-}
-
-type DeviceRequestStream = Pin<Box<dyn Stream<Item = DeviceRequest> + Send>>;
 
 enum DeviceRequest {
     Audio(AudioMessage),

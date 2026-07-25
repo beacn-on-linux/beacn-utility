@@ -25,9 +25,6 @@ strum = "0.28.0"
 strum_macros = "0.28.0"
 enum-map = "2.7.3"
 
-# Used for Sending and Receiving Messages
-#oneshot = { version = "0.2.1", features = ["std"] }
-
 # Used for SIMD EQ calculations
 wide = "1.5.0"
 
