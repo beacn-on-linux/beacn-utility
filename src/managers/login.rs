@@ -11,6 +11,7 @@
    https://www.freedesktop.org/wiki/Software/systemd/inhibit/
 */
 
+use crate::managers::LoginEventTriggers;
 use anyhow::Result;
 use beacn_lib::flume::Sender;
 use log::{debug, warn};

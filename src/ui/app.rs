@@ -13,7 +13,6 @@ use crate::window_handle::App;
 use beacn_lib::flume::{Receiver, Sender};
 use beacn_lib::manager::DeviceType;
 use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
-use rfd::MessageDialogResult;
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
@@ -173,6 +172,8 @@ impl App for BeacnMicApp {
     fn should_close(&mut self) -> bool {
         #[cfg(not(unix))]
         {
+            use rfd::MessageDialogResult;
+
             // Non-Unix OSs don't have tray support, so we should prompt
             let result = rfd::MessageDialog::new()
                 .set_title("Confirm")
