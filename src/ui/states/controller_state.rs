@@ -4,12 +4,14 @@ use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
 use beacn_lib::MaybeFuture;
 use beacn_lib::flume::Sender;
-use log::{debug, warn};
+use directories::BaseDirs;
+use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::fs::File;
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::oneshot;
-use xdg::BaseDirectories;
 
 // Literally nothing to do here right now
 #[derive(Debug, Default, Clone)]
@@ -109,21 +111,18 @@ impl BeacnControllerState {
 
     pub fn load_from_file(&mut self) {
         let file_name = format!("{}.json", self.device_definition.device_info.serial);
-        let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
-        let config_file = xdg_dirs.find_config_file(file_name);
 
-        debug!("Attempting to load Config from {config_file:?}");
-        #[allow(clippy::collapsible_if)]
-        if let Some(file) = config_file {
-            if let Ok(file) = File::open(file) {
-                if let Ok(config) = serde_json::from_reader(file) {
-                    debug!("Load Successful");
-                    self.saved_settings = config;
-                    return;
-                }
+        if let Some(path) = get_config_file_base() {
+            let config_file = path.join(file_name);
+            if config_file.exists()
+                && let Ok(file) = File::open(config_file)
+                && let Ok(config) = serde_json::from_reader(file)
+            {
+                debug!("Load Successful");
+                self.saved_settings = config;
+                return;
             }
         }
-
         debug!("Config Load Failed, Setting Defaults");
         // Load the default settings, then save them.
         self.saved_settings = SavedSettings::default();
@@ -132,16 +131,30 @@ impl BeacnControllerState {
 
     pub fn save_to_file(&self) {
         let file_name = format!("{}.json", self.device_definition.device_info.serial);
-        let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
-        let config_file = xdg_dirs.place_config_file(file_name);
 
-        #[allow(clippy::collapsible_if)]
-        if let Ok(file) = config_file {
-            if let Ok(file) = File::create(file) {
-                if let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings) {
-                    warn!("Config Saving Failed: {e}");
-                }
+        if let Some(path) = get_config_file_base() {
+            let config_file = path.join(file_name);
+
+            if let Ok(file) = File::create(config_file)
+                && let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings)
+            {
+                warn!("Config Saving Failed: {e}");
             }
+        }
+
+        warn!("Unable to locate config directory, cannot save.");
+    }
+}
+
+fn get_config_file_base() -> Option<PathBuf> {
+    let base = BaseDirs::new()?;
+    let config = base.config_dir().join(APP_NAME);
+
+    match fs::create_dir_all(&config) {
+        Ok(()) => Some(config),
+        Err(e) => {
+            error!("Failed to create config directory: {e}");
+            None
         }
     }
 }
