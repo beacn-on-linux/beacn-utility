@@ -16,6 +16,7 @@ use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, Ri
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
+    #[cfg_attr(unix, allow(unused))]
     main_sender: Sender<ToMainMessages>,
 
     device_list: Vec<DeviceDefinition>,
