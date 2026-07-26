@@ -86,23 +86,9 @@ async fn main() -> Result<()> {
     ));
 
     // Try to establish a log file in the XDG data directory
-    let base_dirs = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
-    let data = base_dirs.data_dir().join(APP_NAME);
-
-    // This is a migration to move from ~/.local/share/io.github.beacn_on_linux to
-    // ~/.local/share/beacn-utility - This is to match the cache and config behaviours.
-    let old_data_path = base_dirs.data_dir().join(APP_TLD);
-    if old_data_path.exists() && !data.exists() {
-        println!("Migrating Log Directory from {old_data_path:?} to {data:?}");
-        fs::rename(&base_dirs.data_dir().join(APP_TLD), &data)?;
-    } else if old_data_path.exists() && data.exists() {
-        fs::remove_dir_all(&old_data_path)?;
-    }
-
-    let log_path = data.join("logs");
-    match fs::create_dir_all(&log_path) {
-        Ok(()) => {
-            let log_file = log_path.join("beacn-utility.log");
+    match get_logs_path() {
+        Ok(path) => {
+            let log_file = path.join("beacn-utility.log");
             println!("Logging to file: {log_file:?}");
 
             let file_rotate = FileRotate::new(
@@ -341,6 +327,59 @@ fn has_autostart() -> Result<bool> {
 
     debug!("Checking: {autostart_file:?}");
     Ok(autostart_file.exists())
+}
+
+pub fn get_logs_path() -> Result<PathBuf> {
+    let log_path = get_data_path()?.join("logs");
+    fs::create_dir_all(&log_path)?;
+
+    Ok(log_path)
+}
+
+pub fn get_data_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let data = base.data_dir().join(APP_NAME);
+
+    // This is a migration to move from ~/.local/share/io.github.beacn_on_linux to
+    // ~/.local/share/beacn-utility - This is to match the cache and config behaviours.
+    let old_data_path = base.data_dir().join(APP_TLD);
+    if old_data_path.exists() && !data.exists() {
+        println!("Migrating Log Directory from {old_data_path:?} to {data:?}");
+        fs::rename(&old_data_path, &data)?;
+    } else if old_data_path.exists() && data.exists() {
+        fs::remove_dir_all(&old_data_path)?;
+    }
+
+    match fs::create_dir_all(&data) {
+        Ok(()) => Ok(data),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
+}
+
+pub fn get_config_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let config = base.config_dir().join(APP_NAME);
+
+    match fs::create_dir_all(&config) {
+        Ok(()) => Ok(config),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
+}
+
+pub fn get_cache_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let cache = base.cache_dir().join(APP_NAME);
+
+    match fs::create_dir_all(&cache) {
+        Ok(()) => Ok(cache),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
 }
 
 pub fn get_autostart_file() -> Result<PathBuf> {

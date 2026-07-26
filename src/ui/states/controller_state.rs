@@ -1,6 +1,6 @@
-use crate::APP_NAME;
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
+use crate::{APP_NAME, get_config_path};
 use anyhow::Result;
 use beacn_lib::MaybeFuture;
 use beacn_lib::flume::Sender;
@@ -112,7 +112,7 @@ impl BeacnControllerState {
     pub fn load_from_file(&mut self) {
         let file_name = format!("{}.json", self.device_definition.device_info.serial);
 
-        if let Some(path) = get_config_file_base() {
+        if let Ok(path) = get_config_path() {
             let config_file = path.join(file_name);
             if config_file.exists()
                 && let Ok(file) = File::open(config_file)
@@ -132,7 +132,7 @@ impl BeacnControllerState {
     pub fn save_to_file(&self) {
         let file_name = format!("{}.json", self.device_definition.device_info.serial);
 
-        if let Some(path) = get_config_file_base() {
+        if let Ok(path) = get_config_path() {
             let config_file = path.join(file_name);
 
             if let Ok(file) = File::create(config_file)
@@ -143,19 +143,6 @@ impl BeacnControllerState {
         }
 
         warn!("Unable to locate config directory, cannot save.");
-    }
-}
-
-fn get_config_file_base() -> Option<PathBuf> {
-    let base = BaseDirs::new()?;
-    let config = base.config_dir().join(APP_NAME);
-
-    match fs::create_dir_all(&config) {
-        Ok(()) => Some(config),
-        Err(e) => {
-            error!("Failed to create config directory: {e}");
-            None
-        }
     }
 }
 

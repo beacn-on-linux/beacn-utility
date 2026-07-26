@@ -1,7 +1,7 @@
 // This file is a mess, and it's mostly intentional for the first pass, it primarily informs
 // on how to render everything, positions, shapes, etc... I'll keep some level of documentation
 
-use crate::{APP_NAME, APP_TLD};
+use crate::{APP_NAME, APP_TLD, get_cache_path};
 use anyhow::{Context, Result, anyhow, bail};
 use directories::BaseDirs;
 use enum_map::{EnumMap, enum_map};
@@ -600,9 +600,7 @@ impl DialHandler {
 
         let file_name = CACHE_PATH.to_string();
 
-        let base_dirs = BaseDirs::new();
-        if let Some(base_dirs) = &base_dirs {
-            let cache_path = base_dirs.cache_dir().join(APP_NAME);
+        if let Ok(cache_path) = get_cache_path() {
             let cache_file = cache_path.join(file_name.clone());
 
             // Attempt to delete old cache files if it exists
@@ -661,8 +659,7 @@ impl DialHandler {
 
         debug!("Generated {} images in {:?}", count, start.elapsed());
 
-        if let Some(base_dirs) = base_dirs {
-            let cache_path = base_dirs.cache_dir().join(APP_TLD);
+        if let Ok(cache_path) = get_cache_path() {
             let cache_file = cache_path.join(file_name);
 
             debug!("Attempting to Save to Cache");
