@@ -51,15 +51,6 @@ trait Session {
     ) -> Result<()>;
 }
 
-#[derive(Debug)]
-#[allow(unused)]
-pub enum LoginEventTriggers {
-    Sleep(oneshot::Sender<()>),
-    Wake(oneshot::Sender<()>),
-    Lock,
-    Unlock,
-}
-
 pub async fn spawn_login_handler(
     tx: Sender<LoginEventTriggers>,
     stop_rx: tokio_mpsc::Receiver<()>,

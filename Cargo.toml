@@ -43,24 +43,16 @@ beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = 
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.1.11" }
 #beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
-# Tray Handler
-ksni = { version = "0.3.6", features = ["blocking"] }
-
 # Image Handling
 image = "0.25.10"
 fontdue = "0.9.3"
 
-
 # For Creating .desktop files outside the flatpak runtime
 rust-ini = "0.21.3"
-xdg = "3.0.0"
 
 # Profile Loading / Saving
 serde = "1.0.229"
 serde_json = "1.0.151"
-
-# Sleep Management
-zbus = "5.18.0"
 
 # Pipeweaver Stuff
 interprocess = { version = "2.4.2", features = ["tokio"] }
@@ -74,11 +66,16 @@ ulid = "1.2.1"
 directories = "6.0.0"
 rayon = "1.12.0"
 futures = "0.3.33"
-tokio-stream = "0.1.19"
 
 [target.'cfg(linux)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
+
+# Tray Handler
+ksni = { version = "0.3.6", features = ["blocking"] }
+
+# Sleep Management
+zbus = "5.18.0"
 
 # Packaging
 [package.metadata.deb]

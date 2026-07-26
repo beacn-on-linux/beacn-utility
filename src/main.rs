@@ -10,9 +10,7 @@ use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
 
 #[cfg(windows)]
-use egui_winit::winit::platform::windows::{
-    EventLoopBuilderExtWindows, WindowAttributesExtWindows,
-};
+use egui_winit::winit::platform::windows::EventLoopBuilderExtWindows;
 
 #[cfg(unix)]
 use egui_winit::winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11};
@@ -23,7 +21,6 @@ use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use log::{LevelFilter, debug, error, info, warn};
-use managers::tray::handle_tray;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
@@ -140,8 +137,12 @@ async fn main() -> Result<()> {
     let (tray_tx, tray_rx) = unbounded();
     let tray_main_tx = main_tx.clone();
     let tray = task::spawn(async move {
-        if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
-            error!("Failed to Spawn Tray: {e}");
+        #[cfg(unix)]
+        {
+            use managers::tray::handle_tray;
+            if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
+                error!("Failed to Spawn Tray: {e}");
+            }
         }
     });
 

@@ -1,9 +1,6 @@
 use crate::device_manager::DeviceMessage;
-use crate::{
-    APP_NAME, AUTO_START_KEY, BACKGROUND_PARAM, ToMainMessages, get_autostart_file,
-    prepare_context, run_async_blocking,
-};
-use anyhow::{Result, anyhow};
+use crate::{ToMainMessages, prepare_context};
+use anyhow::Result;
 use beacn_lib::flume::Sender;
 use egui::{Context, Id, Ui};
 use egui_glow::glow;
@@ -22,11 +19,9 @@ use egui_winit::winit::{
 };
 use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
-use ini::Ini;
 use log::{debug, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{env, fs};
 
 const FRAME_TIME: std::time::Duration = std::time::Duration::from_micros(16_667);
 
@@ -285,12 +280,21 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 self.app.handle_device_message(msg);
             }
             UserEvent::SetAutoStart(create) => {
-                let key = Id::new(AUTO_START_KEY);
-                if let Some(window) = &self.window {
-                    #[cfg(unix)]
-                    {
-                        use ashpd::WindowIdentifier;
-                        use ashpd::desktop::background::Background;
+                debug!("Changing Autostart: {create}");
+                #[cfg(unix)]
+                {
+                    use crate::{
+                        APP_NAME, AUTO_START_KEY, BACKGROUND_PARAM, get_autostart_file,
+                        run_async_blocking,
+                    };
+                    use anyhow::anyhow;
+                    use ashpd::WindowIdentifier;
+                    use ashpd::desktop::background::Background;
+                    use ini::Ini;
+                    use std::{env, fs};
+
+                    let key = Id::new(AUTO_START_KEY);
+                    if let Some(window) = &self.window {
                         if ashpd::is_sandboxed() {
                             println!("Running inside Flatpak, using Background Portal");
 
