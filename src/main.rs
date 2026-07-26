@@ -383,26 +383,23 @@ pub fn get_cache_path() -> Result<PathBuf> {
 }
 
 pub fn get_autostart_file() -> Result<PathBuf> {
-    let config_dir = if let Ok(config) = env::var("XDG_CONFIG_HOME") {
-        config
-    } else if let Ok(home) = env::var("HOME") {
-        format!("{home}/.config")
-    } else {
-        bail!("Unable to obtain XDG Config Directory")
-    };
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let config_dir = base.config_dir();
 
-    let path = PathBuf::from(format!(
-        "{config_dir}/autostart/{APP_TLD}.{APP_NAME}.desktop"
-    ));
+    // This is how flatpaks will create the file, so we need to match it
+    let autostart_file = format!("{APP_TLD}.{APP_NAME}.desktop");
+    let path = config_dir.join("autostart").join(autostart_file);
 
-    let legacy_path = PathBuf::from(format!("{config_dir}/autostart/{APP_TLD}.desktop"));
+    let legacy_path = config_dir
+        .join("autostart")
+        .join(format!("{APP_TLD}.desktop"));
     if legacy_path.exists() {
         if !path.exists() {
             debug!("Migrating Legacy Autostart File from {legacy_path:?} to {path:?}");
-            std::fs::rename(&legacy_path, &path)?;
+            fs::rename(&legacy_path, &path)?;
         } else {
             debug!("Removing Legacy Autostart File at {legacy_path:?} as new file exists",);
-            std::fs::remove_file(&legacy_path)?;
+            fs::remove_file(&legacy_path)?;
         }
     }
 
