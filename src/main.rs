@@ -2,18 +2,27 @@ use crate::device_manager::spawn_device_manager;
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
-use anyhow::Result;
 use anyhow::bail;
+use anyhow::{Result, anyhow};
 use beacn_lib::flume::unbounded;
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
+
+#[cfg(windows)]
+use egui_winit::winit::platform::windows::{
+    EventLoopBuilderExtWindows, WindowAttributesExtWindows,
+};
+
+#[cfg(unix)]
 use egui_winit::winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11};
+
+use directories::BaseDirs;
 use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{LevelFilter, debug, error, info};
+use log::{LevelFilter, debug, error, info, warn};
 use managers::tray::handle_tray;
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
@@ -21,11 +30,10 @@ use simplelog::{
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
-use std::{env, thread};
+use std::{env, fs, thread};
 use tokio::runtime::Handle;
-use tokio::signal::unix::{SignalKind, signal};
+
 use tokio::{join, task};
-use xdg::BaseDirectories;
 
 mod device_manager;
 mod integrations;
@@ -80,25 +88,28 @@ async fn main() -> Result<()> {
     ));
 
     // Try to establish a log file in the XDG data directory
-    let xdg_dirs = BaseDirectories::with_prefix(APP_TLD);
-    let log_path = xdg_dirs.create_data_directory(PathBuf::from("logs"));
-    if let Ok(path) = log_path {
-        let log_file = path.join("beacn-utility.log");
-        println!("Logging to file: {log_file:?}");
+    let base_dirs = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let log_path = base_dirs.data_dir().join(APP_TLD).join("logs");
+    match fs::create_dir_all(&log_path) {
+        Ok(()) => {
+            let log_file = log_path.join("beacn-utility.log");
+            println!("Logging to file: {log_file:?}");
 
-        let file_rotate = FileRotate::new(
-            log_file,
-            AppendCount::new(5),
-            ContentLimit::Bytes(1024 * 1024 * 2),
-            Compression::OnRotate(1),
-            #[cfg(unix)]
-            None,
-        );
-        log_targets.push(WriteLogger::new(
-            LevelFilter::Debug,
-            config.build(),
-            file_rotate,
-        ));
+            let file_rotate = FileRotate::new(
+                log_file,
+                AppendCount::new(5),
+                ContentLimit::Bytes(1024 * 1024 * 2),
+                Compression::OnRotate(1),
+                None,
+            );
+            log_targets.push(WriteLogger::new(
+                LevelFilter::Debug,
+                config.build(),
+                file_rotate,
+            ));
+        }
+
+        Err(e) => warn!("Log file directory creation failed, File Logging Disabled: {e}"),
     }
 
     CombinedLogger::init(log_targets)?;
@@ -119,10 +130,6 @@ async fn main() -> Result<()> {
     if handle_active_instance().await {
         return Ok(());
     }
-
-    // Register Signal Handler
-    let mut sigint = signal(SignalKind::interrupt())?;
-    let mut sigterm = signal(SignalKind::terminate())?;
 
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = unbounded();
@@ -149,14 +156,18 @@ async fn main() -> Result<()> {
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
-    let resource_class = format!("{APP_TLD}.{APP_NAME}");
-
-    let window_attributes = Window::default_attributes()
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(ICON)))
         .with_inner_size(LogicalSize::new(1024, 500))
-        .with_name(resource_class, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
+
+    #[cfg(unix)]
+    {
+        let resource_class = format!("{APP_TLD}.{APP_NAME}");
+        window_attributes = window_attributes.with_name(resource_class, APP_NAME);
+    }
 
     // Ok, spawn up the thread responsible for the UI
     let device_rx_inner = device_rx.clone();
@@ -256,13 +267,7 @@ async fn main() -> Result<()> {
                 }
             }
 
-            _ = sigint.recv() => {
-                println!("Caught Ctrl+C");
-                break;
-            }
-
-            _ = sigterm.recv() => {
-                println!("Caught SIGTERM");
+            _ = shutdown_signal() => {
                 break;
             }
         }
@@ -344,6 +349,38 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     }
 
     Ok(path)
+}
+
+#[cfg(unix)]
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigint = signal(SignalKind::interrupt()).unwrap();
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+    tokio::select! {
+        _ = sigint.recv() => println!("Caught Ctrl+C"),
+        _ = sigterm.recv() => println!("Caught SIGTERM"),
+    }
+}
+
+#[cfg(windows)]
+async fn shutdown_signal() {
+    use tokio::signal::windows;
+
+    let mut ctrl_c = windows::ctrl_c().unwrap();
+    let mut ctrl_break = windows::ctrl_break().unwrap();
+    let mut ctrl_close = windows::ctrl_close().unwrap();
+    let mut ctrl_logoff = windows::ctrl_logoff().unwrap();
+    let mut ctrl_shutdown = windows::ctrl_shutdown().unwrap();
+
+    tokio::select! {
+        _ = ctrl_c.recv() => println!("Caught Ctrl+C"),
+        _ = ctrl_break.recv() => println!("Caught Ctrl+Break"),
+        _ = ctrl_close.recv() => println!("Console closing"),
+        _ = ctrl_logoff.recv() => println!("User logging off"),
+        _ = ctrl_shutdown.recv() => println!("System shutting down"),
+    }
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the
