@@ -49,6 +49,7 @@ use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
+use tokio_tungstenite::tungstenite::handshake::client::Response;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 use ulid::Ulid;
@@ -174,7 +175,7 @@ struct PipeweaverHandler {
     device_type: DeviceType,
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
-    stop_rx: watch::Receiver<()>,
+    stop_rx: watch::Receiver<bool>,
     suspended_rx: watch::Receiver<bool>,
     temporary_active: bool,
 
@@ -198,7 +199,7 @@ impl PipeweaverHandler {
         device_type: DeviceType,
         sender: Sender<ControlMessage>,
         input_rx: Receiver<Interactions>,
-        stop_rx: watch::Receiver<()>,
+        stop_rx: watch::Receiver<bool>,
         suspended_rx: watch::Receiver<bool>,
     ) -> Self {
         Self {
@@ -279,6 +280,11 @@ impl PipeweaverHandler {
                 warn!("Pipeweaver Error: {}", e);
             }
 
+            if *self.stop_rx.borrow() {
+                info!("Shutdown Requested, terminating");
+                break 'connect;
+            }
+
             // Drain (and ignore) incoming interactions while disconnected
             loop {
                 select! {
@@ -342,8 +348,8 @@ impl PipeweaverHandler {
     }
 
     async fn handle_connection(&mut self, url: &str, meter: &str) -> Result<()> {
-        let (mut stream, _) = connect_async(url).await?;
-        let (mut meter, _) = connect_async(meter).await?;
+        let (mut stream, _) = self.connect_with_stop(url).await?;
+        let (mut meter, _) = self.connect_with_stop(meter).await?;
         info!("Successfully connected to Pipeweaver");
 
         self.has_connected = true;
@@ -354,6 +360,17 @@ impl PipeweaverHandler {
         self.run_message_loop(&mut stream, &mut meter).await?;
 
         Ok(())
+    }
+
+    async fn connect_with_stop(&mut self, url: &str) -> Result<(WebSocket, Response)> {
+        select! {
+            result = connect_async(url) => {
+                Ok(result?)
+            }
+            Ok(_) = self.stop_rx.changed() => {
+                bail!("Shutdown requested")
+            }
+        }
     }
 
     async fn load_status(&mut self, stream: &mut WebSocket) -> Result<()> {
@@ -373,45 +390,51 @@ impl PipeweaverHandler {
         // There are occasionally patch messages which could occur before the status response,
         // so we'll loop here until we get the answer we're looking for
         loop {
-            match stream.next().await {
-                Some(Ok(Message::Text(msg))) => {
-                    let value = serde_json::from_str::<Value>(msg.as_str())?;
+            select! {
+                message = stream.next() => match message {
+                    Some(Ok(Message::Text(msg))) => {
+                        let value = serde_json::from_str::<Value>(msg.as_str())?;
 
-                    // This should be a WebSocketResponse object
-                    let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
+                        // This should be a WebSocketResponse object
+                        let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
 
-                    // Check the ID (should always be present)
-                    let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
+                        // Check the ID (should always be present)
+                        let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
 
-                    // We can occasionally get patches before the Status response, so verify the ID...
-                    if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
-                        // This is our DaemonStatus response
-                        let error = anyhow!("Failed to Read Data");
-                        let data = object.get("data").ok_or(error)?.clone();
+                        // We can occasionally get patches before the Status response, so verify the ID...
+                        if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
+                            // This is our DaemonStatus response
+                            let error = anyhow!("Failed to Read Data");
+                            let data = object.get("data").ok_or(error)?.clone();
 
-                        let error = anyhow!("Failed to Read Status");
-                        self.raw_status = data.get("Status").ok_or(error)?.clone();
+                            let error = anyhow!("Failed to Read Status");
+                            self.raw_status = data.get("Status").ok_or(error)?.clone();
 
-                        let raw = self.raw_status.clone();
-                        self.status = serde_json::from_value::<DaemonStatus>(raw)?;
-                        break;
+                            let raw = self.raw_status.clone();
+                            self.status = serde_json::from_value::<DaemonStatus>(raw)?;
+                            break;
+                        }
                     }
-                }
 
-                Some(Ok(Message::Close(frame))) => {
-                    bail!("Pipeweaver closed websocket: {:?}", frame);
-                }
+                    Some(Ok(Message::Close(frame))) => {
+                        bail!("Pipeweaver closed websocket: {:?}", frame);
+                    }
 
-                Some(Ok(other)) => {
-                    debug!("Ignoring websocket message during status load: {:?}", other);
-                }
+                    Some(Ok(other)) => {
+                        debug!("Ignoring websocket message during status load: {:?}", other);
+                    }
 
-                Some(Err(e)) => {
-                    return Err(e.into());
-                }
+                    Some(Err(e)) => {
+                        return Err(e.into());
+                    }
 
-                None => {
-                    bail!("Pipeweaver websocket closed while loading status");
+                    None => {
+                        bail!("Pipeweaver websocket closed while loading status");
+                    }
+                },
+
+                Ok(_) = self.stop_rx.changed() => {
+                    bail!("Shutdown Requested");
                 }
             }
         }
@@ -1297,7 +1320,7 @@ pub fn spawn_pipeweaver_handler(
     sender: Sender<ControlMessage>,
     device: DeviceType,
     input_rx: Receiver<Interactions>,
-    stop_rx: watch::Receiver<()>,
+    stop_rx: watch::Receiver<bool>,
     suspended_rx: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, suspended_rx);

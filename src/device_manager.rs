@@ -241,7 +241,7 @@ pub async fn spawn_device_manager(
     // Stop any control devices which may be active
     for device in devices.values() {
         if let DeviceEntry::Control(_, stop, _, _) = device {
-            let _ = stop.send(());
+            let _ = stop.send(true);
         }
     }
 
@@ -384,7 +384,7 @@ async fn handle_device_attached(
             };
 
             let (tx, rx) = unbounded();
-            let (stop_tx, stop_rx) = watch::channel(());
+            let (stop_tx, stop_rx) = watch::channel(false);
             let (suspended_tx, suspended_rx) = watch::channel(false);
             let img_tx = tx.clone();
             let task =
@@ -463,7 +463,7 @@ enum DeviceEntry {
     Audio(Box<dyn BeacnAudioDevice>),
     Control(
         Box<dyn BeacnControlDevice>,
-        watch::Sender<()>,
+        watch::Sender<bool>,
         watch::Sender<bool>,
         JoinHandle<()>,
     ),
