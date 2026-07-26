@@ -87,7 +87,19 @@ async fn main() -> Result<()> {
 
     // Try to establish a log file in the XDG data directory
     let base_dirs = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
-    let log_path = base_dirs.data_dir().join(APP_TLD).join("logs");
+    let data = base_dirs.data_dir().join(APP_NAME);
+
+    // This is a migration to move from ~/.local/share/io.github.beacn_on_linux to
+    // ~/.local/share/beacn-utility - This is to match the cache and config behaviours.
+    let old_data_path = base_dirs.data_dir().join(APP_TLD);
+    if old_data_path.exists() && !data.exists() {
+        println!("Migrating Log Directory from {old_data_path:?} to {data:?}");
+        fs::rename(&base_dirs.data_dir().join(APP_TLD), &data)?;
+    } else if old_data_path.exists() && data.exists() {
+        fs::remove_dir_all(&old_data_path)?;
+    }
+
+    let log_path = data.join("logs");
     match fs::create_dir_all(&log_path) {
         Ok(()) => {
             let log_file = log_path.join("beacn-utility.log");
