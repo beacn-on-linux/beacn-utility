@@ -181,7 +181,9 @@ async fn main() -> Result<()> {
     let window = thread::Builder::new()
         .name("beacn-util-ui".to_string())
         .spawn(move || {
-            let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
+            let app_main_tx = window_main_tx.clone();
+
+            let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(app_main_tx, device_rx_inner));
             let mut hide_initial = hide_initial;
 
             // This is used for trying to respawn the window on error

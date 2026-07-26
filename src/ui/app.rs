@@ -1,3 +1,4 @@
+use crate::ToMainMessages;
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui::audio_pages::AudioPage;
@@ -9,12 +10,15 @@ use crate::ui::states::controller_state::BeacnControllerState;
 use crate::ui::widgets::{pipeweaver_button, round_nav_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
-use beacn_lib::flume::Receiver;
+use beacn_lib::flume::{Receiver, Sender};
 use beacn_lib::manager::DeviceType;
 use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
+use rfd::MessageDialogResult;
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
+    main_sender: Sender<ToMainMessages>,
+
     device_list: Vec<DeviceDefinition>,
     active_device: Option<DeviceDefinition>,
 
@@ -39,8 +43,10 @@ pub struct BeacnMicApp {
 }
 
 impl BeacnMicApp {
-    pub fn new(device_recv: Receiver<DeviceMessage>) -> Self {
+    pub fn new(main_sender: Sender<ToMainMessages>, device_recv: Receiver<DeviceMessage>) -> Self {
         Self {
+            main_sender,
+
             device_list: vec![],
             active_device: None,
 
@@ -165,11 +171,34 @@ impl App for BeacnMicApp {
     }
 
     fn should_close(&mut self) -> bool {
+        #[cfg(not(unix))]
+        {
+            // Non-Unix OSs don't have tray support, so we should prompt
+            let result = rfd::MessageDialog::new()
+                .set_title("Confirm")
+                .set_description("Closing will quit the app, Confirm?")
+                .set_buttons(rfd::MessageButtons::YesNo)
+                .set_level(rfd::MessageLevel::Warning)
+                .show();
+
+            if result == MessageDialogResult::Yes {
+                return true;
+            }
+            false
+        }
+
         // TODO: This should prompt the user, and / or check the settings
+        #[cfg(unix)]
         true
     }
 
     fn on_close(&mut self) {
+        #[cfg(not(unix))]
+        {
+            // Quit the App completely.
+            let _ = self.main_sender.send(ToMainMessages::Quit);
+        }
+
         for audio_page in &mut self.audio_pages {
             audio_page.on_close();
         }

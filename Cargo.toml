@@ -67,7 +67,7 @@ directories = "6.0.0"
 rayon = "1.12.0"
 futures = "0.3.33"
 
-[target.'cfg(linux)'.dependencies]
+[target.'cfg(unix)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
 
@@ -76,6 +76,9 @@ ksni = { version = "0.3.6", features = ["blocking"] }
 
 # Sleep Management
 zbus = "5.18.0"
+
+[target.'cfg(not(unix))'.dependencies]
+rfd = "0.17.2"
 
 # Packaging
 [package.metadata.deb]
