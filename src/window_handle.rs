@@ -498,7 +498,11 @@ impl GlowRenderer {
         debug!("Creating glutin Display with Config: {:?}", config_template);
 
         let gl_display = unsafe {
-            glutin::display::Display::new(raw_display_handle, DisplayApiPreference::Egl).unwrap()
+            glutin::display::Display::new(
+                raw_display_handle,
+                DisplayApiPreference::EglThenWgl(Some(raw_window_handle)),
+            )
+            .unwrap()
         };
 
         let config = unsafe {
