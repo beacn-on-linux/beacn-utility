@@ -1,5 +1,6 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
 use anyhow::{Result, bail};
+use beacn_lib::flume::{Receiver, Sender};
 use directories::BaseDirs;
 use interprocess::local_socket::{
     GenericFilePath, GenericNamespaced, ListenerOptions, Name, NameType, ToFsName, ToNsName,
@@ -10,11 +11,10 @@ use log::{debug, warn};
 use std::io::ErrorKind;
 use std::{env, fs, path::PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub async fn handle_ipc(
-    mut manager_rx: UnboundedReceiver<ManagerMessages>,
-    main_tx: UnboundedSender<ToMainMessages>,
+    manager_rx: Receiver<ManagerMessages>,
+    main_tx: Sender<ToMainMessages>,
 ) -> Result<()> {
     debug!("Spawning IPC Socket");
 
@@ -30,10 +30,10 @@ pub async fn handle_ipc(
     debug!("IPC listener started at {name:?}");
     loop {
         tokio::select! {
-            msg = manager_rx.recv() => {
+            msg = manager_rx.recv_async() => {
                 match msg {
-                    Some(ManagerMessages::Quit) => break,
-                    None => {
+                    Ok(ManagerMessages::Quit) => break,
+                    Err(_) => {
                         warn!("Message Handler channel broken, bailing");
                         break;
                     }
