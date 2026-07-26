@@ -75,6 +75,7 @@ async fn main() -> Result<()> {
     config.add_filter_ignore_str("winit::window");
     config.add_filter_ignore_str("zbus");
     config.add_filter_ignore_str("nusb::platform::linux_usbfs");
+    config.add_filter_ignore_str("nusb::platform::windows_winusb");
 
     // Setup Console Logging
     log_targets.push(TermLogger::new(
@@ -134,7 +135,10 @@ async fn main() -> Result<()> {
     let ipc = task::spawn(handle_ipc(ipc_rx, ipc_main_tx));
 
     // Ok, spawn up the Tray Handler
+    #[cfg_attr(not(unix), allow(unused))]
     let (tray_tx, tray_rx) = unbounded();
+
+    #[cfg_attr(not(unix), allow(unused))]
     let tray_main_tx = main_tx.clone();
     let tray = task::spawn(async move {
         #[cfg(unix)]

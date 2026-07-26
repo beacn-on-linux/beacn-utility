@@ -837,7 +837,7 @@ impl DialHandler {
     }
 
     fn load_cache(path: &PathBuf) -> Result<DialMeterData> {
-        let file = File::open(&path)?;
+        let file = File::open(path)?;
         let mut reader = BufReader::new(file);
         let mut map: DialMeterData = EnumMap::default();
 

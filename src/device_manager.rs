@@ -42,7 +42,11 @@ pub async fn spawn_device_manager(
 ) {
     let (plug_tx, plug_rx) = unbounded();
     let (manage_tx, manage_rx) = unbounded();
+
+    #[cfg_attr(not(unix), allow(unused))]
     let (login_tx, login_rx) = bounded(5);
+
+    #[cfg_attr(not(unix), allow(unused))]
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
     // Device state, keyed by location.
