@@ -77,9 +77,6 @@ ksni = { version = "0.3.6", features = ["blocking"] }
 # Sleep Management
 zbus = "5.18.0"
 
-[target.'cfg(not(unix))'.dependencies]
-rfd = "0.17.2"
-
 # Packaging
 [package.metadata.deb]
 name = "beacn-utility"

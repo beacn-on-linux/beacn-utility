@@ -38,6 +38,7 @@ pub enum UserEvent {
     DeviceMessage(DeviceMessage),
     SetAutoStart(bool),
     SetMinimumRefreshRate(bool),
+    Close,
     Quit,
 }
 
@@ -396,8 +397,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     self.schedule_redraw(event_loop);
                 }
             }
+            UserEvent::Close => {
+                debug!("Close Event Recieved, closing window");
+                self.destroy_window();
+            }
             UserEvent::Quit => {
-                debug!("Quit Event Received, closing window");
+                debug!("Quit Event Received, closing window and ending loop");
                 self.destroy_window();
                 event_loop.exit();
             }
