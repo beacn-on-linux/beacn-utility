@@ -1,15 +1,12 @@
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
+use crate::get_config_path;
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
-use crate::{APP_NAME, get_config_path};
 use anyhow::Result;
 use beacn_lib::MaybeFuture;
 use beacn_lib::flume::Sender;
-use directories::BaseDirs;
-use log::{debug, error, warn};
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::fs::File;
-use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::oneshot;
 

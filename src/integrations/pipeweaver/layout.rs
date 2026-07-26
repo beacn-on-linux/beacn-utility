@@ -1,9 +1,8 @@
 // This file is a mess, and it's mostly intentional for the first pass, it primarily informs
 // on how to render everything, positions, shapes, etc... I'll keep some level of documentation
 
-use crate::{APP_NAME, APP_TLD, get_cache_path};
+use crate::get_cache_path;
 use anyhow::{Context, Result, anyhow, bail};
-use directories::BaseDirs;
 use enum_map::{EnumMap, enum_map};
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
