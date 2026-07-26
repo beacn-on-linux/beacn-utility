@@ -1,8 +1,9 @@
 // This file is a mess, and it's mostly intentional for the first pass, it primarily informs
 // on how to render everything, positions, shapes, etc... I'll keep some level of documentation
 
-use crate::APP_NAME;
+use crate::{APP_NAME, APP_TLD};
 use anyhow::{Context, Result, anyhow, bail};
+use directories::BaseDirs;
 use enum_map::{EnumMap, enum_map};
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
@@ -20,7 +21,6 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::Instant;
 use strum::IntoEnumIterator;
-use xdg::BaseDirectories;
 
 // First thing we need, is to device the font used for rendering on the screen
 #[allow(unused)]
@@ -599,30 +599,35 @@ impl DialHandler {
         let start = Instant::now();
 
         let file_name = CACHE_PATH.to_string();
-        let xdg_dirs = BaseDirectories::with_prefix(APP_NAME);
 
-        // Attempt to delete old cache files if it exists
-        let old_file_name = "image_cache.bin".to_string(); // whatever the old name was
-        if let Some(old_file) = xdg_dirs.find_cache_file(old_file_name) {
-            if let Err(e) = fs::remove_file(&old_file) {
-                warn!("Failed to remove old cache file: {e}");
-            } else {
-                debug!("Removed old cache file: {old_file:?}");
-            }
-        }
+        let base_dirs = BaseDirs::new();
+        if let Some(base_dirs) = &base_dirs {
+            let cache_path = base_dirs.cache_dir().join(APP_TLD);
+            let cache_file = cache_path.join(file_name.clone());
 
-        // Attempt to Load the Cache file
-        let cache_file = xdg_dirs.find_cache_file(file_name.clone());
-        if let Some(file) = cache_file {
-            debug!("Attempting to load Cache from {file:?}");
+            // Attempt to delete old cache files if it exists
+            let old_file_name = "image_cache.bin".to_string();
+            let old_file_path = cache_path.join(old_file_name);
 
-            match Self::load_cache(file) {
-                Ok(map) => {
-                    info!("Loaded Cache in {:?}", start.elapsed());
-                    return map;
+            if old_file_path.exists() {
+                if let Err(e) = fs::remove_file(&old_file_path) {
+                    warn!("Failed to remove old cache file: {e}");
+                } else {
+                    debug!("Removed old cache file: {old_file_path:?}");
                 }
-                Err(e) => {
-                    warn!("Cache Load Failed: {e}");
+            }
+
+            // Attempt to Load the Cache file
+            if cache_file.exists() {
+                debug!("Attempting to load Cache from {cache_file:?}");
+                match Self::load_cache(&cache_file) {
+                    Ok(map) => {
+                        info!("Loaded Cache in {:?}", start.elapsed());
+                        return map;
+                    }
+                    Err(e) => {
+                        warn!("Cache Load Failed: {e}");
+                    }
                 }
             }
         }
@@ -656,14 +661,19 @@ impl DialHandler {
 
         debug!("Generated {} images in {:?}", count, start.elapsed());
 
-        debug!("Attempting to Save to Cache");
-        let time = Instant::now();
-        let cache_file = xdg_dirs.place_cache_file(file_name);
-        if let Ok(file) = cache_file {
-            if let Err(e) = Self::save_cache(file, &map) {
-                warn!("Cache Saving Failed: {e}");
-            } else {
-                info!("Cache Saved in {:?}", time.elapsed());
+        if let Some(base_dirs) = base_dirs {
+            let cache_path = base_dirs.cache_dir().join(APP_TLD);
+            let cache_file = cache_path.join(file_name);
+
+            debug!("Attempting to Save to Cache");
+
+            let time = Instant::now();
+            match fs::create_dir_all(cache_path) {
+                Ok(()) => match Self::save_cache(cache_file, &map) {
+                    Ok(()) => info!("Cache Saved in {:?}", time.elapsed()),
+                    Err(e) => warn!("Cache Saving Failed: {e}"),
+                },
+                Err(e) => info!("Cache Save Failed, Unable to Create Cache Dir: {e}"),
             }
         }
         map
@@ -826,7 +836,7 @@ impl DialHandler {
         Ok(())
     }
 
-    fn load_cache(path: PathBuf) -> Result<DialMeterData> {
+    fn load_cache(path: &PathBuf) -> Result<DialMeterData> {
         let file = File::open(&path)?;
         let mut reader = BufReader::new(file);
         let mut map: DialMeterData = EnumMap::default();
