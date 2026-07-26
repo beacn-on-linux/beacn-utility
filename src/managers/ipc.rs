@@ -1,37 +1,25 @@
 use crate::{APP_NAME, ManagerMessages, ToMainMessages};
 use anyhow::{Result, bail};
-use beacn_lib::flume::{Receiver, Sender};
-
 use directories::BaseDirs;
-use log::{debug, warn};
-
-use std::{env, path::PathBuf};
-
-use tokio::{
-    fs,
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{UnixListener, UnixStream},
+use interprocess::local_socket::{
+    GenericFilePath, GenericNamespaced, ListenerOptions, Name, NameType, ToFsName, ToNsName,
+    tokio::prelude::{LocalSocketListener, LocalSocketStream},
+    traits::tokio::{Listener, Stream},
 };
+use log::{debug, warn};
+use std::io::ErrorKind;
+use std::{env, fs, path::PathBuf};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub async fn handle_ipc(
-    manager_rx: Receiver<ManagerMessages>,
-    main_tx: Sender<ToMainMessages>,
+    mut manager_rx: UnboundedReceiver<ManagerMessages>,
+    main_tx: UnboundedSender<ToMainMessages>,
 ) -> Result<()> {
     debug!("Spawning IPC Socket");
 
-    let socket_path = get_socket_file_path();
-    if let Some(parent) = socket_path.parent()
-        && let Err(e) = fs::create_dir_all(parent).await
-    {
-        warn!("Failed to create socket directory {parent:?}: {e}");
-        bail!("Failed to open IPC Socket");
-    }
-
-    if socket_path.exists() {
-        let _ = fs::remove_file(&socket_path).await;
-    }
-
-    let listener = match UnixListener::bind(&socket_path) {
+    let name = get_socket_name()?;
+    let listener = match bind_listener(&name) {
         Ok(listener) => listener,
         Err(e) => {
             warn!("Failed to bind to socket: {e}");
@@ -39,46 +27,37 @@ pub async fn handle_ipc(
         }
     };
 
-    debug!("IPC listener started at {socket_path:?}");
-
+    debug!("IPC listener started at {name:?}");
     loop {
         tokio::select! {
-            msg = manager_rx.recv_async() => {
+            msg = manager_rx.recv() => {
                 match msg {
-                    Ok(ManagerMessages::Quit) => {
-                        break;
-                    }
-
-                    Err(e) => {
-                        warn!("Message handler channel broken: {e}");
+                    Some(ManagerMessages::Quit) => break,
+                    None => {
+                        warn!("Message Handler channel broken, bailing");
                         break;
                     }
                 }
             }
 
-            result = listener.accept() => {
-                match result {
-                    Ok((mut stream, _)) => {
+            accepted = listener.accept() => {
+                match accepted {
+                    Ok(mut stream) => {
                         let mut msg = String::new();
-
                         if let Err(e) = stream.read_to_string(&mut msg).await {
                             warn!("Failed to read message from stream: {e}");
-                            continue;
+                            break;
                         }
-
                         match msg.as_str() {
                             "TRIGGER" => {
-                                if let Err(e) = main_tx.send_async(ToMainMessages::SpawnWindow).await {
-                                    warn!("Failed to send main message: {e}");
-                                }
+                                let _ = main_tx.send(ToMainMessages::SpawnWindow);
                             }
-
                             _ => {
                                 debug!("Unknown Message, aborting: {msg}");
+                                break;
                             }
                         }
                     }
-
                     Err(e) => {
                         warn!("Unexpected socket error: {e}");
                         break;
@@ -88,39 +67,78 @@ pub async fn handle_ipc(
         }
     }
 
-    let _ = fs::remove_file(&socket_path).await;
     debug!("IPC Socket closed");
     Ok(())
 }
 
-pub async fn handle_active_instance() -> bool {
-    let socket_path = get_socket_file_path();
-    debug!("Looking for Socket at {socket_path:?}");
-
-    if !socket_path.exists() {
-        debug!("Existing socket is not present");
-        return false;
+/// Binds the listener, transparently recovering from a stale socket left behind
+/// by a previous, uncleanly-terminated instance.
+fn bind_listener(name: &Name<'static>) -> std::io::Result<LocalSocketListener> {
+    match ListenerOptions::new().name(name.clone()).create_tokio() {
+        Ok(listener) => Ok(listener),
+        Err(e) if e.kind() == ErrorKind::AddrInUse => {
+            debug!("Socket appears to be in use; treating as stale and retrying bind");
+            remove_stale_file_socket(name);
+            ListenerOptions::new().name(name.clone()).create_tokio()
+        }
+        Err(e) => Err(e),
     }
+}
 
-    debug!("Attempting to connect to existing socket");
+/// Removes the on-disk socket file for the `GenericFilePath` fallback name type.
+/// A no-op for namespaced names, which have nothing on the filesystem to remove.
+fn remove_stale_file_socket(_name: &Name<'static>) {
+    let path = get_socket_file_path();
+    if path.exists() {
+        let _ = fs::remove_file(&path);
+    }
+}
 
-    match UnixStream::connect(&socket_path).await {
+/// Checks whether another instance is already running by attempting to connect
+/// to its socket. If so, forwards a trigger message to it and returns `true`.
+pub async fn handle_active_instance() -> bool {
+    let name = match get_socket_name() {
+        Ok(name) => name,
+        Err(e) => {
+            debug!("Failed to build socket name: {e}");
+            return false;
+        }
+    };
+
+    debug!("Attempting to Connect to Existing Socket at {name:?}");
+    match LocalSocketStream::connect(name.clone()).await {
         Ok(mut stream) => {
-            debug!("Connected, sending trigger");
-
+            debug!("Connected to Existing Socket, Sending Trigger");
             let _ = stream.write_all(b"TRIGGER").await;
-
+            let _ = stream.shutdown().await;
             true
         }
-
         Err(e) => {
-            debug!("Failed to connect to socket: {e}");
-            debug!("Removing stale socket file");
-
-            let _ = fs::remove_file(socket_path).await;
-
+            debug!("Failed to Connect to Socket: {e}");
+            debug!("Removing Stale Socket File (if any)");
+            remove_stale_file_socket(&name);
             false
         }
+    }
+}
+
+fn get_socket_name() -> Result<Name<'static>> {
+    let socket_file_name = get_socket_file_name();
+
+    if GenericNamespaced::is_supported() {
+        Ok(socket_file_name.to_ns_name::<GenericNamespaced>()?)
+    } else {
+        let path = get_socket_file_path();
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent)
+        {
+            warn!("Failed to create socket directory {parent:?}: {e}");
+            bail!("Failed to create socket directory");
+        }
+        Ok(path
+            .to_string_lossy()
+            .into_owned()
+            .to_fs_name::<GenericFilePath>()?)
     }
 }
 
@@ -129,11 +147,9 @@ fn get_socket_file_path() -> PathBuf {
         .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
         .unwrap_or_else(|| {
             let tmp_dir = env::temp_dir();
-
             if !tmp_dir.exists() {
-                let _ = std::fs::create_dir_all(&tmp_dir);
+                let _ = fs::create_dir_all(&tmp_dir);
             }
-
             tmp_dir
         });
 
