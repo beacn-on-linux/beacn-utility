@@ -458,6 +458,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "beacn-lib"
 version = "0.1.11"
+source = "git+https://github.com/beacn-on-linux/beacn-lib.git?branch=flume-test-nusb-async#c1605d2fd02855014ed6ea4b6e8d515d5b8a2a90"
 dependencies = [
  "anyhow",
  "async-io",
@@ -512,7 +513,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-tungstenite",
- "uds_windows",
  "ulid",
  "wide",
  "xdg",

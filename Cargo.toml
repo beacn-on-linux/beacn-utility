@@ -20,6 +20,9 @@ log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 # Error Handling
 anyhow = "1.0.104"
 
+# Async Runtime
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal"] }
+
 # Enum Helpers
 strum = "0.28.0"
 strum_macros = "0.28.0"
@@ -47,9 +50,6 @@ ksni = { version = "0.3.6", features = ["blocking"] }
 image = "0.25.10"
 fontdue = "0.9.3"
 
-# Apature Science Handheld Portal Device (autostart / background)
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal"] }
-ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
 
 # For Creating .desktop files outside the flatpak runtime
 rust-ini = "0.21.3"
@@ -76,9 +76,9 @@ rayon = "1.12.0"
 futures = "0.3.33"
 tokio-stream = "0.1.19"
 
-# WINDOWS: Useful primarily for testing and comparison
-[target.'cfg(windows)'.dependencies]
-uds_windows = "1.1.0"
+[target.'cfg(linux)'.dependencies]
+# Apature Science Handheld Portal Device (autostart / background)
+ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
 
 # Packaging
 [package.metadata.deb]
