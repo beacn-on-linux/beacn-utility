@@ -23,6 +23,9 @@ anyhow = "1.0.104"
 # Async Runtime
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal"] }
 
+# Opening Stuff
+open = "5.4.0"
+
 # Enum Helpers
 strum = "0.28.0"
 strum_macros = "0.28.0"

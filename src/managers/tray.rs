@@ -1,4 +1,4 @@
-use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
+use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages, get_logs_path};
 use anyhow::Result;
 use beacn_lib::flume::{Receiver, Sender, bounded};
 use image::GenericImageView;
@@ -11,6 +11,7 @@ use std::{env, fs};
 
 enum TrayMessages {
     Activate,
+    OpenLogs,
     Quit,
 }
 
@@ -57,6 +58,12 @@ pub async fn handle_tray(
                 match msg {
                     Ok(TrayMessages::Activate) => {
                         let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
+                    }
+
+                    Ok(TrayMessages::OpenLogs) => {
+                        if let Ok(logs) = get_logs_path() {
+                            let _ = open::that(logs);
+                        }
                     }
 
                     Ok(TrayMessages::Quit) => {
@@ -167,6 +174,15 @@ impl Tray for TrayIcon {
                 label: String::from("Show"),
                 activate: Box::new(|this: &mut TrayIcon| {
                     let _ = this.tx.try_send(TrayMessages::Activate);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
+            StandardItem {
+                label: String::from("Open Logs"),
+                activate: Box::new(|this: &mut TrayIcon| {
+                    let _ = this.tx.try_send(TrayMessages::OpenLogs);
                 }),
                 ..Default::default()
             }
