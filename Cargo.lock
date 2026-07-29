@@ -458,7 +458,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "beacn-lib"
 version = "0.1.11"
-source = "git+https://github.com/beacn-on-linux/beacn-lib.git?branch=flume-test-nusb-async#a11667f3245d8174cd7841425177ec379d6b67f2"
+source = "git+https://github.com/beacn-on-linux/beacn-lib.git?branch=flume-test-nusb-async#4b0eaa38f79cdd3fd5fad67b16a85c6aad842b7c"
 dependencies = [
  "anyhow",
  "async-io",

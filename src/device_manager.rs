@@ -193,7 +193,7 @@ pub async fn spawn_device_manager(
 
                                 AudioMessage::Linked(command) => match command {
                                     LinkedCommands::GetLinked(tx) => {
-                                        let _ = tx.send(dev.get_linked_app_list().await);
+                                        let _ = tx.send(dev.get_linked_apps().await);
                                     }
 
                                     LinkedCommands::SetLinked(app, tx) => {
