@@ -29,6 +29,7 @@ use futures::FutureExt;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
 use std::time::Duration;
 use strum_macros::Display;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
@@ -370,7 +371,7 @@ async fn handle_device_attached(
 
             let (serial, version) = match &device {
                 Some(d) => (d.get_serial(), d.get_version()),
-                None => ("Unknown".to_string(), "Unknown".to_string()),
+                None => ("Unknown".to_string(), VersionNumber(0, 0, 0, 0)),
             };
 
             let data = DeviceDefinition {
@@ -462,7 +463,7 @@ fn set_pipeweaver_draw_suspended(devices: &HashMap<DeviceLocation, DeviceEntry>,
 enum DeviceEntry {
     Audio(Box<dyn BeacnAudioDevice>),
     Control(
-        Box<dyn BeacnControlDevice>,
+        Arc<Box<dyn BeacnControlDevice>>,
         watch::Sender<bool>,
         watch::Sender<bool>,
         JoinHandle<()>,
