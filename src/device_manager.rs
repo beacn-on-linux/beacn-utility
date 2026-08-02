@@ -88,7 +88,7 @@ pub async fn spawn_device_manager(
                     LoginEventTriggers::Sleep(tx) => {
                         suspended = true;
                         set_pipeweaver_draw_suspended(&devices, true);
-                        enable_devices(&devices, false);
+                        enable_devices(&devices, false).await;
                         let _ = tx.send(());
                     }
 
@@ -110,18 +110,18 @@ pub async fn spawn_device_manager(
                         }
 
                         set_pipeweaver_draw_suspended(&devices, false);
-                        enable_devices(&devices, true);
+                        enable_devices(&devices, true).await;
                         let _ = tx.send(());
                     }
 
                     LoginEventTriggers::Lock => {
                         set_pipeweaver_draw_suspended(&devices, true);
-                        enable_devices(&devices, false);
+                        enable_devices(&devices, false).await;
                     }
 
                     LoginEventTriggers::Unlock => {
                         set_pipeweaver_draw_suspended(&devices, false);
-                        enable_devices(&devices, true);
+                        enable_devices(&devices, true).await;
                     }
                 }
             }
@@ -208,25 +208,25 @@ pub async fn spawn_device_manager(
                         if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                             match msg {
                                 ControlMessage::SendImage(img, x, y, tx) => {
-                                    let _ = tx.send(dev.set_image(x, y, &img));
+                                    let _ = tx.send(dev.set_image(x, y, &img).await);
                                 }
                                 ControlMessage::DisplayBrightness(brightness, tx) => {
-                                    let _ = tx.send(dev.set_display_brightness(brightness));
+                                    let _ = tx.send(dev.set_display_brightness(brightness).await);
                                 }
                                 ControlMessage::ButtonBrightness(brightness, tx) => {
-                                    let _ = tx.send(dev.set_button_brightness(brightness));
+                                    let _ = tx.send(dev.set_button_brightness(brightness).await);
                                 }
                                 ControlMessage::DimTimeout(timeout, tx) => {
-                                    let _ = tx.send(dev.set_dim_timeout(timeout));
+                                    let _ = tx.send(dev.set_dim_timeout(timeout).await);
                                 }
                                 ControlMessage::ButtonColour(button, colour, tx) => {
-                                    let _ = tx.send(dev.set_button_colour(button, colour));
+                                    let _ = tx.send(dev.set_button_colour(button, colour).await);
                                 }
                                 ControlMessage::Enabled(enabled, tx) => {
-                                    let _ = tx.send(dev.set_enabled(enabled));
+                                    let _ = tx.send(dev.set_enabled(enabled).await);
                                 }
                                 ControlMessage::KeepAlive(tx) => {
-                                    let _ = tx.send(dev.send_keepalive());
+                                    let _ = tx.send(dev.send_keepalive().await);
                                 }
                             }
                         }
@@ -264,10 +264,10 @@ pub async fn spawn_device_manager(
                     && let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                         match msg {
                             ControlMessage::SendImage(img, x, y, tx) => {
-                                let _ = tx.send(dev.set_image(x, y, &img));
+                                let _ = tx.send(dev.set_image(x, y, &img).await);
                             }
                             ControlMessage::ButtonColour(button, colour, tx) => {
-                                let _ = tx.send(dev.set_button_colour(button, colour));
+                                let _ = tx.send(dev.set_button_colour(button, colour).await);
                             }
                             _ => {}
                         }
@@ -378,10 +378,7 @@ async fn handle_device_attached(
                 state,
                 location: location.clone(),
                 device_type,
-                device_info: DeviceInfo {
-                    serial,
-                    version: VersionNumber::from(version),
-                },
+                device_info: DeviceInfo { serial, version },
             };
 
             let (tx, rx) = unbounded();
@@ -444,10 +441,10 @@ enum DeviceRequest {
 }
 
 #[allow(unused)]
-fn enable_devices(devices: &HashMap<DeviceLocation, DeviceEntry>, enabled: bool) {
+async fn enable_devices(devices: &HashMap<DeviceLocation, DeviceEntry>, enabled: bool) {
     for device in devices.values() {
         if let DeviceEntry::Control(dev, ..) = device {
-            let _ = dev.set_enabled(enabled);
+            let _ = dev.set_enabled(enabled).await;
         }
     }
 }
