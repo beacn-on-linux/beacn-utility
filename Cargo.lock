@@ -457,8 +457,8 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "beacn-lib"
-version = "0.1.11"
-source = "git+https://github.com/beacn-on-linux/beacn-lib.git?branch=flume-test-nusb-async#4b0eaa38f79cdd3fd5fad67b16a85c6aad842b7c"
+version = "0.2.2"
+source = "git+https://github.com/beacn-on-linux/beacn-lib.git?tag=v0.2.2#0679205c613b6d597d80f9010c379964b21f72ab"
 dependencies = [
  "anyhow",
  "async-io",
@@ -468,12 +468,17 @@ dependencies = [
  "enum-map",
  "flume",
  "futures-lite",
+ "gloo-timers",
  "jpeg-decoder",
  "log",
  "nusb",
  "oneshot",
  "strum",
  "thiserror 2.0.19",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-time",
 ]
 
 [[package]]
@@ -1708,6 +1713,18 @@ dependencies = [
  "skrifa",
  "smallvec",
  "vello_common",
+]
+
+[[package]]
+name = "gloo-timers"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "482ce8a491a501da4cd806bd190275363d674f2845005c6ddbd5d3e1dd54495d"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "js-sys",
+ "wasm-bindgen",
 ]
 
 [[package]]
