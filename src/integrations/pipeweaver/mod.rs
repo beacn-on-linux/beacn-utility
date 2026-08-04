@@ -10,8 +10,7 @@ use crate::integrations::pipeweaver::layout::{
 use crate::runtime;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
-use beacn_lib::crossbeam;
-use beacn_lib::crossbeam::channel::{Receiver, Sender, TryRecvError};
+use beacn_lib::flume::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use directories::BaseDirs;
@@ -46,11 +45,11 @@ use std::time::{Duration, Instant};
 use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
-use tokio::sync::mpsc::channel;
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
+use tokio_tungstenite::tungstenite::handshake::client::Response;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 use ulid::Ulid;
@@ -176,7 +175,7 @@ struct PipeweaverHandler {
     device_type: DeviceType,
     sender: Sender<ControlMessage>,
     input_rx: Receiver<Interactions>,
-    stop_rx: watch::Receiver<()>,
+    stop_rx: watch::Receiver<bool>,
     suspended_rx: watch::Receiver<bool>,
     temporary_active: bool,
 
@@ -200,7 +199,7 @@ impl PipeweaverHandler {
         device_type: DeviceType,
         sender: Sender<ControlMessage>,
         input_rx: Receiver<Interactions>,
-        stop_rx: watch::Receiver<()>,
+        stop_rx: watch::Receiver<bool>,
         suspended_rx: watch::Receiver<bool>,
     ) -> Self {
         Self {
@@ -235,12 +234,12 @@ impl PipeweaverHandler {
         let mut clean_stop = true;
 
         // Send the Pipeweaver Splash
-        self.draw_splash();
-        self.draw_status("Loading...");
+        self.draw_splash().await;
+        self.draw_status("Loading...").await;
 
         sleep(Duration::from_millis(250)).await;
 
-        self.disable_buttons();
+        self.disable_buttons().await;
 
         // We need to handle this in a loop, if something goes bad just make sure we're disconnencted
         // and try again after 5 seconds,
@@ -254,12 +253,12 @@ impl PipeweaverHandler {
 
             if !self.displaying_error {
                 if !self.has_connected {
-                    self.draw_status("Failed to connect to Pipeweaver");
-                    self.disable_buttons();
+                    self.draw_status("Failed to connect to Pipeweaver").await;
+                    self.disable_buttons().await;
                 } else {
-                    self.draw_splash();
-                    self.draw_status("Connection to Pipeweaver lost");
-                    self.disable_buttons();
+                    self.draw_splash().await;
+                    self.draw_status("Connection to Pipeweaver lost").await;
+                    self.disable_buttons().await;
                 }
             }
             self.displaying_error = true;
@@ -281,17 +280,15 @@ impl PipeweaverHandler {
                 warn!("Pipeweaver Error: {}", e);
             }
 
-            // Spawn a sync <-> async loop so we can consume incoming messages while disconnected
-            let sync_receiver = self.input_rx.clone();
-            let (interaction_tx, mut interaction_rx) = channel(10);
+            if *self.stop_rx.borrow() {
+                info!("Shutdown Requested, terminating");
+                break 'connect;
+            }
 
-            let (stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
-            runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
-
-            // Create a loop which handles things like incoming messages and stopping
+            // Drain (and ignore) incoming interactions while disconnected
             loop {
                 select! {
-                    Some(_) = interaction_rx.recv() => {
+                    Ok(_) = self.input_rx.recv_async() => {
                         // We need to NOOP this, drain the channel so messages don't queue.
                     }
                     Ok(_) = self.stop_rx.changed() => {
@@ -299,7 +296,6 @@ impl PipeweaverHandler {
                     }
                     _ = sleep(Duration::from_secs(5)) => {
                         // 5 Seconds have elapsed, break this loop to reconnect
-                        drop(stop_tx);
                         continue 'connect;
                     }
                 }
@@ -308,19 +304,20 @@ impl PipeweaverHandler {
 
         info!("Pipeweaver Manager Terminated");
         if clean_stop {
-            self.draw_splash();
-            self.draw_status("Beacn Utility Stopped");
-            self.disable_buttons();
+            self.draw_splash().await;
+            self.draw_status("Beacn Utility Stopped").await;
+            self.disable_buttons().await;
         }
     }
 
-    fn draw_splash(&self) {
+    async fn draw_splash(&self) {
         let (tx, rx) = oneshot::channel();
+
         let _ = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
-        let _ = rx.recv();
+        let _ = rx.await;
     }
 
-    fn draw_status(&self, text: &str) {
+    async fn draw_status(&self, text: &str) {
         let text = DrawingUtils::draw_text(
             text.into(),
             800,
@@ -333,22 +330,26 @@ impl PipeweaverHandler {
 
         if let Ok(img) = img_as_jpeg(text, Rgba([0, 0, 0, 255])) {
             let (tx, rx) = oneshot::channel();
-            let _ = self.sender.send(SendImage(img, 0, 330, tx));
-            let _ = rx.recv();
+            match self.sender.send(SendImage(img, 0, 330, tx)) {
+                Ok(_) => debug!("Pipeweaver SendImage queued"),
+                Err(e) => debug!("Pipeweaver SendImage failed: {:?}", e),
+            }
+            let _ = rx.await;
         }
     }
 
-    fn disable_buttons(&self) {
+    async fn disable_buttons(&self) {
         for button in ButtonLighting::iter() {
             let (tx, rx) = oneshot::channel();
             let _ = self.sender.send(ButtonColour(button, COLOUR_BLACK, tx));
-            let _ = rx.recv();
+
+            let _ = rx.await;
         }
     }
 
     async fn handle_connection(&mut self, url: &str, meter: &str) -> Result<()> {
-        let (mut stream, _) = connect_async(url).await?;
-        let (mut meter, _) = connect_async(meter).await?;
+        let (mut stream, _) = self.connect_with_stop(url).await?;
+        let (mut meter, _) = self.connect_with_stop(meter).await?;
         info!("Successfully connected to Pipeweaver");
 
         self.has_connected = true;
@@ -359,6 +360,17 @@ impl PipeweaverHandler {
         self.run_message_loop(&mut stream, &mut meter).await?;
 
         Ok(())
+    }
+
+    async fn connect_with_stop(&mut self, url: &str) -> Result<(WebSocket, Response)> {
+        select! {
+            result = connect_async(url) => {
+                Ok(result?)
+            }
+            Ok(_) = self.stop_rx.changed() => {
+                bail!("Shutdown requested")
+            }
+        }
     }
 
     async fn load_status(&mut self, stream: &mut WebSocket) -> Result<()> {
@@ -378,45 +390,51 @@ impl PipeweaverHandler {
         // There are occasionally patch messages which could occur before the status response,
         // so we'll loop here until we get the answer we're looking for
         loop {
-            match stream.next().await {
-                Some(Ok(Message::Text(msg))) => {
-                    let value = serde_json::from_str::<Value>(msg.as_str())?;
+            select! {
+                message = stream.next() => match message {
+                    Some(Ok(Message::Text(msg))) => {
+                        let value = serde_json::from_str::<Value>(msg.as_str())?;
 
-                    // This should be a WebSocketResponse object
-                    let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
+                        // This should be a WebSocketResponse object
+                        let object = value.as_object().ok_or(anyhow!("Failed to Read Object"))?;
 
-                    // Check the ID (should always be present)
-                    let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
+                        // Check the ID (should always be present)
+                        let id = object.get("id").ok_or(anyhow!("Failed to Read ID"))?;
 
-                    // We can occasionally get patches before the Status response, so verify the ID...
-                    if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
-                        // This is our DaemonStatus response
-                        let error = anyhow!("Failed to Read Data");
-                        let data = object.get("data").ok_or(error)?.clone();
+                        // We can occasionally get patches before the Status response, so verify the ID...
+                        if id.as_u64().ok_or(anyhow!("Unable to Parse id"))? == status_id {
+                            // This is our DaemonStatus response
+                            let error = anyhow!("Failed to Read Data");
+                            let data = object.get("data").ok_or(error)?.clone();
 
-                        let error = anyhow!("Failed to Read Status");
-                        self.raw_status = data.get("Status").ok_or(error)?.clone();
+                            let error = anyhow!("Failed to Read Status");
+                            self.raw_status = data.get("Status").ok_or(error)?.clone();
 
-                        let raw = self.raw_status.clone();
-                        self.status = serde_json::from_value::<DaemonStatus>(raw)?;
-                        break;
+                            let raw = self.raw_status.clone();
+                            self.status = serde_json::from_value::<DaemonStatus>(raw)?;
+                            break;
+                        }
                     }
-                }
 
-                Some(Ok(Message::Close(frame))) => {
-                    bail!("Pipeweaver closed websocket: {:?}", frame);
-                }
+                    Some(Ok(Message::Close(frame))) => {
+                        bail!("Pipeweaver closed websocket: {:?}", frame);
+                    }
 
-                Some(Ok(other)) => {
-                    debug!("Ignoring websocket message during status load: {:?}", other);
-                }
+                    Some(Ok(other)) => {
+                        debug!("Ignoring websocket message during status load: {:?}", other);
+                    }
 
-                Some(Err(e)) => {
-                    return Err(e.into());
-                }
+                    Some(Err(e)) => {
+                        return Err(e.into());
+                    }
 
-                None => {
-                    bail!("Pipeweaver websocket closed while loading status");
+                    None => {
+                        bail!("Pipeweaver websocket closed while loading status");
+                    }
+                },
+
+                Ok(_) = self.stop_rx.changed() => {
+                    bail!("Shutdown Requested");
                 }
             }
         }
@@ -431,7 +449,7 @@ impl PipeweaverHandler {
         self.update_renderers()?;
 
         // Perform the initial screen render
-        self.perform_full_refresh()?;
+        self.perform_full_refresh().await?;
 
         Ok(())
     }
@@ -441,22 +459,14 @@ impl PipeweaverHandler {
         stream: &mut WebSocket,
         meter: &mut WebSocket,
     ) -> Result<()> {
-        debug!("Spawning Sync <-> Async Loop");
-
         const METER_HALF_TICK_MS: u64 = 50;
         const TICK_RATE: f32 = METER_HALF_TICK_MS as f32 / 1000.0;
-
-        let sync_receiver = self.input_rx.clone();
-        let (interaction_tx, mut interaction_rx) = channel(10);
-
-        let (_stop_tx, stop_rx) = crossbeam::channel::bounded::<()>(0);
-        runtime().spawn_blocking(move || sync_to_async(sync_receiver, interaction_tx, stop_rx));
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
 
         let (tx, rx) = oneshot::channel();
         self.sender.send(ControlMessage::Enabled(true, tx))?;
-        rx.recv()??;
+        rx.await??;
 
         let mut last_channel_count = 0;
 
@@ -482,7 +492,7 @@ impl PipeweaverHandler {
                 Ok(_) = self.suspended_rx.changed() => {
                     // We've woken up from a suspension, so redraw everything
                     if !self.is_suspended() {
-                        self.refresh_page()?;
+                        self.refresh_page().await?;
                     }
 
                     // Restart the loop, just in case there are other redraws needed
@@ -510,7 +520,7 @@ impl PipeweaverHandler {
 
                                 if count != last_channel_count {
                                     last_channel_count = count;
-                                    self.load_page_button()?;
+                                    self.load_page_button().await?;
                                 }
 
                                 let sources = &self.status.audio.profile.devices.sources;
@@ -523,8 +533,8 @@ impl PipeweaverHandler {
                                     self.update_renderers()?;
 
                                     // Set the Button Colours
-                                    self.load_all_dial_button_colours()?;
-                                    self.perform_full_redraw()?;
+                                    self.load_all_dial_button_colours().await?;
+                                    self.perform_full_redraw().await?;
                                 } else {
                                     // Check whether any existing devices have changed
                                     for (index, device) in self.devices_shown.iter().enumerate() {
@@ -608,14 +618,14 @@ impl PipeweaverHandler {
                                             // Send it
                                             let (tx,rx) = oneshot::channel();
                                             self.sender.send(SendImage(img, x, y, tx))?;
-                                            rx.recv()??;
+                                            rx.await??;
                                         };
 
                                         // We split this out because there's a lot of borrowing going on
                                         // inside the loops regards the renderer, which makes executing
                                         // earlier more difficult :D
                                         if refresh_button_colour {
-                                            self.load_dial_button_colour(index)?;
+                                            self.load_dial_button_colour(index).await?;
                                         }
                                     }
                                 }
@@ -668,7 +678,7 @@ impl PipeweaverHandler {
 
                                 let (tx, rx) = oneshot::channel();
                                 self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                                rx.recv()??;
+                                rx.await??;
 
                                 sub_tick = Some((result.id, index));
                                 sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
@@ -712,7 +722,7 @@ impl PipeweaverHandler {
 
                         let (tx, rx) = oneshot::channel();
                         self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                        rx.recv()??;
+                        rx.await??;
 
                         // Keep ticking until meter hits zero
                         if renderer.meter > 0 {
@@ -726,14 +736,14 @@ impl PipeweaverHandler {
                     // We should be sleeping, and something woke us up, so put us back to sleep
                     let (tx, rx) = oneshot::channel();
                     self.sender.send(ControlMessage::Enabled(false, tx))?;
-                    rx.recv()??;
+                    rx.await??;
 
                     self.temporary_active = false;
                 }
 
-                maybe_msg = interaction_rx.recv() => {
+                maybe_msg = self.input_rx.recv_async() => {
                     match maybe_msg {
-                        Some(msg) => {
+                        Ok(msg) => {
                             if is_suspended {
                                 // Reset the timer in all cases
                                 suspend_sleep.as_mut().reset(time::Instant::now() + Duration::from_secs(5));
@@ -742,7 +752,7 @@ impl PipeweaverHandler {
                                     // Wake the device up, and flag as temporarily active
                                     let (tx, rx) = oneshot::channel();
                                     self.sender.send(ControlMessage::Enabled(true, tx))?;
-                                    rx.recv()??;
+                                    rx.await??;
 
                                     self.temporary_active = true;
                                 }
@@ -765,13 +775,13 @@ impl PipeweaverHandler {
                                 t => bail!("WTF is this doing here?! {:?}", t)
                             }
                         },
-                        None => bail!("Receive Handler Closed!")
+                        Err(_) => bail!("Receive Handler Closed!")
                     }
                 }
                 _instant = keep_alive.tick() => {
                     let (tx,rx) = oneshot::channel();
                     self.sender.send(ControlMessage::KeepAlive(tx))?;
-                    rx.recv()??;
+                    rx.await??;
                 }
 
                 _ = ticker.tick() => {
@@ -781,11 +791,11 @@ impl PipeweaverHandler {
         }
     }
 
-    fn perform_full_refresh(&mut self) -> Result<()> {
-        self.perform_full_redraw()?;
-        self.load_all_dial_button_colours()?;
-        self.load_page_button()?;
-        self.load_mix_button_colours()?;
+    async fn perform_full_refresh(&mut self) -> Result<()> {
+        self.perform_full_redraw().await?;
+        self.load_all_dial_button_colours().await?;
+        self.load_page_button().await?;
+        self.load_mix_button_colours().await?;
 
         Ok(())
     }
@@ -803,7 +813,7 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    fn perform_full_redraw(&self) -> Result<()> {
+    async fn perform_full_redraw(&self) -> Result<()> {
         let (width, height) = DISPLAY_DIMENSIONS;
         let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
 
@@ -822,12 +832,14 @@ impl PipeweaverHandler {
         let (tx, rx) = oneshot::channel();
         let img = img_as_jpeg(base, BG_COLOUR)?;
         self.sender.send(SendImage(img, 0, 0, tx))?;
-        rx.recv()??;
+
+        debug!("Full Redraw Send");
+        rx.await??;
 
         Ok(())
     }
 
-    fn redraw_volumes(&self) -> Result<()> {
+    async fn redraw_volumes(&self) -> Result<()> {
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
             let renderer = self.renderers.get(item).ok_or(error)?;
@@ -846,20 +858,20 @@ impl PipeweaverHandler {
             // Send it
             let (tx, rx) = oneshot::channel();
             self.sender.send(SendImage(drawing.image, x, y, tx))?;
-            rx.recv()??;
+            rx.await??;
         }
 
         Ok(())
     }
 
-    fn load_all_dial_button_colours(&self) -> Result<()> {
+    async fn load_all_dial_button_colours(&self) -> Result<()> {
         for index in 0..self.devices_shown.len() {
-            self.load_dial_button_colour(index)?;
+            self.load_dial_button_colour(index).await?;
         }
         Ok(())
     }
 
-    fn load_page_button(&mut self) -> Result<()> {
+    async fn load_page_button(&mut self) -> Result<()> {
         let pages = self.get_page_count();
         if self.active_page >= pages {
             self.active_page = pages - 1;
@@ -880,13 +892,15 @@ impl PipeweaverHandler {
         };
 
         // Send the page colours
-        self.set_button_colour(ButtonLighting::Left, left_colour)?;
-        self.set_button_colour(ButtonLighting::Right, right_colour)?;
+        self.set_button_colour(ButtonLighting::Left, left_colour)
+            .await?;
+        self.set_button_colour(ButtonLighting::Right, right_colour)
+            .await?;
 
         Ok(())
     }
 
-    fn load_mix_button_colours(&self) -> Result<()> {
+    async fn load_mix_button_colours(&self) -> Result<()> {
         let colour = match self.channel_type {
             ChannelType::Source => match self.active_mix {
                 Mix::A => COLOUR_MIX_B,
@@ -896,11 +910,11 @@ impl PipeweaverHandler {
             ChannelType::Target => COLOUR_BLACK,
         };
 
-        self.set_button_colour(ButtonLighting::Mix, colour)?;
+        self.set_button_colour(ButtonLighting::Mix, colour).await?;
         Ok(())
     }
 
-    fn load_dial_button_colour(&self, index: usize) -> Result<()> {
+    async fn load_dial_button_colour(&self, index: usize) -> Result<()> {
         let error = anyhow!("No Such Index");
         let device_id = self.devices_shown.get(index).ok_or(error)?;
 
@@ -923,7 +937,7 @@ impl PipeweaverHandler {
             alpha: colour[3],
         };
 
-        self.set_button_colour(dial_button, beacn_colour)?;
+        self.set_button_colour(dial_button, beacn_colour).await?;
         Ok(())
     }
 
@@ -951,10 +965,10 @@ impl PipeweaverHandler {
         Ok(renderer)
     }
 
-    fn refresh_page(&mut self) -> Result<()> {
+    async fn refresh_page(&mut self) -> Result<()> {
         self.devices_shown = self.get_channels_on_page();
         self.update_renderers()?;
-        self.perform_full_refresh()?;
+        self.perform_full_refresh().await?;
         Ok(())
     }
 
@@ -1063,11 +1077,13 @@ impl PipeweaverHandler {
             .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
     }
 
-    fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
+    async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = ButtonColour(button, colour, tx);
         self.sender.send(message)?;
-        rx.recv()??;
+
+        debug!("Set Button Colour: {:?}", button);
+        rx.await??;
         Ok(())
     }
 
@@ -1182,8 +1198,8 @@ impl PipeweaverHandler {
                     Mix::A => Mix::B,
                     Mix::B => Mix::A,
                 };
-                self.redraw_volumes()?;
-                self.load_mix_button_colours()?;
+                self.redraw_volumes().await?;
+                self.load_mix_button_colours().await?;
             }
             Buttons::PageLeft | Buttons::PageRight => {
                 let change: i8 = match button {
@@ -1202,7 +1218,7 @@ impl PipeweaverHandler {
                 self.active_page = self.active_page.wrapping_add_signed(change);
 
                 if !self.is_suspended() || self.temporary_active {
-                    self.refresh_page()?;
+                    self.refresh_page().await?;
                 }
             }
 
@@ -1304,7 +1320,7 @@ pub fn spawn_pipeweaver_handler(
     sender: Sender<ControlMessage>,
     device: DeviceType,
     input_rx: Receiver<Interactions>,
-    stop_rx: watch::Receiver<()>,
+    stop_rx: watch::Receiver<bool>,
     suspended_rx: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, suspended_rx);
@@ -1320,28 +1336,4 @@ fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
         return Ok(img.into_rgba8());
     }
     bail!("Failed to load image");
-}
-
-fn sync_to_async(
-    rx: Receiver<Interactions>,
-    tx: tokio::sync::mpsc::Sender<Interactions>,
-    cancel: Receiver<()>,
-) -> Result<()> {
-    debug!("Running Up Receiver..");
-    loop {
-        crossbeam::select! {
-            recv(rx) -> msg => match msg {
-                Ok(val) => tx.blocking_send(val)?,
-                Err(_) => {
-                    debug!("Crossbeam channel disconnected, stopping sync wrapper");
-                    break;
-                }
-            },
-            recv(cancel) -> _ => {
-                // We don't care about the result, we just want to stop the loop
-                break;
-            }
-        }
-    }
-    Ok(())
 }

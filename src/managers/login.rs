@@ -11,12 +11,13 @@
    https://www.freedesktop.org/wiki/Software/systemd/inhibit/
 */
 
+use crate::managers::LoginEventTriggers;
 use anyhow::Result;
-use beacn_lib::crossbeam;
+use beacn_lib::flume::Sender;
 use log::{debug, warn};
 use std::collections::HashMap;
 use std::env;
-use tokio::sync::mpsc as tokio_mpsc;
+use tokio::sync::{mpsc as tokio_mpsc, oneshot};
 use zbus::export::ordered_stream::OrderedStreamExt;
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
 use zbus::{Connection, proxy};
@@ -51,32 +52,19 @@ trait Session {
     ) -> Result<()>;
 }
 
-#[derive(Debug)]
-#[allow(unused)]
-pub enum LoginEventTriggers {
-    Sleep(oneshot::Sender<()>),
-    Wake(oneshot::Sender<()>),
-    Lock,
-    Unlock,
-}
-
-pub fn spawn_login_handler(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
+pub async fn spawn_login_handler(
+    tx: Sender<LoginEventTriggers>,
     stop_rx: tokio_mpsc::Receiver<()>,
 ) -> Result<()> {
     debug!("Starting Sleep Handler with dedicated runtime..");
 
     // Create a dedicated runtime for this thread since this is a long-running task
     // that would otherwise block your main runtime for the entire app lifetime
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .build()?;
-
-    rt.block_on(run_internal(tx, stop_rx))
+    run_internal(tx, stop_rx).await
 }
 
 async fn run_internal(
-    tx: crossbeam::channel::Sender<LoginEventTriggers>,
+    tx: Sender<LoginEventTriggers>,
     mut stop_rx: tokio_mpsc::Receiver<()>,
 ) -> Result<()> {
     let mut inhibitor = None;
@@ -147,7 +135,7 @@ async fn run_internal(
                         debug!("Sleep Message Sent, awaiting completion..");
 
                         // Use spawn_blocking to wait for the sync channel
-                        let _ = sleep_rx.recv();
+                        let _ = sleep_rx.await;
                     }
 
                     debug!("Sleep Handling Complete, Attempting to Drop Inhibitor");
@@ -165,7 +153,7 @@ async fn run_internal(
                         debug!("Wake Message Sent, awaiting completion..");
 
                         // Use spawn_blocking to wait for the sync channel
-                        let _ = wake_rx.recv();
+                        let _ = wake_rx.await;
                     }
 
                     debug!("Wake Handling Complete, Attempting to replace Inhibitor");

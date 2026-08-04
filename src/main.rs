@@ -2,31 +2,35 @@ use crate::device_manager::spawn_device_manager;
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
-use anyhow::Result;
 use anyhow::bail;
-use beacn_lib::crossbeam::channel::unbounded;
-use beacn_lib::crossbeam::{channel, select};
+use anyhow::{Result, anyhow};
+use beacn_lib::flume::unbounded;
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
+
+#[cfg(windows)]
+use egui_winit::winit::platform::windows::EventLoopBuilderExtWindows;
+
+#[cfg(unix)]
 use egui_winit::winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11};
+
+use directories::BaseDirs;
 use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
-use log::{LevelFilter, debug, error, info};
-use managers::tray::handle_tray;
-use signal_hook::consts::{SIGINT, SIGTERM};
-use signal_hook::iterator::Signals;
+use log::{LevelFilter, debug, error, info, warn};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
-use std::{env, thread};
-use tokio::runtime::{Builder, Runtime};
-use xdg::BaseDirectories;
+use std::{env, fs, thread};
+use tokio::runtime::Handle;
+
+use tokio::{join, task};
 
 mod device_manager;
 mod integrations;
@@ -46,17 +50,20 @@ const APP_TITLE: &str = "Beacn Utility";
 const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
-static TOKIO_RUNTIME: OnceLock<Runtime> = OnceLock::new();
-pub fn runtime() -> &'static Runtime {
-    TOKIO_RUNTIME.get_or_init(|| Builder::new_multi_thread().enable_all().build().unwrap())
+static TOKIO_RUNTIME: OnceLock<Handle> = OnceLock::new();
+
+pub fn runtime() -> &'static Handle {
+    TOKIO_RUNTIME.get_or_init(Handle::current)
 }
+
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
-fn main() -> Result<()> {
-    // Register Signal Handler
-    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Configure the static runtime as this runtime
+    runtime();
 
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
@@ -67,6 +74,8 @@ fn main() -> Result<()> {
     config.add_filter_ignore_str("winit::event_loop");
     config.add_filter_ignore_str("winit::window");
     config.add_filter_ignore_str("zbus");
+    config.add_filter_ignore_str("nusb::platform::linux_usbfs");
+    config.add_filter_ignore_str("nusb::platform::windows_winusb");
 
     // Setup Console Logging
     log_targets.push(TermLogger::new(
@@ -77,25 +86,26 @@ fn main() -> Result<()> {
     ));
 
     // Try to establish a log file in the XDG data directory
-    let xdg_dirs = BaseDirectories::with_prefix(APP_TLD);
-    let log_path = xdg_dirs.create_data_directory(PathBuf::from("logs"));
-    if let Ok(path) = log_path {
-        let log_file = path.join("beacn-utility.log");
-        println!("Logging to file: {log_file:?}");
+    match get_logs_path() {
+        Ok(path) => {
+            let log_file = path.join("beacn-utility.log");
+            println!("Logging to file: {log_file:?}");
 
-        let file_rotate = FileRotate::new(
-            log_file,
-            AppendCount::new(5),
-            ContentLimit::Bytes(1024 * 1024 * 2),
-            Compression::OnRotate(1),
-            #[cfg(unix)]
-            None,
-        );
-        log_targets.push(WriteLogger::new(
-            LevelFilter::Debug,
-            config.build(),
-            file_rotate,
-        ));
+            let file_rotate = FileRotate::new(
+                log_file,
+                AppendCount::new(5),
+                ContentLimit::Bytes(1024 * 1024 * 2),
+                Compression::OnRotate(1),
+                None,
+            );
+            log_targets.push(WriteLogger::new(
+                LevelFilter::Debug,
+                config.build(),
+                file_rotate,
+            ));
+        }
+
+        Err(e) => warn!("Log file directory creation failed, File Logging Disabled: {e}"),
     }
 
     CombinedLogger::init(log_targets)?;
@@ -110,172 +120,160 @@ fn main() -> Result<()> {
         || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
 
     // Firstly, create a message bus which allows threads to message back to here
-    let (main_tx, main_rx) = channel::unbounded();
+    let (main_tx, main_rx) = unbounded();
 
     // Check whether an existing instance is running, and bail if so
-    if handle_active_instance() {
+    if handle_active_instance().await {
         return Ok(());
     }
 
-    // Setup Signal Handling
-    let (signal_tx, signal_rx) = unbounded::<i32>();
-    thread::spawn(move || {
-        for sig in signals.forever() {
-            // We don't need any kind of clean shutdown here, this thread will bail when
-            // the main loop terminates.
-            let _ = signal_tx.send(sig);
-        }
-    });
-
     // Spawn up the IPC handler
-    let (ipc_tx, ipc_rx) = channel::unbounded();
+    let (ipc_tx, ipc_rx) = unbounded();
     let ipc_main_tx = main_tx.clone();
-    let ipc = thread::spawn(|| handle_ipc(ipc_rx, ipc_main_tx));
+    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_main_tx));
 
     // Ok, spawn up the Tray Handler
-    let (tray_tx, tray_rx) = channel::unbounded();
+    #[cfg_attr(not(unix), allow(unused))]
+    let (tray_tx, tray_rx) = unbounded();
+
+    #[cfg_attr(not(unix), allow(unused))]
     let tray_main_tx = main_tx.clone();
-    let tray = thread::spawn(|| {
-        if let Err(e) = handle_tray(tray_rx, tray_main_tx) {
-            error!("Failed to Spawn Tray: {e}");
+    let tray = task::spawn(async move {
+        #[cfg(unix)]
+        {
+            use managers::tray::handle_tray;
+            if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
+                error!("Failed to Spawn Tray: {e}");
+            }
         }
     });
 
     // Ok, we need to spawn up the device manager, first lets create some channels
     // The first channel is for us to be able to tell the manager to shut down, or reconfigure
-    let (manage_tx, manage_rx) = channel::unbounded();
+    let (manage_tx, manage_rx) = unbounded();
 
     // This one sends and receives messages when devices are attached and removed
-    let (device_tx, device_rx) = channel::unbounded();
+    let (device_tx, device_rx) = unbounded();
     let dev_main_tx = main_tx.clone();
-    let device_manager = thread::spawn(|| spawn_device_manager(manage_rx, dev_main_tx, device_tx));
+    let device_manager = task::spawn(spawn_device_manager(manage_rx, dev_main_tx, device_tx));
 
     // Under KDE at least, it expects the window class to be both the TLD and the name in order
     // to look for the icon in the right place.
-    let resource_class = format!("{APP_TLD}.{APP_NAME}");
-
-    let window_attributes = Window::default_attributes()
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut window_attributes = Window::default_attributes()
         .with_title(APP_TITLE)
         .with_window_icon(Some(load_icon(ICON)))
         .with_inner_size(LogicalSize::new(1024, 500))
-        .with_name(resource_class, APP_NAME)
         .with_min_inner_size(LogicalSize::new(1024, 500));
+
+    #[cfg(unix)]
+    {
+        let resource_class = format!("{APP_TLD}.{APP_NAME}");
+        window_attributes = window_attributes.with_name(resource_class, APP_NAME);
+    }
 
     // Ok, spawn up the thread responsible for the UI
     let device_rx_inner = device_rx.clone();
     let window_main_tx = main_tx.clone();
-    let window = thread::spawn(move || {
-        let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(device_rx_inner));
-        let mut hide_initial = hide_initial;
 
-        // This is used for trying to respawn the window on error
-        let mut last_error = Instant::now();
-        let mut attempts = 0;
+    let window = thread::Builder::new()
+        .name("beacn-util-ui".to_string())
+        .spawn(move || {
+            let app_main_tx = window_main_tx.clone();
 
-        let mut event_loop = EventLoop::<UserEvent>::with_user_event()
-            .with_any_thread(true)
-            .build()
-            .expect("Failed to create event loop");
+            let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(app_main_tx, device_rx_inner));
+            let mut hide_initial = hide_initial;
 
-        loop {
-            // Create the Window Runner
-            let runner = WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
+            // This is used for trying to respawn the window on error
+            let mut last_error = Instant::now();
+            let mut attempts = 0;
 
-            // Run and check for return
-            match runner.run(&mut event_loop, hide_initial) {
-                Ok(()) => break,
-                Err((recovered_app, was_hidden, e)) => {
-                    error!("UI has Crashed: {e}");
+            let mut event_loop = EventLoop::<UserEvent>::with_user_event()
+                .with_any_thread(true)
+                .build()
+                .expect("Failed to create event loop");
 
-                    // Something crashed it, could be wayland, or X11, either way, we're lost.
-                    // Check the last time this happened (have we successfully respawned before?)
-                    if last_error.elapsed() < Duration::from_secs(5) {
-                        attempts = 0;
+            loop {
+                // Create the Window Runner
+                let runner =
+                    WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
+
+                // Run and check for return
+                match runner.run(&mut event_loop, hide_initial) {
+                    Ok(()) => break,
+                    Err((recovered_app, was_hidden, e)) => {
+                        error!("UI has Crashed: {e}");
+
+                        // Something crashed it, could be wayland, or X11, either way, we're lost.
+                        // Check the last time this happened (have we successfully respawned before?)
+                        if last_error.elapsed() < Duration::from_secs(5) {
+                            attempts = 0;
+                        }
+
+                        // Refresh the last error time, increment the attempt account
+                        last_error = Instant::now();
+                        attempts += 1;
+
+                        // Yea, there's nothing we can do here, we're just going to have to bail.
+                        // TODO: This should probably quit the app
+                        if attempts > 3 {
+                            error!("Failed to recover UI after {attempts} attempts, bailing");
+                            break;
+                        }
+
+                        app = recovered_app;
+                        hide_initial = was_hidden;
+                        thread::sleep(Duration::from_millis(500));
                     }
-
-                    // Refresh the last error time, increment the attempt account
-                    last_error = Instant::now();
-                    attempts += 1;
-
-                    // Yea, there's nothing we can do here, we're just going to have to bail.
-                    // TODO: This should probably quit the app
-                    if attempts > 3 {
-                        error!("Failed to recover UI after {attempts} attempts, bailing");
-                        break;
-                    }
-
-                    app = recovered_app;
-                    hide_initial = was_hidden;
-                    thread::sleep(Duration::from_millis(500));
                 }
             }
-        }
-    });
+        })?;
 
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
     let mut context = Context::default();
+
     loop {
-        select! {
-            recv(main_rx) -> msg => {
+        tokio::select! {
+            msg = main_rx.recv_async() => {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ToMainMessages::UpdateContext(new_ctx) => {
-                                debug!("Context Updated");
-                                // Context Update
-                                context = new_ctx;
-                            }
-                            ToMainMessages::SpawnWindow => {
-                                // Window Re-Open requested
-                                send_user_event(&context, UserEvent::FocusWindow);
-                            }
-                            ToMainMessages::RequestRedraw => {
-                                // Repaint requested
-                                send_user_event(&context, UserEvent::RequestRedraw);
-                            }
-                            ToMainMessages::Quit => {
-                                // Break out and Close
-                                break;
-                            }
-                        }
+                    Ok(ToMainMessages::UpdateContext(new_ctx)) => {
+                        debug!("Context Updated");
+                        context = new_ctx;
                     }
+
+                    Ok(ToMainMessages::SpawnWindow) => {
+                        send_user_event(&context, UserEvent::FocusWindow);
+                    }
+
+                    Ok(ToMainMessages::RequestRedraw) => {
+                        send_user_event(&context, UserEvent::RequestRedraw);
+                    }
+
+                    Ok(ToMainMessages::Quit) => break,
+
                     Err(e) => {
                         error!("Main Loop Broken, bailing: {e}");
                         break;
                     }
                 }
             }
-            recv(device_rx) -> msg => {
+
+            msg = device_rx.recv_async() => {
                 match msg {
                     Ok(msg) => {
-                        // Pump this to the UI
-                        send_user_event(&context, UserEvent::DeviceMessage(msg))
+                        send_user_event(&context, UserEvent::DeviceMessage(msg));
                     }
+
                     Err(e) => {
                         error!("Device Handler Broken, bailing: {e}");
                         break;
                     }
                 }
             }
-            recv(signal_rx) -> sig => {
-                match sig {
-                    Ok(SIGINT) => {
-                        println!("Caught Ctrl+C");
-                        break;
-                    }
-                    Ok(SIGTERM) => {
-                        println!("Caught SIGTERM");
-                        break;
-                    }
-                    Ok(other) => {
-                        println!("Signal: {}", other);
-                    }
-                    Err(e) => {
-                        error!("Signal Handler Broken, bailing: {e}");
-                        break
-                    },
-                }
+
+            _ = shutdown_signal() => {
+                break;
             }
         }
     }
@@ -287,9 +285,7 @@ fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     let _ = window.join();
-    let _ = tray.join();
-    let _ = device_manager.join();
-    let _ = ipc.join();
+    let _ = join!(ipc, tray, device_manager);
 
     debug!("Shutdown Complete");
 
@@ -333,31 +329,113 @@ fn has_autostart() -> Result<bool> {
     Ok(autostart_file.exists())
 }
 
+pub fn get_logs_path() -> Result<PathBuf> {
+    let log_path = get_data_path()?.join("logs");
+    fs::create_dir_all(&log_path)?;
+
+    Ok(log_path)
+}
+
+pub fn get_data_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let data = base.data_dir().join(APP_NAME);
+
+    // This is a migration to move from ~/.local/share/io.github.beacn_on_linux to
+    // ~/.local/share/beacn-utility - This is to match the cache and config behaviours.
+    let old_data_path = base.data_dir().join(APP_TLD);
+    if old_data_path.exists() && !data.exists() {
+        println!("Migrating Log Directory from {old_data_path:?} to {data:?}");
+        fs::rename(&old_data_path, &data)?;
+    } else if old_data_path.exists() && data.exists() {
+        fs::remove_dir_all(&old_data_path)?;
+    }
+
+    match fs::create_dir_all(&data) {
+        Ok(()) => Ok(data),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
+}
+
+pub fn get_config_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let config = base.config_dir().join(APP_NAME);
+
+    match fs::create_dir_all(&config) {
+        Ok(()) => Ok(config),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
+}
+
+pub fn get_cache_path() -> Result<PathBuf> {
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let cache = base.cache_dir().join(APP_NAME);
+
+    match fs::create_dir_all(&cache) {
+        Ok(()) => Ok(cache),
+        Err(e) => {
+            bail!("Failed to create config directory: {e}");
+        }
+    }
+}
+
 pub fn get_autostart_file() -> Result<PathBuf> {
-    let config_dir = if let Ok(config) = env::var("XDG_CONFIG_HOME") {
-        config
-    } else if let Ok(home) = env::var("HOME") {
-        format!("{home}/.config")
-    } else {
-        bail!("Unable to obtain XDG Config Directory")
-    };
+    let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
+    let config_dir = base.config_dir();
 
-    let path = PathBuf::from(format!(
-        "{config_dir}/autostart/{APP_TLD}.{APP_NAME}.desktop"
-    ));
+    // This is how flatpaks will create the file, so we need to match it
+    let autostart_file = format!("{APP_TLD}.{APP_NAME}.desktop");
+    let path = config_dir.join("autostart").join(autostart_file);
 
-    let legacy_path = PathBuf::from(format!("{config_dir}/autostart/{APP_TLD}.desktop"));
+    let legacy_path = config_dir
+        .join("autostart")
+        .join(format!("{APP_TLD}.desktop"));
     if legacy_path.exists() {
         if !path.exists() {
             debug!("Migrating Legacy Autostart File from {legacy_path:?} to {path:?}");
-            std::fs::rename(&legacy_path, &path)?;
+            fs::rename(&legacy_path, &path)?;
         } else {
             debug!("Removing Legacy Autostart File at {legacy_path:?} as new file exists",);
-            std::fs::remove_file(&legacy_path)?;
+            fs::remove_file(&legacy_path)?;
         }
     }
 
     Ok(path)
+}
+
+#[cfg(unix)]
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut sigint = signal(SignalKind::interrupt()).unwrap();
+    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+    tokio::select! {
+        _ = sigint.recv() => println!("Caught Ctrl+C"),
+        _ = sigterm.recv() => println!("Caught SIGTERM"),
+    }
+}
+
+#[cfg(windows)]
+async fn shutdown_signal() {
+    use tokio::signal::windows;
+
+    let mut ctrl_c = windows::ctrl_c().unwrap();
+    let mut ctrl_break = windows::ctrl_break().unwrap();
+    let mut ctrl_close = windows::ctrl_close().unwrap();
+    let mut ctrl_logoff = windows::ctrl_logoff().unwrap();
+    let mut ctrl_shutdown = windows::ctrl_shutdown().unwrap();
+
+    tokio::select! {
+        _ = ctrl_c.recv() => println!("Caught Ctrl+C"),
+        _ = ctrl_break.recv() => println!("Caught Ctrl+Break"),
+        _ = ctrl_close.recv() => println!("Console closing"),
+        _ = ctrl_logoff.recv() => println!("User logging off"),
+        _ = ctrl_shutdown.recv() => println!("System shutting down"),
+    }
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the

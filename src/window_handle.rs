@@ -1,12 +1,7 @@
 use crate::device_manager::DeviceMessage;
-use crate::{
-    APP_NAME, AUTO_START_KEY, BACKGROUND_PARAM, ToMainMessages, get_autostart_file,
-    prepare_context, run_async_blocking,
-};
-use anyhow::{Result, anyhow};
-use ashpd::WindowIdentifier;
-use ashpd::desktop::background::Background;
-use beacn_lib::crossbeam::channel::Sender;
+use crate::{ToMainMessages, prepare_context};
+use anyhow::Result;
+use beacn_lib::flume::Sender;
 use egui::{Context, Id, Ui};
 use egui_glow::glow;
 use egui_glow::glow::HasContext;
@@ -24,11 +19,9 @@ use egui_winit::winit::{
 };
 use glutin::display::DisplayApiPreference;
 use glutin::prelude::GlSurface;
-use ini::Ini;
 use log::{debug, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{env, fs};
 
 const FRAME_TIME: std::time::Duration = std::time::Duration::from_micros(16_667);
 
@@ -45,6 +38,7 @@ pub enum UserEvent {
     DeviceMessage(DeviceMessage),
     SetAutoStart(bool),
     SetMinimumRefreshRate(bool),
+    Close,
     Quit,
 }
 
@@ -287,94 +281,111 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                 self.app.handle_device_message(msg);
             }
             UserEvent::SetAutoStart(create) => {
-                let key = Id::new(AUTO_START_KEY);
-                if let Some(window) = &self.window {
-                    if ashpd::is_sandboxed() {
-                        println!("Running inside Flatpak, using Background Portal");
+                debug!("Changing Autostart: {create}");
+                #[cfg(unix)]
+                {
+                    use crate::{
+                        APP_NAME, AUTO_START_KEY, BACKGROUND_PARAM, get_autostart_file,
+                        run_async_blocking,
+                    };
+                    use anyhow::anyhow;
+                    use ashpd::WindowIdentifier;
+                    use ashpd::desktop::background::Background;
+                    use ini::Ini;
+                    use std::{env, fs};
 
-                        let window_handle = window.window_handle().unwrap().as_raw();
-                        let display_handle = window.display_handle().ok().map(|d| d.as_raw());
+                    let key = Id::new(AUTO_START_KEY);
+                    if let Some(window) = &self.window {
+                        if ashpd::is_sandboxed() {
+                            println!("Running inside Flatpak, using Background Portal");
 
-                        let reason = "Manage Beacn Devices on Startup";
+                            let window_handle = window.window_handle().unwrap().as_raw();
+                            let display_handle = window.display_handle().ok().map(|d| d.as_raw());
 
-                        run_async_blocking(async {
-                            let identifier = WindowIdentifier::from_raw_handle(
-                                &window_handle,
-                                display_handle.as_ref(),
-                            )
-                            .await;
+                            let reason = "Manage Beacn Devices on Startup";
 
-                            let request = Background::request()
-                                .identifier(identifier)
-                                .reason(reason)
-                                .auto_start(create)
-                                .dbus_activatable(false)
-                                .command::<Vec<_>, String>(vec![
-                                    String::from(APP_NAME),
-                                    String::from(BACKGROUND_PARAM),
-                                ]);
+                            run_async_blocking(async {
+                                let identifier = WindowIdentifier::from_raw_handle(
+                                    &window_handle,
+                                    display_handle.as_ref(),
+                                )
+                                .await;
 
-                            debug!("Requesting Background Access");
+                                let request = Background::request()
+                                    .identifier(identifier)
+                                    .reason(reason)
+                                    .auto_start(create)
+                                    .dbus_activatable(false)
+                                    .command::<Vec<_>, String>(vec![
+                                        String::from(APP_NAME),
+                                        String::from(BACKGROUND_PARAM),
+                                    ]);
 
-                            let result = match request.send().await.and_then(|r| r.response()) {
-                                Ok(response) => {
-                                    debug!("{response:?}");
-                                    Some(response.auto_start())
+                                debug!("Requesting Background Access");
+
+                                let result = match request.send().await.and_then(|r| r.response()) {
+                                    Ok(response) => {
+                                        debug!("{response:?}");
+                                        Some(response.auto_start())
+                                    }
+                                    Err(e) => {
+                                        debug!("Failed to request autostart run: {e}");
+                                        None
+                                    }
+                                };
+                                self.context.memory_mut(|mem| {
+                                    mem.data.insert_temp(key, result);
+                                })
+                            });
+                        } else {
+                            debug!("Running Outside Flatpak, manually handling");
+                            let attempt = match get_autostart_file() {
+                                Ok(path) => {
+                                    if path.exists() && fs::remove_file(path.clone()).is_err() {
+                                        Err(anyhow!("Unable to remove existing AutoStart"))
+                                    } else if create {
+                                        if let Ok(exe) = env::current_exe() {
+                                            let mut conf = Ini::new();
+                                            let exe = exe.to_string_lossy().to_string();
+
+                                            conf.with_section(Some("Desktop Entry"))
+                                                .set("Type", "Application")
+                                                .set("Name", "Beacn Utility")
+                                                .set(
+                                                    "Comment",
+                                                    "A Tool for Configuring Beacn Devices",
+                                                )
+                                                .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
+                                                .set("Terminal", "false");
+
+                                            match conf.write_to_file(path) {
+                                                Ok(()) => Ok(()),
+                                                Err(e) => {
+                                                    Err(anyhow!("Failed to Write File, {}", e))
+                                                }
+                                            }
+                                        } else {
+                                            Err(anyhow!("Unable to Determine Executable"))
+                                        }
+                                    } else {
+                                        // Existing file was deleted, that's all that's needed
+                                        Ok(())
+                                    }
                                 }
+                                Err(e) => Err(anyhow!(e)),
+                            };
+
+                            let result = match attempt {
+                                Ok(()) => Some(create),
                                 Err(e) => {
-                                    debug!("Failed to request autostart run: {e}");
+                                    debug!("Failed to Handle AutoStart: {e}");
                                     None
                                 }
                             };
                             self.context.memory_mut(|mem| {
                                 mem.data.insert_temp(key, result);
                             })
-                        });
-                    } else {
-                        debug!("Running Outside Flatpak, manually handling");
-                        // TODO: I have the XDG crate, I can locate this automatically
-
-                        let attempt = match get_autostart_file() {
-                            Ok(path) => {
-                                if path.exists() && fs::remove_file(path.clone()).is_err() {
-                                    Err(anyhow!("Unable to remove existing AutoStart"))
-                                } else if create {
-                                    if let Ok(exe) = env::current_exe() {
-                                        let mut conf = Ini::new();
-                                        let exe = exe.to_string_lossy().to_string();
-
-                                        conf.with_section(Some("Desktop Entry"))
-                                            .set("Type", "Application")
-                                            .set("Name", "Beacn Utility")
-                                            .set("Comment", "A Tool for Configuring Beacn Devices")
-                                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
-                                            .set("Terminal", "false");
-
-                                        match conf.write_to_file(path) {
-                                            Ok(()) => Ok(()),
-                                            Err(e) => Err(anyhow!("Failed to Write File, {}", e)),
-                                        }
-                                    } else {
-                                        Err(anyhow!("Unable to Determine Executable"))
-                                    }
-                                } else {
-                                    // Existing file was deleted, that's all that's needed
-                                    Ok(())
-                                }
-                            }
-                            Err(e) => Err(anyhow!(e)),
-                        };
-
-                        let result = match attempt {
-                            Ok(()) => Some(create),
-                            Err(e) => {
-                                debug!("Failed to Handle AutoStart: {e}");
-                                None
-                            }
-                        };
-                        self.context.memory_mut(|mem| {
-                            mem.data.insert_temp(key, result);
-                        })
+                        }
                     }
                 }
             }
@@ -384,8 +395,12 @@ impl ApplicationHandler<UserEvent> for WindowRunner {
                     self.schedule_redraw(event_loop);
                 }
             }
+            UserEvent::Close => {
+                debug!("Close Event Recieved, closing window");
+                self.destroy_window();
+            }
             UserEvent::Quit => {
-                debug!("Quit Event Received, closing window");
+                debug!("Quit Event Received, closing window and ending loop");
                 self.destroy_window();
                 event_loop.exit();
             }
@@ -485,6 +500,16 @@ impl GlowRenderer {
 
         debug!("Creating glutin Display with Config: {:?}", config_template);
 
+        #[cfg(windows)]
+        let gl_display = unsafe {
+            glutin::display::Display::new(
+                raw_display_handle,
+                DisplayApiPreference::EglThenWgl(None),
+            )
+            .unwrap()
+        };
+
+        #[cfg(unix)]
         let gl_display = unsafe {
             glutin::display::Display::new(raw_display_handle, DisplayApiPreference::Egl).unwrap()
         };

@@ -1,11 +1,9 @@
-use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages};
+use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages, get_logs_path};
 use anyhow::Result;
-use beacn_lib::crossbeam::channel::{Receiver, Sender};
-use beacn_lib::crossbeam::{channel, select};
+use beacn_lib::flume::{Receiver, Sender, bounded};
 use image::GenericImageView;
-use ksni::blocking::TrayMethods;
 use ksni::menu::StandardItem;
-use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray};
+use ksni::{Category, Icon, MenuItem, Status, ToolTip, Tray, TrayMethods};
 use log::{debug, warn};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -13,10 +11,11 @@ use std::{env, fs};
 
 enum TrayMessages {
     Activate,
+    OpenLogs,
     Quit,
 }
 
-pub fn handle_tray(
+pub async fn handle_tray(
     tray_manager: Receiver<ManagerMessages>,
     tray_main_tx: Sender<ToMainMessages>,
 ) -> Result<()> {
@@ -36,45 +35,53 @@ pub fn handle_tray(
         warn!("Unable to remove existing icon, using whatever is already there..");
     }
 
-    let (icon_tx, icon_rx) = channel::bounded(20);
+    let (icon_tx, icon_rx) = bounded(20);
     let icon = TrayIcon::new(icon_tx, &tmp_file_path);
     let handle = icon
         .disable_dbus_name(ashpd::is_sandboxed())
         .assume_sni_available(true)
-        .spawn()?;
+        .spawn()
+        .await;
+
+    let handle = match handle {
+        Ok(handle) => handle,
+        Err(e) => {
+            fs::remove_file(&tmp_file_path)?;
+            warn!("Unable to Spawn the Tray Handler: {}", e);
+            return Ok(());
+        }
+    };
 
     loop {
-        select! {
-            recv(icon_rx) -> msg => {
+        tokio::select! {
+            msg = icon_rx.recv_async() => {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            TrayMessages::Activate => {
-                                // Tell the Main Thread to spawn a new window
-                                let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
-                                debug!("Activate Triggered");
-                            },
-                            TrayMessages::Quit => {
-                                // If we have an active window, we need to close it first.
-                                // Tell the parent to immediately quit
-                                let _ = tray_main_tx.send(ToMainMessages::Quit);
-                            }
+                    Ok(TrayMessages::Activate) => {
+                        let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
+                    }
+
+                    Ok(TrayMessages::OpenLogs) => {
+                        if let Ok(logs) = get_logs_path() {
+                            let _ = open::that(logs);
                         }
                     }
+
+                    Ok(TrayMessages::Quit) => {
+                        let _ = tray_main_tx.send(ToMainMessages::Quit);
+                        break;
+                    }
+
                     Err(e) => {
                         warn!("Icon receiver channel broken, bailing: {e}");
                         break;
                     }
                 }
             }
-            recv(tray_manager) -> msg => {
+
+            msg = tray_manager.recv_async() => {
                 match msg {
-                    Ok(msg) => {
-                        match msg {
-                            ManagerMessages::Quit => {
-                                break;
-                            }
-                        }
+                    Ok(ManagerMessages::Quit) => {
+                        break;
                     }
 
                     Err(e) => {
@@ -167,6 +174,15 @@ impl Tray for TrayIcon {
                 label: String::from("Show"),
                 activate: Box::new(|this: &mut TrayIcon| {
                     let _ = this.tx.try_send(TrayMessages::Activate);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
+            StandardItem {
+                label: String::from("Open Logs"),
+                activate: Box::new(|this: &mut TrayIcon| {
+                    let _ = this.tx.try_send(TrayMessages::OpenLogs);
                 }),
                 ..Default::default()
             }

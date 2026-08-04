@@ -1,3 +1,4 @@
+use crate::ToMainMessages;
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui::audio_pages::AudioPage;
@@ -9,12 +10,20 @@ use crate::ui::states::controller_state::BeacnControllerState;
 use crate::ui::widgets::{pipeweaver_button, round_nav_button};
 use crate::ui::{audio_pages, controller_pages};
 use crate::window_handle::App;
-use beacn_lib::crossbeam::channel;
+use beacn_lib::flume::{Receiver, Sender};
 use beacn_lib::manager::DeviceType;
-use egui::{Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, RichText, Ui};
+use egui::{
+    Align, Button, Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, Id, RichText,
+    Ui,
+};
 use std::collections::HashMap;
 
 pub struct BeacnMicApp {
+    #[cfg_attr(unix, allow(unused))]
+    main_sender: Sender<ToMainMessages>,
+
+    show_close_modal: bool,
+
     device_list: Vec<DeviceDefinition>,
     active_device: Option<DeviceDefinition>,
 
@@ -24,7 +33,7 @@ pub struct BeacnMicApp {
     audio_pages: Vec<Box<dyn AudioPage>>,
     control_pages: Vec<Box<dyn ControllerPage>>,
 
-    device_recv: channel::Receiver<DeviceMessage>,
+    device_recv: Receiver<DeviceMessage>,
     active_page: usize,
 
     // We can probably do better here
@@ -39,8 +48,12 @@ pub struct BeacnMicApp {
 }
 
 impl BeacnMicApp {
-    pub fn new(device_recv: channel::Receiver<DeviceMessage>) -> Self {
+    pub fn new(main_sender: Sender<ToMainMessages>, device_recv: Receiver<DeviceMessage>) -> Self {
         Self {
+            main_sender,
+
+            show_close_modal: false,
+
             device_list: vec![],
             active_device: None,
 
@@ -100,6 +113,12 @@ impl App for BeacnMicApp {
         if self.needs_page_open {
             self.open_current_page(ui.ctx());
             self.needs_page_open = false;
+        }
+
+        // Ok, next we need a modal for 'Close' behaviours
+        let modal = egui::Modal::new(Id::new("close_behaviour"));
+        if self.show_close_modal {
+            modal.show(ui.ctx(), |ui| self.draw_close_modal(ui));
         }
 
         egui::Panel::left("left_panel")
@@ -165,11 +184,24 @@ impl App for BeacnMicApp {
     }
 
     fn should_close(&mut self) -> bool {
+        #[cfg(not(unix))]
+        {
+            self.show_close_modal = true;
+            false
+        }
+
         // TODO: This should prompt the user, and / or check the settings
+        #[cfg(unix)]
         true
     }
 
     fn on_close(&mut self) {
+        #[cfg(not(unix))]
+        {
+            // // Quit the App completely.
+            // let _ = self.main_sender.send(ToMainMessages::Quit);
+        }
+
         for audio_page in &mut self.audio_pages {
             audio_page.on_close();
         }
@@ -245,6 +277,35 @@ impl App for BeacnMicApp {
 }
 
 impl BeacnMicApp {
+    fn draw_close_modal(&mut self, ui: &mut Ui) {
+        ui.set_min_width(320.0);
+
+        ui.vertical_centered(|ui| {
+            ui.add_space(8.0);
+            ui.label(RichText::new("Confirm Exit").size(20.0).strong());
+
+            ui.add_space(12.0);
+            ui.label("Closing will quit the application.");
+
+            ui.add_space(20.0);
+            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
+                ui.add_space((ui.available_width() - 210.0).max(0.0) / 2.0);
+
+                if ui.add_sized([100.0, 32.0], Button::new("Cancel")).clicked() {
+                    self.show_close_modal = false;
+                }
+
+                ui.add_space(10.0);
+                if ui.add_sized([100.0, 32.0], Button::new("Quit")).clicked() {
+                    self.show_close_modal = false;
+                    let _ = self.main_sender.send(ToMainMessages::Quit);
+                }
+            });
+
+            ui.add_space(8.0);
+        });
+    }
+
     fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
         if self.device_list.is_empty() || self.active_device.is_none() {
             return;
