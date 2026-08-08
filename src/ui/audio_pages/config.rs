@@ -8,7 +8,8 @@ use crate::ui::audio_pages::config_pages::mic_setup::MicSetupPage;
 use crate::ui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
 use crate::ui::states::audio_state::BeacnAudioState;
 use crate::ui::widgets::draw_range;
-use beacn_lib::audio::messages::headphones::HPMicOutputGain;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::types::HasRange;
 use egui::{Ui, vec2};
 
@@ -93,7 +94,10 @@ impl AudioPage for Configuration {
                         HPMicOutputGain::range(),
                         "Output Gain",
                         "dB",
-                    ) {}
+                    ) {
+                        let msg = Headphones::MicOutputGain(HPMicOutputGain(gain.output_gain));
+                        let _ = state.handle_message(Message::Headphones(msg));
+                    }
                 });
             });
         });
