@@ -45,7 +45,7 @@ use std::time::{Duration, Instant};
 use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};

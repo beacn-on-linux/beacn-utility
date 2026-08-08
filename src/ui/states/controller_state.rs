@@ -2,13 +2,11 @@ use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, E
 use crate::get_config_path;
 use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
-use beacn_lib::MaybeFuture;
 use beacn_lib::flume::Sender;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::time::Duration;
-use tokio::sync::oneshot;
 
 // Literally nothing to do here right now
 #[derive(Debug, Default, Clone)]
@@ -68,7 +66,7 @@ impl BeacnControllerState {
         self.saved_settings.display_brightness = brightness;
         let message = ControlMessage::DisplayBrightness(brightness, tx);
         self.send_control(message)?;
-        rx.wait()??;
+        rx.recv()??;
         if save {
             self.save_to_file();
         }
@@ -80,7 +78,7 @@ impl BeacnControllerState {
         self.saved_settings.button_brightness = brightness;
         let message = ControlMessage::ButtonBrightness(brightness, tx);
         self.send_control(message)?;
-        rx.wait()??;
+        rx.recv()??;
         if save {
             self.save_to_file();
         }
@@ -92,7 +90,7 @@ impl BeacnControllerState {
         self.saved_settings.display_dim = timeout;
         let message = ControlMessage::DimTimeout(timeout, tx);
         self.send_control(message)?;
-        rx.wait()??;
+        rx.recv()??;
         if save {
             self.save_to_file();
         }

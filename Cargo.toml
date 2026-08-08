@@ -31,6 +31,9 @@ strum = "0.28.0"
 strum_macros = "0.28.0"
 enum-map = "2.7.3"
 
+# Used for Sending and Receiving Messages
+oneshot = "0.2.1"
+
 # Used for SIMD EQ calculations
 wide = "1.5.0"
 

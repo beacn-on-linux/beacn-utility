@@ -505,6 +505,7 @@ dependencies = [
  "ksni",
  "log",
  "log-panics",
+ "oneshot",
  "open",
  "pipeweaver-ipc",
  "pipeweaver-profile",

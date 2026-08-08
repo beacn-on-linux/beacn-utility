@@ -33,7 +33,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use strum_macros::Display;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 pub async fn spawn_device_manager(
