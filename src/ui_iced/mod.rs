@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 pub mod app;
+pub mod events;
 mod page;
 pub mod pages;
 pub mod widgets;

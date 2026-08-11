@@ -215,7 +215,6 @@ impl App for BeacnMicApp {
         match message {
             DeviceMessage::DeviceArrived(device) => match device {
                 DeviceArriveMessage::Audio(state) => {
-                    // Load the Device State
                     let definition = state.definition().clone();
 
                     // Store the Device, and the device state
