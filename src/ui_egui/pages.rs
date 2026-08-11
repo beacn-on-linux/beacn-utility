@@ -1,4 +1,4 @@
-use crate::window_handle::{UserEvent, send_user_event};
+use crate::ui_egui::window_handle::{UserEvent, send_user_event};
 use crate::{AUTO_START_KEY, VERSION};
 use egui::{Id, RichText, Ui};
 

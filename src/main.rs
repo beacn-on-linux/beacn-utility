@@ -1,6 +1,6 @@
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui_egui::app::BeacnMicApp;
-use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
+use crate::ui_egui::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::bail;
 use anyhow::{Result, anyhow};
 use beacn_lib::flume::unbounded;
@@ -37,7 +37,6 @@ mod integrations;
 mod managers;
 mod ui_egui;
 pub mod ui_iced;
-mod window_handle;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");

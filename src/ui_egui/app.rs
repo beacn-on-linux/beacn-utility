@@ -8,8 +8,8 @@ use crate::ui_egui::audio_pages::AudioPage;
 use crate::ui_egui::controller_pages::ControllerPage;
 use crate::ui_egui::pages::{pipeweaver_ui, settings_ui};
 use crate::ui_egui::widgets::{pipeweaver_button, round_nav_button};
+use crate::ui_egui::window_handle::App;
 use crate::ui_egui::{audio_pages, controller_pages};
-use crate::window_handle::App;
 use beacn_lib::flume::{Receiver, Sender};
 use beacn_lib::manager::DeviceType;
 use egui::{

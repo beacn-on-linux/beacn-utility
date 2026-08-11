@@ -9,6 +9,7 @@ mod numbers;
 mod pages;
 mod shared_pages;
 mod widgets;
+pub(crate) mod window_handle;
 
 // SVG Images
 pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| {
