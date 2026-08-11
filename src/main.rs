@@ -1,21 +1,9 @@
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
-use crate::ui_egui::app::BeacnMicApp;
-use crate::ui_egui::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::bail;
 use anyhow::{Result, anyhow};
 use beacn_lib::flume::{Receiver, unbounded};
-use egui::{Context, Id};
-use egui_winit::winit::dpi::LogicalSize;
-use egui_winit::winit::event_loop::EventLoop;
-
-#[cfg(windows)]
-use egui_winit::winit::platform::windows::EventLoopBuilderExtWindows;
-
-#[cfg(unix)]
-use egui_winit::winit::platform::x11::{EventLoopBuilderExtX11, WindowAttributesExtX11};
 
 use directories::BaseDirs;
-use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
@@ -28,8 +16,7 @@ use simplelog::{
 };
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use std::time::{Duration, Instant};
-use std::{env, fs, thread};
+use std::{env, fs};
 use tokio::runtime::{Handle, Runtime};
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
@@ -168,57 +155,23 @@ fn main() -> Result<()> {
 
     // This one sends and receives messages when devices are attached and removed
     let (device_tx, device_rx) = unbounded();
-    let dev_main_tx = main_tx.clone();
-    let device_manager = task::spawn(spawn_device_manager(manage_rx, dev_main_tx, device_tx));
-
-    // Under KDE at least, it expects the window class to be both the TLD and the name in order
-    // to look for the icon in the right place.
-    #[cfg_attr(not(unix), allow(unused_mut))]
-    let mut window_attributes = Window::default_attributes()
-        .with_title(APP_TITLE)
-        .with_window_icon(Some(load_icon(ICON)))
-        .with_inner_size(LogicalSize::new(1024, 500))
-        .with_min_inner_size(LogicalSize::new(1024, 500));
-
-    #[cfg(unix)]
-    {
-        let resource_class = format!("{APP_TLD}.{APP_NAME}");
-        window_attributes = window_attributes.with_name(resource_class, APP_NAME);
-    }
-
-    // Ok, spawn up the thread responsible for the UI
-    let device_rx_inner = device_rx.clone();
-    let window_main_tx = main_tx.clone();
+    let device_manager = task::spawn(spawn_device_manager(manage_rx, device_tx));
 
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
     let (window_tx, window_rx) = unbounded();
 
     // Honestly, we might not need this loop, the UI can read and manage its own channels
-    task::spawn(async move {
+    let (signal_tx, signal_rx) = unbounded();
+    let signal = task::spawn(async move {
         loop {
             tokio::select! {
-                msg = main_rx.recv_async() => {
-                    match msg {
-                        Ok(ToMainMessages::SpawnWindow) => {
-                            let _ = window_tx.send_async(WindowMessage::OpenWindow).await;
-                        }
-
-                        Ok(ToMainMessages::Quit) => {
-                            let _ = window_tx.send_async(WindowMessage::Quit).await;
-                            break
-                        },
-
-                        Err(e) => {
-                            error!("Main Loop Broken, bailing: {e}");
-                            break;
-                        }
-                    }
+                Ok(ManagerMessages::Quit) = signal_rx.recv_async() => {
+                    break;
                 }
 
                 _ = shutdown_signal() => {
                     let _ = window_tx.send_async(WindowMessage::Quit).await;
-                    break;
                 }
             }
         }
@@ -227,12 +180,13 @@ fn main() -> Result<()> {
     spawn_iced_window(device_rx, window_rx)?;
 
     debug!("Shutdown Triggered - Waiting for Threads to Terminate..");
+    let _ = signal_tx.send(ManagerMessages::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     // Join on the remaining tasks
-    let _ = tokio_rt.block_on(async { join!(ipc, tray, device_manager) });
+    let _ = tokio_rt.block_on(async { join!(signal, ipc, tray, device_manager) });
 
     debug!("Shutdown Complete");
 
@@ -259,17 +213,20 @@ fn spawn_iced_window(
     };
 
     // Initial Window Settings and size
-    let mut initial_window_settings = window::Settings {
-        exit_on_close_request: false, // Intercepts the X button manually
+    let mut window_settings = window::Settings {
+        exit_on_close_request: false,
+        icon: Some(load_icon_iced(ICON)),
         size: Size::new(1024., 500.),
         min_size: Some(Size::new(1024., 500.)),
         ..Default::default()
     };
 
+    // Allows wayland compositors to set the window icon
     #[cfg(target_os = "linux")]
     {
-        initial_window_settings.platform_specific = PlatformSpecific {
-            application_id: "io.github.beacn_on_linux.beacn-utility".into(),
+        let application_id = format!("{APP_TLD}.{APP_NAME}");
+        window_settings.platform_specific = PlatformSpecific {
+            application_id: application_id.into(),
             ..Default::default()
         };
     }
@@ -280,12 +237,12 @@ fn spawn_iced_window(
             let window_rx = window_rx.clone();
 
             let (mut app_state, boot) = BeacnUtility::new(Flags {
-                window_settings: initial_window_settings.clone(),
+                window_settings: window_settings.clone(),
                 device_rx,
                 window_rx,
             });
 
-            let (initial_id, open_task) = window::open(initial_window_settings.clone());
+            let (initial_id, open_task) = window::open(window_settings.clone());
             app_state.active_id = Some(initial_id);
 
             let mapped_open_task = open_task.map(move |_| Message::WindowOpened(initial_id));
@@ -306,34 +263,14 @@ fn spawn_iced_window(
     .map_err(anyhow::Error::from)
 }
 
-fn prepare_context(ctx: &mut Context) {
-    let auto_start_key = Id::new(AUTO_START_KEY);
-
-    let auto_start = match has_autostart() {
-        Ok(present) => {
-            debug!("File State: {present}");
-            Some(present)
-        }
-        Err(e) => {
-            debug!("Error Getting State: {e}");
-            None
-        }
-    };
-    debug!("Setting Value: {auto_start:?}");
-
-    ctx.memory_mut(|mem| {
-        mem.data.insert_temp(auto_start_key, auto_start);
-    })
-}
-
-fn load_icon(bytes: &[u8]) -> Icon {
+fn load_icon_iced(bytes: &[u8]) -> window::Icon {
     let (icon_rgba, icon_width, icon_height) = {
         let image = image::load_from_memory(bytes).unwrap().into_rgba8();
         let (width, height) = image.dimensions();
         let rgba = image.into_raw();
         (rgba, width, height)
     };
-    Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+    window::icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
 }
 
 fn has_autostart() -> Result<bool> {
@@ -466,6 +403,7 @@ pub enum WindowMessage {
     Quit,
 }
 
+// This needs to exist until egui is killed completely.
 pub enum ToMainMessages {
     SpawnWindow,
     // RequestRedraw,

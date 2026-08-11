@@ -11,11 +11,11 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::ManagerMessages;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::LoginEventTriggers;
-use crate::{ManagerMessages, ToMainMessages};
 use anyhow::anyhow;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
@@ -40,7 +40,6 @@ use tokio::task::JoinHandle;
 
 pub async fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,
-    self_tx: Sender<ToMainMessages>,
     event_tx: Sender<DeviceMessage>,
 ) {
     let (plug_tx, plug_rx) = unbounded();
@@ -106,7 +105,6 @@ pub async fn spawn_device_manager(
                                 &mut forwarders,
                                 &device_event_tx,
                                 &event_tx,
-                                &self_tx,
                             )
                             .await;
                         }
@@ -144,7 +142,6 @@ pub async fn spawn_device_manager(
                                 &mut forwarders,
                                 &device_event_tx,
                                 &event_tx,
-                                &self_tx,
                             )
                             .await;
                         }
@@ -294,7 +291,6 @@ async fn handle_device_attached(
     forwarders: &mut HashMap<DeviceLocation, JoinHandle<()>>,
     device_event_tx: &UnboundedSender<(DeviceLocation, DeviceRequest)>,
     event_tx: &Sender<DeviceMessage>,
-    self_tx: &Sender<ToMainMessages>,
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {

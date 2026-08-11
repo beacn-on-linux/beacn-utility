@@ -1,5 +1,5 @@
+use crate::ToMainMessages;
 use crate::devices::manager::DeviceMessage;
-use crate::{ToMainMessages, prepare_context};
 use anyhow::Result;
 use beacn_lib::flume::Sender;
 use egui::{Context, Id, Ui};
@@ -193,7 +193,7 @@ impl WindowRunner {
     fn create_new_context(&mut self) {
         // Prepare a new context for the window
         self.context = Context::default();
-        prepare_context(&mut self.context);
+        //prepare_context(&mut self.context);
         self.app.with_context(&self.context);
 
         // Attach the proxy in the new context

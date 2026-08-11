@@ -1,4 +1,4 @@
-use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, ToMainMessages, get_logs_path};
+use crate::{APP_NAME, APP_TITLE, ICON, ManagerMessages, WindowMessage, get_logs_path};
 use anyhow::Result;
 use beacn_lib::flume::{Receiver, Sender, bounded};
 use image::GenericImageView;
@@ -17,7 +17,7 @@ enum TrayMessages {
 
 pub async fn handle_tray(
     tray_manager: Receiver<ManagerMessages>,
-    tray_main_tx: Sender<ToMainMessages>,
+    tray_main_tx: Sender<WindowMessage>,
 ) -> Result<()> {
     debug!("Spawning Tray");
 
@@ -57,7 +57,7 @@ pub async fn handle_tray(
             msg = icon_rx.recv_async() => {
                 match msg {
                     Ok(TrayMessages::Activate) => {
-                        let _ = tray_main_tx.send(ToMainMessages::SpawnWindow);
+                        let _ = tray_main_tx.send(WindowMessage::OpenWindow);
                     }
 
                     Ok(TrayMessages::OpenLogs) => {
@@ -67,7 +67,7 @@ pub async fn handle_tray(
                     }
 
                     Ok(TrayMessages::Quit) => {
-                        let _ = tray_main_tx.send(ToMainMessages::Quit);
+                        let _ = tray_main_tx.send(WindowMessage::Quit);
                         break;
                     }
 
