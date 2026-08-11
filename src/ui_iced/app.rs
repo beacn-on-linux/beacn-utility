@@ -3,11 +3,13 @@ use crate::devices::manager::{DeviceDefinition, DeviceMessage};
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
+use crate::ui_iced::events::channel::TrackedReceiver;
 use crate::ui_iced::pages::page::Page;
 use beacn_lib::flume::Receiver;
 use beacn_lib::manager::DeviceLocation;
 use iced::widget::{container, text};
-use iced::{Element, Subscription, Task, window};
+use iced::{Element, Size, Subscription, Task, window};
+use iced_futures::subscription::from_recipe;
 use std::collections::HashMap;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -58,7 +60,11 @@ pub enum Message {
     ActivateSettings,
 
     // Window Related Tasks
+    Quit,
+    WindowOpen,
     WindowOpened(window::Id),
+    WindowCloseRequested(window::Id),
+    WindowResized((window::Id, Size)),
 }
 
 pub struct BeacnUtility {
@@ -109,6 +115,33 @@ impl BeacnUtility {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Quit => {
+                return iced::exit();
+            }
+            Message::WindowOpen => {
+                if self.active_id.is_some() {
+                    return Task::none();
+                }
+
+                // Spawn up the window
+                let (id, task) = window::open(self.window_settings.clone());
+                self.active_id = Some(id);
+
+                // Trigger a callback on things to do when the window is actually opened.
+                return task.map(move |_| Message::WindowOpened(id));
+            }
+            Message::WindowOpened(_id) => {}
+            Message::WindowCloseRequested(id) => {
+                self.active_id = None;
+                return window::close(id);
+            }
+            Message::WindowResized((_, size)) => {
+                self.window_settings.size = size;
+            }
+
+            _ => {}
+        }
         Task::none()
     }
 
@@ -117,6 +150,19 @@ impl BeacnUtility {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        Subscription::none()
+        let window = TrackedReceiver {
+            id: "window_rx",
+            rx: self.window_rx.clone(),
+            map_fn: |msg| match msg {
+                WindowMessage::OpenWindow => Message::WindowOpen,
+                WindowMessage::Quit => Message::Quit,
+            },
+        };
+
+        let window_sub = from_recipe(window);
+        let resize_sub = window::resize_events().map(Message::WindowResized);
+        let close_sub = window::close_requests().map(Message::WindowCloseRequested);
+
+        Subscription::batch(vec![window_sub, resize_sub, close_sub])
     }
 }
