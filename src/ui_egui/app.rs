@@ -1,8 +1,8 @@
 use crate::ToMainMessages;
 use crate::devices::manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
-use crate::devices::states::LoadState;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
+use crate::devices::states::{LoadState, State};
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui_egui::audio_pages::AudioPage;
 use crate::ui_egui::controller_pages::ControllerPage;
@@ -214,9 +214,9 @@ impl App for BeacnMicApp {
     fn handle_device_message(&mut self, message: DeviceMessage) {
         match message {
             DeviceMessage::DeviceArrived(device) => match device {
-                DeviceArriveMessage::Audio(definition, sender) => {
+                DeviceArriveMessage::Audio(state) => {
                     // Load the Device State
-                    let state = AudioState::load_settings(definition.clone(), sender);
+                    let definition = state.definition().clone();
 
                     // Store the Device, and the device state
                     self.device_list.push(definition.clone());
@@ -227,8 +227,9 @@ impl App for BeacnMicApp {
                         self.needs_page_open = true;
                     }
                 }
-                DeviceArriveMessage::Control(definition, sender) => {
-                    let state = ControlState::load_settings(definition.clone(), sender);
+                DeviceArriveMessage::Control(state) => {
+                    let definition = state.definition().clone();
+
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
 

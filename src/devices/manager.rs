@@ -11,6 +11,8 @@
   same applies for the Mix and Mix Create. The devices are too similar to have to worry about
   differences.
 */
+use crate::devices::states::audio::AudioState;
+use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::LoginEventTriggers;
 use crate::{ManagerMessages, ToMainMessages};
@@ -339,9 +341,13 @@ async fn handle_device_attached(
                 );
             }
 
-            let arrived = DeviceArriveMessage::Audio(data, tx);
-            let message = DeviceMessage::DeviceArrived(arrived);
-            let _ = event_tx.send(message);
+            let event_tx_inner = event_tx.clone();
+            tokio::spawn(async move {
+                let state = AudioState::load_settings_async(data, tx).await;
+                let arrived = DeviceArriveMessage::Audio(state);
+                let message = DeviceMessage::DeviceArrived(arrived);
+                let _ = event_tx_inner.send(message);
+            });
         }
         DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
             // This is relatively similar, but the code paths are different. In
@@ -407,9 +413,13 @@ async fn handle_device_attached(
             // Use the async runtime for this
             debug!("Starting PipeWeaver Handler");
 
-            let arrived = DeviceArriveMessage::Control(data, tx);
-            let message = DeviceMessage::DeviceArrived(arrived);
-            let _ = event_tx.send(message);
+            let event_tx_inner = event_tx.clone();
+            tokio::task::spawn_blocking(move || {
+                let state = ControlState::load_settings(data, tx);
+                let arrived = DeviceArriveMessage::Control(state);
+                let message = DeviceMessage::DeviceArrived(arrived);
+                let _ = event_tx_inner.send(message);
+            });
         }
     }
     let _ = self_tx.send(ToMainMessages::RequestRedraw);
@@ -475,8 +485,8 @@ pub enum DeviceMessage {
 
 #[derive(Debug, Clone)]
 pub enum DeviceArriveMessage {
-    Audio(DeviceDefinition, Sender<AudioMessage>),
-    Control(DeviceDefinition, Sender<ControlMessage>),
+    Audio(AudioState),
+    Control(ControlState),
 }
 
 #[derive(Debug)]
