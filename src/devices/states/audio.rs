@@ -219,6 +219,26 @@ impl AudioState {
         }
     }
 
+    pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Handle(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send_async(message).await?;
+                let message = rx.await?;
+
+                // Quickly intercept the message, and set our local value
+                if let Ok(message) = message {
+                    self.set_local_value(message);
+                }
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
     pub fn get_linked(&mut self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Linked(LinkedCommands::GetLinked(tx));
@@ -322,6 +342,71 @@ impl AudioState {
                         failed_message: Some(message),
                     })
                 }
+            }
+        }
+
+        if state.device_definition.device_type == DeviceType::BeacnStudio {
+            let _ = state.get_linked();
+        }
+        state.device_state.state = LoadState::Running;
+        state
+    }
+
+    pub async fn load_settings_async(
+        definition: DeviceDefinition,
+        sender: Sender<AudioMessage>,
+    ) -> Self {
+        let device_type = definition.device_type;
+
+        let mut state = AudioState {
+            device_definition: definition,
+            device_state: DeviceLoadState {
+                state: LoadState::Loading,
+                ..Default::default()
+            },
+            device_sender: Some(sender),
+            ..Default::default()
+        };
+
+        // Before we do anything else, is this definition in an error state?
+        if let DefinitionState::Error(error) = &state.device_definition.state {
+            match error {
+                ErrorType::PermissionDenied => {
+                    state.device_state.state = LoadState::PermissionDenied
+                }
+                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::Other(s) => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some(format!("Device Definition Error: {s}")),
+                        failed_message: None,
+                    });
+                }
+                ErrorType::Unknown => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some("Unknown Error".to_string()),
+                        failed_message: None,
+                    });
+                }
+            }
+            return state;
+        }
+
+        // Ok, grab all the variables from the mic
+        let messages = Message::generate_fetch_message(device_type);
+        for message in messages {
+            // Skip this message if it's not valid for this version
+            if message.get_message_minimum_version() > state.device_definition.device_info.version {
+                continue;
+            }
+
+            if let Err(e) = state.handle_message_async(message).await {
+                state.device_state.state = LoadState::Error;
+                state.device_state.errors.push(ErrorMessage {
+                    error_text: Some(format!("{e:?}")),
+                    failed_message: Some(message),
+                })
             }
         }
 
