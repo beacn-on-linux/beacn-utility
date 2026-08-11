@@ -1,5 +1,6 @@
-mod buttons;
-mod composite;
-mod drag_value;
-mod navigation;
-mod svg;
+pub mod buttons;
+pub mod composite;
+pub mod drag_value;
+pub mod navigation;
+pub mod svg;
+pub mod tabs;
