@@ -9,7 +9,7 @@ use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use iced::font::{Family, Weight};
 use iced::window::settings::PlatformSpecific;
-use iced::{Font, Size, Task, window};
+use iced::{Font, Size, window};
 use log::{LevelFilter, debug, error, info, warn};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
@@ -20,7 +20,7 @@ use std::{env, fs};
 use tokio::runtime::{Handle, Runtime};
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
-use crate::ui_iced::app::{BeacnUtility, Flags, Message};
+use crate::ui_iced::app::{BeacnUtility, Flags};
 use crate::ui_iced::runtime::SharedTokioExecutor;
 use crate::ui_iced::widgets::theme::build_beacn_theme;
 use tokio::{join, task};
@@ -228,7 +228,7 @@ fn spawn_iced_window(
     {
         let application_id = format!("{APP_TLD}.{APP_NAME}");
         window_settings.platform_specific = PlatformSpecific {
-            application_id: application_id.into(),
+            application_id,
             ..Default::default()
         };
     }

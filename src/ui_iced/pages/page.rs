@@ -3,12 +3,14 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::app::DeviceState;
+use crate::ui_iced::pages::audio::config::ConfigMessage;
+use crate::ui_iced::pages::common::error_page::ErrorPageMessages;
 use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
-pub enum PageMessage {
-    // ErrorPage(ErrorPageMessages),
-    // ConfigPage(ConfigMessage), // Empty for now
+pub(crate) enum PageMessage {
+    ErrorPage(ErrorPageMessages),
+    ConfigPage(ConfigMessage), // Empty for now
 }
 
 pub trait Page {
@@ -46,7 +48,7 @@ macro_rules! page_trait {
                 state.definition().state == DefinitionState::Running
             }
 
-            fn on_open(&mut self, state: &$state_type) {}
+            fn on_open(&mut self, _state: &$state_type) {}
             fn on_close(&mut self) {}
 
             fn update(

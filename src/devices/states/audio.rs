@@ -100,13 +100,13 @@ pub struct Lighting {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub struct Equaliser {
+pub(crate) struct Equaliser {
     pub mode: EQMode,
     pub bands: EnumMap<EQMode, EnumMap<EqualiserBand, EqualiserBandConfig>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub struct EqualiserBandConfig {
+pub(crate) struct EqualiserBandConfig {
     pub enabled: bool,
     pub band_type: EqualiserBandType,
     pub frequency: u32, // [0..=20000]Hz

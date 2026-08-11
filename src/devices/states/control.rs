@@ -1,5 +1,4 @@
 use crate::devices::manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
-use crate::devices::states::audio::AudioState;
 use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use crate::get_config_path;
 use anyhow::Result;
