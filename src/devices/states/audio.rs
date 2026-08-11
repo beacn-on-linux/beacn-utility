@@ -131,7 +131,7 @@ pub struct HeadphoneEQValue {
 pub struct BassEnhancement {
     pub enabled: bool,
     pub preset: BassPreset,
-    pub amount: i8, // [0..=10]
+    pub amount: u8, // [0..=10]
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -422,7 +422,7 @@ impl AudioState {
             Message::BassEnhancement(b) => match b {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
                 MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
-                MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as i8,
+                MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as u8,
                 _ => {}
             },
             Message::Compressor(c) => match c {
