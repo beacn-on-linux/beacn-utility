@@ -210,9 +210,9 @@ impl WindowRunner {
         });
 
         // Update the main thread with the new context
-        let _ = self
-            .sender
-            .send(ToMainMessages::UpdateContext(self.context.clone()));
+        // let _ = self
+        //     .sender
+        //     .send(ToMainMessages::UpdateContext(self.context.clone()));
     }
 
     fn destroy_window(&mut self) {

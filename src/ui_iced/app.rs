@@ -1,3 +1,4 @@
+use crate::WindowMessage;
 use crate::devices::manager::{DeviceDefinition, DeviceMessage};
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
@@ -43,10 +44,10 @@ pub struct Device {
 // These are ingress flags, and are passed to the app
 
 pub struct Flags {
-    window_settings: window::Settings,
+    pub window_settings: window::Settings,
 
-    reopen_rx: Receiver<()>,
-    device_rx: Receiver<DeviceMessage>,
+    pub window_rx: Receiver<WindowMessage>,
+    pub device_rx: Receiver<DeviceMessage>,
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -55,6 +56,9 @@ pub struct Flags {
 pub enum Message {
     ActivatePipeweaver,
     ActivateSettings,
+
+    // Window Related Tasks
+    WindowOpened(window::Id),
 }
 
 pub struct BeacnUtility {
@@ -74,27 +78,30 @@ pub struct BeacnUtility {
 
     // Window Tracking and Management
     window_settings: window::Settings,
-    reopen_rx: Receiver<()>,
-    active_id: Option<window::Id>,
+    window_rx: Receiver<WindowMessage>,
+    pub(crate) active_id: Option<window::Id>,
 }
 
 impl BeacnUtility {
-    pub fn new(flags: Flags) -> Self {
-        Self {
-            devices: HashMap::new(),
+    pub fn new(flags: Flags) -> (Self, Task<Message>) {
+        (
+            Self {
+                devices: HashMap::new(),
 
-            active_device: None,
-            active_page: None,
+                active_device: None,
+                active_page: None,
 
-            mixer_active: false,
-            settings_active: false,
+                mixer_active: false,
+                settings_active: false,
 
-            device_rx: flags.device_rx,
+                device_rx: flags.device_rx,
 
-            window_settings: flags.window_settings,
-            reopen_rx: flags.reopen_rx,
-            active_id: None,
-        }
+                window_settings: flags.window_settings,
+                window_rx: flags.window_rx,
+                active_id: None,
+            },
+            Task::none(),
+        )
     }
 
     pub fn title(&self, _window_id: window::Id) -> String {

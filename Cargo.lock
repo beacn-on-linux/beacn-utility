@@ -519,6 +519,7 @@ dependencies = [
  "futures-util",
  "glutin",
  "iced",
+ "iced_futures",
  "image",
  "interprocess",
  "json-patch",

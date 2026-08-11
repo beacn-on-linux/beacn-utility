@@ -160,7 +160,7 @@ pub async fn spawn_device_manager(
                             forwarder.abort();
                         }
 
-                        let _ = self_tx.send(ToMainMessages::RequestRedraw);
+                        //let _ = self_tx.send(ToMainMessages::RequestRedraw);
                     }
 
                     HotPlugMessage::ThreadStopped => break,
@@ -341,6 +341,7 @@ async fn handle_device_attached(
                 );
             }
 
+            debug!("Spawning Handler?");
             let event_tx_inner = event_tx.clone();
             tokio::spawn(async move {
                 let state = AudioState::load_settings_async(data, tx).await;
@@ -422,7 +423,7 @@ async fn handle_device_attached(
             });
         }
     }
-    let _ = self_tx.send(ToMainMessages::RequestRedraw);
+    //let _ = self_tx.send(ToMainMessages::RequestRedraw);
 }
 
 /// Spawn a small task that just loops on `rx` and forwards everything it receives into

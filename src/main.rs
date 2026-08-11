@@ -3,7 +3,7 @@ use crate::ui_egui::app::BeacnMicApp;
 use crate::ui_egui::window_handle::{App, UserEvent, WindowRunner, send_user_event};
 use anyhow::bail;
 use anyhow::{Result, anyhow};
-use beacn_lib::flume::unbounded;
+use beacn_lib::flume::{Receiver, unbounded};
 use egui::{Context, Id};
 use egui_winit::winit::dpi::LogicalSize;
 use egui_winit::winit::event_loop::EventLoop;
@@ -19,6 +19,9 @@ use egui_winit::winit::window::{Icon, Window};
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
+use iced::font::{Family, Weight};
+use iced::window::settings::PlatformSpecific;
+use iced::{Font, Size, Task, window};
 use log::{LevelFilter, debug, error, info, warn};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
@@ -27,9 +30,12 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 use std::{env, fs, thread};
-use tokio::runtime::Handle;
+use tokio::runtime::{Handle, Runtime};
 
-use crate::devices::manager::spawn_device_manager;
+use crate::devices::manager::{DeviceMessage, spawn_device_manager};
+use crate::ui_iced::app::{BeacnUtility, Flags, Message};
+use crate::ui_iced::runtime::SharedTokioExecutor;
+use crate::ui_iced::widgets::theme::build_beacn_theme;
 use tokio::{join, task};
 
 pub mod devices;
@@ -55,13 +61,14 @@ static TOKIO_RUNTIME: OnceLock<Handle> = OnceLock::new();
 pub fn runtime() -> &'static Handle {
     TOKIO_RUNTIME.get_or_init(Handle::current)
 }
-
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
+    let tokio_rt = Runtime::new().expect("Failed to create Tokio Runtime");
+    let _guard = tokio_rt.enter();
+
     // Configure the static runtime as this runtime
     runtime();
 
@@ -76,6 +83,13 @@ async fn main() -> Result<()> {
     config.add_filter_ignore_str("zbus");
     config.add_filter_ignore_str("nusb::platform::linux_usbfs");
     config.add_filter_ignore_str("nusb::platform::windows_winusb");
+    config.add_filter_ignore_str("naga");
+    config.add_filter_ignore_str("iced_wgpu");
+    config.add_filter_ignore_str("iced_winit");
+    config.add_filter_ignore_str("wgpu_hal");
+    config.add_filter_ignore_str("wgpu_core");
+    config.add_filter_ignore_str("cosmic_text");
+    config.add_filter_ignore_str("sctk");
 
     // Setup Console Logging
     log_targets.push(TermLogger::new(
@@ -123,7 +137,7 @@ async fn main() -> Result<()> {
     let (main_tx, main_rx) = unbounded();
 
     // Check whether an existing instance is running, and bail if so
-    if handle_active_instance().await {
+    if tokio_rt.block_on(handle_active_instance()) {
         return Ok(());
     }
 
@@ -176,120 +190,116 @@ async fn main() -> Result<()> {
     let device_rx_inner = device_rx.clone();
     let window_main_tx = main_tx.clone();
 
-    let window = thread::Builder::new()
-        .name("beacn-util-ui".to_string())
-        .spawn(move || {
-            let app_main_tx = window_main_tx.clone();
-
-            let mut app: Box<dyn App> = Box::new(BeacnMicApp::new(app_main_tx, device_rx_inner));
-            let mut hide_initial = hide_initial;
-
-            // This is used for trying to respawn the window on error
-            let mut last_error = Instant::now();
-            let mut attempts = 0;
-
-            let mut event_loop = EventLoop::<UserEvent>::with_user_event()
-                .with_any_thread(true)
-                .build()
-                .expect("Failed to create event loop");
-
-            loop {
-                // Create the Window Runner
-                let runner =
-                    WindowRunner::new(app, window_main_tx.clone(), window_attributes.clone());
-
-                // Run and check for return
-                match runner.run(&mut event_loop, hide_initial) {
-                    Ok(()) => break,
-                    Err((recovered_app, was_hidden, e)) => {
-                        error!("UI has Crashed: {e}");
-
-                        // Something crashed it, could be wayland, or X11, either way, we're lost.
-                        // Check the last time this happened (have we successfully respawned before?)
-                        if last_error.elapsed() < Duration::from_secs(5) {
-                            attempts = 0;
-                        }
-
-                        // Refresh the last error time, increment the attempt account
-                        last_error = Instant::now();
-                        attempts += 1;
-
-                        // Yea, there's nothing we can do here, we're just going to have to bail.
-                        // TODO: This should probably quit the app
-                        if attempts > 3 {
-                            error!("Failed to recover UI after {attempts} attempts, bailing");
-                            break;
-                        }
-
-                        app = recovered_app;
-                        hide_initial = was_hidden;
-                        thread::sleep(Duration::from_millis(500));
-                    }
-                }
-            }
-        })?;
-
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
-    let mut context = Context::default();
+    let (window_tx, window_rx) = unbounded();
 
-    loop {
-        tokio::select! {
-            msg = main_rx.recv_async() => {
-                match msg {
-                    Ok(ToMainMessages::UpdateContext(new_ctx)) => {
-                        debug!("Context Updated");
-                        context = new_ctx;
-                    }
+    // Honestly, we might not need this loop, the UI can read and manage its own channels
+    task::spawn(async move {
+        loop {
+            tokio::select! {
+                msg = main_rx.recv_async() => {
+                    match msg {
+                        Ok(ToMainMessages::SpawnWindow) => {
+                            let _ = window_tx.send(WindowMessage::OpenWindow);
+                        }
 
-                    Ok(ToMainMessages::SpawnWindow) => {
-                        send_user_event(&context, UserEvent::FocusWindow);
-                    }
+                        Ok(ToMainMessages::Quit) => break,
 
-                    Ok(ToMainMessages::RequestRedraw) => {
-                        send_user_event(&context, UserEvent::RequestRedraw);
-                    }
-
-                    Ok(ToMainMessages::Quit) => break,
-
-                    Err(e) => {
-                        error!("Main Loop Broken, bailing: {e}");
-                        break;
+                        Err(e) => {
+                            error!("Main Loop Broken, bailing: {e}");
+                            break;
+                        }
                     }
                 }
-            }
 
-            msg = device_rx.recv_async() => {
-                match msg {
-                    Ok(msg) => {
-                        send_user_event(&context, UserEvent::DeviceMessage(msg));
-                    }
-
-                    Err(e) => {
-                        error!("Device Handler Broken, bailing: {e}");
-                        break;
-                    }
+                _ = shutdown_signal() => {
+                    break;
                 }
-            }
-
-            _ = shutdown_signal() => {
-                break;
             }
         }
-    }
+    });
+
+    spawn_iced_window(device_rx, window_rx)?;
 
     debug!("Shutdown Triggered - Waiting for Threads to Terminate..");
-    send_user_event(&context, UserEvent::Quit);
     let _ = manage_tx.send(ManagerMessages::Quit);
     let _ = ipc_tx.send(ManagerMessages::Quit);
     let _ = tray_tx.send(ManagerMessages::Quit);
 
-    let _ = window.join();
-    let _ = join!(ipc, tray, device_manager);
+    // Join on the remaining tasks
+    let _ = tokio_rt.block_on(async { join!(ipc, tray, device_manager) });
 
     debug!("Shutdown Complete");
 
     Ok(())
+}
+
+fn spawn_iced_window(
+    device_rx: Receiver<DeviceMessage>,
+    window_rx: Receiver<WindowMessage>,
+) -> Result<()> {
+    const BOLD_FONT: &[u8] = include_bytes!("../resources/fonts/noto/NotoSans-Bold.ttf");
+    const REGULAR_FONT: &[u8] = include_bytes!("../resources/fonts/noto/NotoSans-Regular.ttf");
+    const SEMI_BOLD_FONT: &[u8] = include_bytes!("../resources/fonts/noto/NotoSans-SemiBold.ttf");
+
+    let settings = iced::Settings {
+        default_font: Font {
+            family: Family::Name("Noto Sans"),
+            weight: Weight::Semibold,
+            ..Default::default()
+        },
+        fonts: vec![REGULAR_FONT.into(), SEMI_BOLD_FONT.into(), BOLD_FONT.into()],
+        default_text_size: 12.0.into(),
+        ..Default::default()
+    };
+
+    // Initial Window Settings and size
+    let mut initial_window_settings = window::Settings {
+        exit_on_close_request: false, // Intercepts the X button manually
+        size: Size::new(1024., 500.),
+        min_size: Some(Size::new(1024., 500.)),
+        ..Default::default()
+    };
+
+    #[cfg(target_os = "linux")]
+    {
+        initial_window_settings.platform_specific = PlatformSpecific {
+            application_id: "io.github.beacn_on_linux.beacn-utility".into(),
+            ..Default::default()
+        };
+    }
+
+    iced::daemon(
+        move || {
+            let device_rx = device_rx.clone();
+            let window_rx = window_rx.clone();
+
+            let (mut app_state, boot) = BeacnUtility::new(Flags {
+                window_settings: initial_window_settings.clone(),
+                device_rx,
+                window_rx,
+            });
+
+            let (initial_id, open_task) = window::open(initial_window_settings.clone());
+            app_state.active_id = Some(initial_id);
+
+            let mapped_open_task = open_task.map(move |_| Message::WindowOpened(initial_id));
+            let combined_task = Task::batch(vec![boot, mapped_open_task]);
+
+            // Track your initial_id in your state here if needed, then yield:
+            (app_state, combined_task)
+        },
+        BeacnUtility::update,
+        BeacnUtility::view,
+    )
+    .title(BeacnUtility::title)
+    .subscription(BeacnUtility::subscription)
+    .theme(|_state: &BeacnUtility, _window_id: window::Id| build_beacn_theme())
+    .settings(settings)
+    .executor::<SharedTokioExecutor>()
+    .run()
+    .map_err(anyhow::Error::from)
 }
 
 fn prepare_context(ctx: &mut Context) {
@@ -445,9 +455,16 @@ pub enum ManagerMessages {
     Quit,
 }
 
+// This is a dupe of ToMainMessages for now, until I know whether main()
+// needs to maintain anything special, or can just wait for the window to close.
+pub enum WindowMessage {
+    OpenWindow,
+    Quit,
+}
+
 pub enum ToMainMessages {
     SpawnWindow,
-    RequestRedraw,
-    UpdateContext(Context),
+    // RequestRedraw,
+    // UpdateContext(Context),
     Quit,
 }

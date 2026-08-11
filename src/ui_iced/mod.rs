@@ -5,6 +5,7 @@ use std::sync::LazyLock;
 pub mod app;
 pub mod events;
 pub mod pages;
+pub mod runtime;
 pub mod widgets;
 
 pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {

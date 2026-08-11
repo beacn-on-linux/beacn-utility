@@ -46,6 +46,8 @@ glutin = "0.32.3"
 
 # UI Framework (iced)
 iced = { version = "0.14.0", features = ["advanced", "svg", "canvas"] }
+iced_futures = "0.14.0"
+
 unicode-segmentation = "1"
 emath = "0.36.1"
 
