@@ -17,7 +17,7 @@ use enum_map::{Enum, EnumMap};
 use crate::device_manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
 };
-use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
+use crate::ui_egui::states::{DeviceState, ErrorMessage, LoadState};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;

@@ -1,7 +1,7 @@
 pub(crate) mod about;
 pub(crate) mod error;
 
-use crate::ui::states::controller_state::BeacnControllerState;
+use crate::ui_egui::states::controller_state::BeacnControllerState;
 use egui::{Context, Ui};
 
 pub trait ControllerPage {

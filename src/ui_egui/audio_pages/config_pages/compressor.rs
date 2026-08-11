@@ -1,6 +1,6 @@
-use crate::ui::audio_pages::config_pages::{ConfigPage, map_to_range};
-use crate::ui::states::audio_state::BeacnAudioState;
-use crate::ui::widgets::{draw_range, get_slider, toggle_button};
+use crate::ui_egui::audio_pages::config_pages::{ConfigPage, map_to_range};
+use crate::ui_egui::states::audio_state::BeacnAudioState;
+use crate::ui_egui::widgets::{draw_range, get_slider, toggle_button};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::compressor::CompressorMode::{Advanced, Simple};
 use beacn_lib::audio::messages::compressor::{

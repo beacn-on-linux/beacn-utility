@@ -1,5 +1,5 @@
-use crate::ui::audio_pages::AudioPage;
-use crate::ui::states::audio_state::BeacnAudioState;
+use crate::ui_egui::audio_pages::AudioPage;
+use crate::ui_egui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::LinkChannel;
 use beacn_lib::manager::DeviceType;
 use egui::{ComboBox, Ui};

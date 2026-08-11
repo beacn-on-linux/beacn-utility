@@ -1,4 +1,4 @@
-use crate::ui::states::audio_state::BeacnAudioState;
+use crate::ui_egui::states::audio_state::BeacnAudioState;
 use egui::{Context, Ui};
 
 pub(crate) mod about;

@@ -1,5 +1,5 @@
-use crate::ui::controller_pages::ControllerPage;
-use crate::ui::states::controller_state::BeacnControllerState;
+use crate::ui_egui::controller_pages::ControllerPage;
+use crate::ui_egui::states::controller_state::BeacnControllerState;
 use beacn_lib::manager::DeviceType;
 use egui::{Align, Layout, RichText, Slider, Ui};
 use std::time::Duration;

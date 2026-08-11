@@ -1,6 +1,6 @@
-use crate::ui::controller_pages::ControllerPage;
-use crate::ui::shared_pages::errors::display_errors;
-use crate::ui::states::controller_state::BeacnControllerState;
+use crate::ui_egui::controller_pages::ControllerPage;
+use crate::ui_egui::shared_pages::errors::display_errors;
+use crate::ui_egui::states::controller_state::BeacnControllerState;
 use egui::Ui;
 
 pub struct ErrorPage {}

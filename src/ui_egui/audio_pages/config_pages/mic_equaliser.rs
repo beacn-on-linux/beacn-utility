@@ -1,11 +1,11 @@
-use crate::ui::SVG;
-use crate::ui::audio_pages::equaliser::eq_common::{
+use crate::ui_egui::SVG;
+use crate::ui_egui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
-use crate::ui::audio_pages::equaliser::eq_drawer::EqDrawView;
-use crate::ui::states::audio_state::EqualiserBandType::*;
-use crate::ui::states::audio_state::{BeacnAudioState, EqualiserBand, EqualiserBandType};
-use crate::ui::widgets::draw_draggable;
+use crate::ui_egui::audio_pages::equaliser::eq_drawer::EqDrawView;
+use crate::ui_egui::states::audio_state::EqualiserBandType::*;
+use crate::ui_egui::states::audio_state::{BeacnAudioState, EqualiserBand, EqualiserBandType};
+use crate::ui_egui::widgets::draw_draggable;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::equaliser::{
     EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,

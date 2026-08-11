@@ -1,6 +1,6 @@
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::get_config_path;
-use crate::ui::states::{DeviceState, ErrorMessage, LoadState};
+use crate::ui_egui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
 use beacn_lib::flume::Sender;
 use log::{debug, warn};

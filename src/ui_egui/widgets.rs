@@ -1,5 +1,5 @@
-use crate::ui::SVG;
-use crate::ui::numbers::NumericType;
+use crate::ui_egui::SVG;
+use crate::ui_egui::numbers::NumericType;
 use egui::emath::Numeric;
 use egui::{
     Align, Button, Color32, CornerRadius, DragValue, Image, Layout, Response, RichText, Slider, Ui,

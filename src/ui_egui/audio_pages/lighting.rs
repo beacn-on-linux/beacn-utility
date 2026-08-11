@@ -1,6 +1,6 @@
-use crate::ui::audio_pages::AudioPage;
-use crate::ui::states::audio_state::BeacnAudioState;
-use crate::ui::states::audio_state::Lighting as LightingState;
+use crate::ui_egui::audio_pages::AudioPage;
+use crate::ui_egui::states::audio_state::BeacnAudioState;
+use crate::ui_egui::states::audio_state::Lighting as LightingState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,

@@ -1,6 +1,6 @@
-use crate::ui::audio_pages::AudioPage;
-use crate::ui::shared_pages::errors::display_errors;
-use crate::ui::states::audio_state::BeacnAudioState;
+use crate::ui_egui::audio_pages::AudioPage;
+use crate::ui_egui::shared_pages::errors::display_errors;
+use crate::ui_egui::states::audio_state::BeacnAudioState;
 use egui::Ui;
 
 pub struct ErrorPage {}
