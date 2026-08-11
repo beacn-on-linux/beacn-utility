@@ -2,8 +2,7 @@ use crate::ui_egui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui_egui::audio_pages::equaliser::eq_util::{BiquadCoefficient, EQUtil};
-use crate::ui_egui::states::audio_state::EqualiserBandType::*;
-use crate::ui_egui::states::audio_state::{EqualiserBand, EqualiserBandConfig};
+
 use egui::{
     Color32, CornerRadius, FontId, Mesh, Pos2, Rect, Response, Sense, Shape, Stroke, StrokeKind,
     Ui, Vec2, pos2, vec2,
@@ -12,6 +11,9 @@ use enum_map::EnumMap;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
 use wide::f32x8;
+
+use crate::devices::states::audio::EqualiserBandType::*;
+use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig};
 
 // The number of points to actually use in the curves
 const EQ_CURVE_RESOLUTION: usize = 512;

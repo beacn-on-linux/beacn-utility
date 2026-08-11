@@ -17,7 +17,7 @@ use enum_map::{Enum, EnumMap};
 use crate::device_manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
 };
-use crate::ui_egui::states::{DeviceState, ErrorMessage, LoadState};
+use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -38,9 +38,9 @@ use strum_macros::EnumIter;
 type Rgb = [u8; 3];
 
 #[derive(Debug, Default, Clone)]
-pub struct BeacnAudioState {
+pub struct AudioState {
     pub device_definition: DeviceDefinition,
-    pub device_state: DeviceState,
+    pub device_state: DeviceLoadState,
     pub device_sender: Option<Sender<AudioMessage>>,
 
     pub headphones: Headphones,
@@ -188,7 +188,7 @@ pub struct Subwoofer {
     pub amount: u8, // [0..=10]
 }
 
-impl BeacnAudioState {
+impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
@@ -253,9 +253,9 @@ impl BeacnAudioState {
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
 
-        let mut state = BeacnAudioState {
+        let mut state = AudioState {
             device_definition: definition,
-            device_state: DeviceState {
+            device_state: DeviceLoadState {
                 state: LoadState::Loading,
                 ..Default::default()
             },

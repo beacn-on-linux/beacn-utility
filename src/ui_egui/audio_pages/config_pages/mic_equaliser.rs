@@ -1,10 +1,10 @@
+use crate::devices::states::audio::EqualiserBandType::*;
+use crate::devices::states::audio::{AudioState, EqualiserBand, EqualiserBandType};
 use crate::ui_egui::SVG;
 use crate::ui_egui::audio_pages::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui_egui::audio_pages::equaliser::eq_drawer::EqDrawView;
-use crate::ui_egui::states::audio_state::EqualiserBandType::*;
-use crate::ui_egui::states::audio_state::{BeacnAudioState, EqualiserBand, EqualiserBandType};
 use crate::ui_egui::widgets::draw_draggable;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::equaliser::{
@@ -50,7 +50,7 @@ impl MicEqualiser {
         self.active_band_drag = None;
     }
 
-    fn load_default_state(&self, state: &mut BeacnAudioState) {
+    fn load_default_state(&self, state: &mut AudioState) {
         // This can be used later as a 'Default' button
         let mode = state.equaliser.mode;
         if mode == EQMode::Simple {
@@ -94,7 +94,7 @@ impl MicEqualiser {
     }
 
     /// Shows the parametric equalizer in the UI
-    pub fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) -> Response {
+    pub fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) -> Response {
         // Are we rendering this for the current serial?
         if let Some(serial) = &self.serial {
             let serial = serial.clone();
@@ -383,7 +383,7 @@ impl MicEqualiser {
         plot_rect: egui::Rect,
         pointer_pos: egui::Pos2,
         bands: &mut Bands,
-        state: &mut BeacnAudioState,
+        state: &mut AudioState,
     ) {
         // We don't have an active item, so there's nothing to do
         let Some(active) = self.active_band_drag else {
@@ -422,7 +422,7 @@ impl MicEqualiser {
         pointer_position: egui::Pos2,
         scroll_up: bool,
         bands: &mut Bands,
-        state: &mut BeacnAudioState,
+        state: &mut AudioState,
     ) {
         if self.eq_mode == EQMode::Simple {
             // Can't adjust the Q in simple mode

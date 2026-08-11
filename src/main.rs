@@ -33,6 +33,7 @@ use tokio::runtime::Handle;
 use tokio::{join, task};
 
 mod device_manager;
+pub mod devices;
 mod integrations;
 mod managers;
 mod ui_egui;

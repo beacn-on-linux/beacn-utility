@@ -5,12 +5,12 @@ pub(crate) mod mic_equaliser;
 pub(crate) mod mic_setup;
 pub(crate) mod suppressor;
 
-use crate::ui_egui::states::audio_state::BeacnAudioState;
+use crate::devices::states::audio::AudioState;
 use egui::Ui;
 
 pub trait ConfigPage {
     fn title(&self) -> &'static str;
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState);
 }
 
 /// Maps a value from one range to another.

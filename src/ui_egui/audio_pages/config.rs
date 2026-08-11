@@ -1,3 +1,4 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::audio_pages::AudioPage;
 use crate::ui_egui::audio_pages::config_pages::ConfigPage;
 use crate::ui_egui::audio_pages::config_pages::compressor::CompressorPage;
@@ -6,7 +7,6 @@ use crate::ui_egui::audio_pages::config_pages::headphones::HeadphonesPage;
 use crate::ui_egui::audio_pages::config_pages::mic_equaliser::MicEqualiser;
 use crate::ui_egui::audio_pages::config_pages::mic_setup::MicSetupPage;
 use crate::ui_egui::audio_pages::config_pages::suppressor::NoiseSuppressionPage;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use crate::ui_egui::widgets::draw_range;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
@@ -42,7 +42,7 @@ impl AudioPage for Configuration {
         "mic"
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         let eq_size = vec2(ui.available_width(), ui.available_height() - 240.);
         ui.allocate_ui_with_layout(eq_size, *ui.layout(), |ui| {
             ui.set_min_size(eq_size);

@@ -1,12 +1,12 @@
 use crate::ToMainMessages;
 use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
+use crate::devices::states::LoadState;
+use crate::devices::states::audio::AudioState;
+use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui_egui::audio_pages::AudioPage;
 use crate::ui_egui::controller_pages::ControllerPage;
 use crate::ui_egui::pages::{pipeweaver_ui, settings_ui};
-use crate::ui_egui::states::LoadState;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
-use crate::ui_egui::states::controller_state::BeacnControllerState;
 use crate::ui_egui::widgets::{pipeweaver_button, round_nav_button};
 use crate::ui_egui::{audio_pages, controller_pages};
 use crate::window_handle::App;
@@ -27,8 +27,8 @@ pub struct BeacnMicApp {
     device_list: Vec<DeviceDefinition>,
     active_device: Option<DeviceDefinition>,
 
-    audio_device_list: HashMap<DeviceDefinition, BeacnAudioState>,
-    control_device_list: HashMap<DeviceDefinition, BeacnControllerState>,
+    audio_device_list: HashMap<DeviceDefinition, AudioState>,
+    control_device_list: HashMap<DeviceDefinition, ControlState>,
 
     audio_pages: Vec<Box<dyn AudioPage>>,
     control_pages: Vec<Box<dyn ControllerPage>>,
@@ -216,7 +216,7 @@ impl App for BeacnMicApp {
             DeviceMessage::DeviceArrived(device) => match device {
                 DeviceArriveMessage::Audio(definition, sender) => {
                     // Load the Device State
-                    let state = BeacnAudioState::load_settings(definition.clone(), sender);
+                    let state = AudioState::load_settings(definition.clone(), sender);
 
                     // Store the Device, and the device state
                     self.device_list.push(definition.clone());
@@ -228,7 +228,7 @@ impl App for BeacnMicApp {
                     }
                 }
                 DeviceArriveMessage::Control(definition, sender) => {
-                    let state = BeacnControllerState::load_settings(definition.clone(), sender);
+                    let state = ControlState::load_settings(definition.clone(), sender);
                     self.device_list.push(definition.clone());
                     self.control_device_list.insert(definition.clone(), state);
 

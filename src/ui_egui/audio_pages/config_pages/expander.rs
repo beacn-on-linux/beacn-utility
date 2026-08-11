@@ -1,5 +1,5 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::audio_pages::config_pages::{ConfigPage, map_to_range};
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use crate::ui_egui::widgets::{get_slider, toggle_button};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::expander::ExpanderMode::{Advanced, Simple};
@@ -17,7 +17,7 @@ impl ConfigPage for ExpanderPage {
         "Expander"
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         ui.push_id("expander", |ui| {
             let mut expander = state.expander;
 

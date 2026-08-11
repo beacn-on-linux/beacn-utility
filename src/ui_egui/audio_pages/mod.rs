@@ -1,4 +1,4 @@
-use crate::ui_egui::states::audio_state::BeacnAudioState;
+use crate::devices::states::audio::AudioState;
 use egui::{Context, Ui};
 
 pub(crate) mod about;
@@ -16,10 +16,10 @@ pub trait AudioPage {
         false
     }
 
-    fn should_show(&self, _: &BeacnAudioState) -> bool {
+    fn should_show(&self, _: &AudioState) -> bool {
         true
     }
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState);
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState);
 
     fn on_close(&mut self) {}
 

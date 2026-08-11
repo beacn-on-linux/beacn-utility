@@ -1,6 +1,6 @@
 use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
+use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};
 use crate::get_config_path;
-use crate::ui_egui::states::{DeviceState, ErrorMessage, LoadState};
 use anyhow::Result;
 use beacn_lib::flume::Sender;
 use log::{debug, warn};
@@ -10,17 +10,17 @@ use std::time::Duration;
 
 // Literally nothing to do here right now
 #[derive(Debug, Default, Clone)]
-pub struct BeacnControllerState {
+pub struct ControlState {
     pub device_definition: DeviceDefinition,
-    pub device_state: DeviceState,
+    pub device_state: DeviceLoadState,
     pub device_sender: Option<Sender<ControlMessage>>,
 
     pub saved_settings: SavedSettings,
 }
 
-impl BeacnControllerState {
+impl ControlState {
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<ControlMessage>) -> Self {
-        let mut state = BeacnControllerState {
+        let mut state = ControlState {
             device_definition: definition,
             device_sender: Some(sender),
             ..Default::default()

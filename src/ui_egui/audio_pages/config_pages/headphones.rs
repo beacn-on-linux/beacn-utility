@@ -1,5 +1,5 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::audio_pages::config_pages::ConfigPage;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use crate::ui_egui::widgets::draw_range;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphone_eq::HPEQType::{Bass, Mids, Treble};
@@ -20,7 +20,7 @@ impl ConfigPage for HeadphonesPage {
         "Headphones"
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         let device_type = state.device_definition.device_type;
 
         let spacing = 10.0;

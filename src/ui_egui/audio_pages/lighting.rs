@@ -1,6 +1,6 @@
+use crate::devices::states::audio::AudioState;
+use crate::devices::states::audio::Lighting as LightingState;
 use crate::ui_egui::audio_pages::AudioPage;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
-use crate::ui_egui::states::audio_state::Lighting as LightingState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::lighting::LightingMode::{
     Gradient, ReactiveMeterDown, ReactiveMeterUp, ReactiveRing, Solid, SparkleMeter, SparkleRandom,
@@ -31,7 +31,7 @@ impl AudioPage for LightingPage {
         "bulb"
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         let device_type = state.device_definition.device_type;
         let mut lighting = state.lighting;
 
@@ -182,7 +182,7 @@ impl AudioPage for LightingPage {
 }
 
 impl LightingPage {
-    fn draw_types_mic(&self, ui: &mut Ui, config: &mut BeacnAudioState, state: &mut LightingState) {
+    fn draw_types_mic(&self, ui: &mut Ui, config: &mut AudioState, state: &mut LightingState) {
         let mode = state.mic_mode;
 
         let solid = mode == Solid;
@@ -212,12 +212,7 @@ impl LightingPage {
         });
     }
 
-    fn draw_types_studio(
-        &self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        state: &mut LightingState,
-    ) {
+    fn draw_types_studio(&self, ui: &mut Ui, config: &mut AudioState, state: &mut LightingState) {
         let mode = state.studio_mode;
 
         let solid = mode == StudioLightingMode::Solid;
@@ -247,7 +242,7 @@ impl LightingPage {
     fn draw_area(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         if config.device_definition.device_type == DeviceType::BeacnStudio {
@@ -272,7 +267,7 @@ impl LightingPage {
     fn draw_solid(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
@@ -286,7 +281,7 @@ impl LightingPage {
     fn draw_gradient(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
@@ -302,7 +297,7 @@ impl LightingPage {
     fn draw_reactive(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
@@ -347,7 +342,7 @@ impl LightingPage {
     fn draw_sparkle(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
@@ -386,7 +381,7 @@ impl LightingPage {
     fn draw_spectrum(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         state: &mut LightingState,
     ) -> Response {
         ui.vertical(|ui| {
@@ -397,12 +392,7 @@ impl LightingPage {
         .response
     }
 
-    fn draw_primary_colour(
-        &mut self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        colour: &mut [u8; 3],
-    ) {
+    fn draw_primary_colour(&mut self, ui: &mut Ui, config: &mut AudioState, colour: &mut [u8; 3]) {
         self.draw_colour_picker(ui, config, colour, "Primary Colour", |rgba| {
             Message::Lighting(Lighting::Colour1(rgba))
         });
@@ -411,7 +401,7 @@ impl LightingPage {
     fn draw_secondary_colour(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         colour: &mut [u8; 3],
     ) {
         self.draw_colour_picker(ui, config, colour, "Secondary Colour", |rgba| {
@@ -419,19 +409,14 @@ impl LightingPage {
         });
     }
 
-    fn draw_speed_direction(&mut self, ui: &mut Ui, config: &mut BeacnAudioState, speed: &mut i32) {
+    fn draw_speed_direction(&mut self, ui: &mut Ui, config: &mut AudioState, speed: &mut i32) {
         self.draw_slider(ui, config, speed, -10..=10, "Speed and Direction:", |val| {
             let value = Lighting::Speed(LightingSpeed(val));
             Message::Lighting(value)
         });
     }
 
-    fn draw_meter_sensitivity(
-        &mut self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        sense: &mut f32,
-    ) {
+    fn draw_meter_sensitivity(&mut self, ui: &mut Ui, config: &mut AudioState, sense: &mut f32) {
         self.draw_slider(ui, config, sense, 1.0..=10.0, "Meter Sensitivity:", |val| {
             let value = Lighting::MeterSensitivity(LightingMeterSensitivty(val));
             Message::Lighting(value)
@@ -441,7 +426,7 @@ impl LightingPage {
     fn draw_meter_source(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         source: &mut LightingMeterSource,
     ) {
         ui.horizontal(|ui| {
@@ -483,12 +468,7 @@ impl LightingPage {
         ui.add_space(4.);
     }
 
-    fn draw_ring_brightness(
-        &mut self,
-        ui: &mut Ui,
-        config: &mut BeacnAudioState,
-        brightness: &mut i32,
-    ) {
+    fn draw_ring_brightness(&mut self, ui: &mut Ui, config: &mut AudioState, brightness: &mut i32) {
         self.draw_slider(ui, config, brightness, 0..=100, "Ring Brightness:", |val| {
             let value = Lighting::Brightness(LightingBrightness(val));
             Message::Lighting(value)
@@ -498,7 +478,7 @@ impl LightingPage {
     fn draw_lighting_style(
         &self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         label: &str,
         checked: bool,
         message_fn: impl FnOnce() -> Option<Message>,
@@ -521,7 +501,7 @@ impl LightingPage {
     fn draw_colour_picker(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         colour: &mut [u8; 3],
         label: &str,
         message_fn: impl FnOnce(RGBA) -> Message,
@@ -547,7 +527,7 @@ impl LightingPage {
     fn draw_slider<T>(
         &mut self,
         ui: &mut Ui,
-        config: &mut BeacnAudioState,
+        config: &mut AudioState,
         value: &mut T,
         range: std::ops::RangeInclusive<T>,
         label: &str,

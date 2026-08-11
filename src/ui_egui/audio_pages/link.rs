@@ -1,5 +1,5 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::audio_pages::AudioPage;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::LinkChannel;
 use beacn_lib::manager::DeviceType;
 use egui::{ComboBox, Ui};
@@ -18,12 +18,12 @@ impl AudioPage for Linked {
         "left_right"
     }
 
-    fn should_show(&self, state: &BeacnAudioState) -> bool {
+    fn should_show(&self, state: &AudioState) -> bool {
         state.device_definition.device_type == DeviceType::BeacnStudio
             && state.headphones.studio_driverless == Some(false)
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         ui.label("This page requires the PC2 USB port to be plugged into a Windows PC with the Beacn Link app running.");
         ui.add_space(10.);
 

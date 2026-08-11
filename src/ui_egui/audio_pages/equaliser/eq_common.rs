@@ -1,8 +1,7 @@
+use crate::devices::states::audio::EqualiserBandType::*;
+use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
 use egui::{Pos2, Rect, Vec2};
 use enum_map::EnumMap;
-
-use crate::ui_egui::states::audio_state::EqualiserBandType::*;
-use crate::ui_egui::states::audio_state::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
 
 /// A full set of equaliser bands, keyed by `EQBand`. Shared type so the
 /// view and the controls layer agree on what they're passing around.

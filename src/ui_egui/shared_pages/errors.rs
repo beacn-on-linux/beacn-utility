@@ -1,4 +1,4 @@
-use crate::ui_egui::states::{ErrorMessage, LoadState};
+use crate::devices::states::{ErrorMessage, LoadState};
 use beacn_lib::manager::DeviceLocation;
 use egui::{RichText, Ui};
 

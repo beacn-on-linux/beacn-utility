@@ -19,7 +19,7 @@ use iced::advanced::widget::{self, Tree, tree};
 use iced::advanced::{Clipboard, Shell, Widget};
 use iced::advanced::{clipboard, renderer};
 use iced::keyboard::key::Named;
-use iced::keyboard::{self, Key, key};
+use iced::keyboard::{self, Key};
 use iced::time::Instant;
 use iced::widget::text_input::{self, Value as TextValue};
 use iced::{Alignment, Element, Event, Length, Padding, Pixels, Point, Rectangle, Size, alignment};
@@ -102,7 +102,6 @@ where
             align_x: alignment::Horizontal::Left,
             aim_radius: 1.0,
             update_while_editing: true,
-            //integral: Num::INTEGRAL,
             on_change: None,
             class: Theme::default(),
         };

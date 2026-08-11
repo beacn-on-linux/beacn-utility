@@ -1,6 +1,6 @@
+use crate::devices::states::control::ControlState;
 use crate::ui_egui::controller_pages::ControllerPage;
 use crate::ui_egui::shared_pages::errors::display_errors;
-use crate::ui_egui::states::controller_state::BeacnControllerState;
 use egui::Ui;
 
 pub struct ErrorPage {}
@@ -20,7 +20,7 @@ impl ControllerPage for ErrorPage {
         true
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnControllerState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut ControlState) {
         display_errors(
             ui,
             &state.device_state.state,

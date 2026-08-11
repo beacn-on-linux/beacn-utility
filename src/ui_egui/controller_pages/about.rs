@@ -1,5 +1,5 @@
+use crate::devices::states::control::ControlState;
 use crate::ui_egui::controller_pages::ControllerPage;
-use crate::ui_egui::states::controller_state::BeacnControllerState;
 use beacn_lib::manager::DeviceType;
 use egui::{Align, Layout, RichText, Slider, Ui};
 use std::time::Duration;
@@ -24,7 +24,7 @@ impl ControllerPage for About {
         false
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnControllerState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut ControlState) {
         match state.device_definition.device_type {
             DeviceType::BeacnMix => ui.heading("About Beacn Mix"),
             DeviceType::BeacnMixCreate => ui.heading("About Beacn Mix Create"),

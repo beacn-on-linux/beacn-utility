@@ -8,7 +8,6 @@ mod controller_pages;
 mod numbers;
 mod pages;
 mod shared_pages;
-mod states;
 mod widgets;
 
 // SVG Images

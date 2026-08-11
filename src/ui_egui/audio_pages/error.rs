@@ -1,6 +1,6 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::audio_pages::AudioPage;
 use crate::ui_egui::shared_pages::errors::display_errors;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use egui::Ui;
 
 pub struct ErrorPage {}
@@ -20,7 +20,7 @@ impl AudioPage for ErrorPage {
         true
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         display_errors(
             ui,
             &state.device_state.state,

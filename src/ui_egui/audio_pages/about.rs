@@ -1,6 +1,6 @@
+use crate::devices::states::audio::AudioState;
 use crate::ui_egui::SVG;
 use crate::ui_egui::audio_pages::AudioPage;
-use crate::ui_egui::states::audio_state::BeacnAudioState;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
@@ -19,7 +19,7 @@ impl AudioPage for About {
         "gear"
     }
 
-    fn ui(&mut self, ui: &mut Ui, state: &mut BeacnAudioState) {
+    fn ui(&mut self, ui: &mut Ui, state: &mut AudioState) {
         let device_type = state.device_definition.device_type;
         let serial_text = state.device_definition.device_info.serial.clone();
         let version_text = state.device_definition.device_info.version.to_string();

@@ -1,10 +1,10 @@
 use beacn_lib::audio::messages::Message;
 
-pub(crate) mod audio_state;
-pub(crate) mod controller_state;
+pub mod audio;
+pub mod control;
 
 #[derive(Debug, Default, Clone)]
-pub struct DeviceState {
+pub struct DeviceLoadState {
     pub state: LoadState,
     pub errors: Vec<ErrorMessage>,
 }
