@@ -1,4 +1,4 @@
-use crate::device_manager::DeviceMessage;
+use crate::devices::manager::DeviceMessage;
 use crate::{ToMainMessages, prepare_context};
 use anyhow::Result;
 use beacn_lib::flume::Sender;

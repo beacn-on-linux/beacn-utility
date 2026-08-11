@@ -1,4 +1,3 @@
-use crate::device_manager::spawn_device_manager;
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use crate::ui_egui::app::BeacnMicApp;
 use crate::window_handle::{App, UserEvent, WindowRunner, send_user_event};
@@ -30,9 +29,9 @@ use std::time::{Duration, Instant};
 use std::{env, fs, thread};
 use tokio::runtime::Handle;
 
+use crate::devices::manager::spawn_device_manager;
 use tokio::{join, task};
 
-mod device_manager;
 pub mod devices;
 mod integrations;
 mod managers;

@@ -1,4 +1,4 @@
-use crate::device_manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
+use crate::devices::manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};
 use crate::get_config_path;
 use anyhow::Result;

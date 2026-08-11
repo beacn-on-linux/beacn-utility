@@ -14,7 +14,7 @@ use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
 use enum_map::{Enum, EnumMap};
 
-use crate::device_manager::{
+use crate::devices::manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
 };
 use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};

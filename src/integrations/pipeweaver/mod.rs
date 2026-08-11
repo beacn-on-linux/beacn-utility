@@ -1,5 +1,5 @@
-use crate::device_manager::ControlMessage;
-use crate::device_manager::ControlMessage::{ButtonColour, SendImage};
+use crate::devices::manager::ControlMessage;
+use crate::devices::manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{
     ChannelChangedProperty, ChannelRenderer, UpdateFrom,
 };

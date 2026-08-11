@@ -1,5 +1,5 @@
 use crate::ToMainMessages;
-use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
+use crate::devices::manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::devices::states::LoadState;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
