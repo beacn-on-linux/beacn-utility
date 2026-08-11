@@ -201,10 +201,13 @@ fn main() -> Result<()> {
                 msg = main_rx.recv_async() => {
                     match msg {
                         Ok(ToMainMessages::SpawnWindow) => {
-                            let _ = window_tx.send(WindowMessage::OpenWindow);
+                            let _ = window_tx.send_async(WindowMessage::OpenWindow).await;
                         }
 
-                        Ok(ToMainMessages::Quit) => break,
+                        Ok(ToMainMessages::Quit) => {
+                            let _ = window_tx.send_async(WindowMessage::Quit).await;
+                            break
+                        },
 
                         Err(e) => {
                             error!("Main Loop Broken, bailing: {e}");
@@ -214,6 +217,7 @@ fn main() -> Result<()> {
                 }
 
                 _ = shutdown_signal() => {
+                    let _ = window_tx.send_async(WindowMessage::Quit).await;
                     break;
                 }
             }
