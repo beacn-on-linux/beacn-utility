@@ -1,8 +1,10 @@
 use crate::devices::manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
-use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};
+use crate::devices::states::audio::AudioState;
+use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use crate::get_config_path;
 use anyhow::Result;
 use beacn_lib::flume::Sender;
+use beacn_lib::manager::DeviceLocation;
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -16,6 +18,16 @@ pub struct ControlState {
     pub device_sender: Option<Sender<ControlMessage>>,
 
     pub saved_settings: SavedSettings,
+}
+
+impl State for ControlState {
+    fn location(&self) -> &DeviceLocation {
+        &self.device_definition.location
+    }
+
+    fn definition(&self) -> &DeviceDefinition {
+        &self.device_definition
+    }
 }
 
 impl ControlState {

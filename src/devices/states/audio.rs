@@ -17,7 +17,7 @@ use enum_map::{Enum, EnumMap};
 use crate::devices::manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
 };
-use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState};
+use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
@@ -31,7 +31,7 @@ use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
-use beacn_lib::manager::DeviceType;
+use beacn_lib::manager::{DeviceLocation, DeviceType};
 use log::debug;
 use strum_macros::EnumIter;
 
@@ -57,6 +57,16 @@ pub struct AudioState {
     pub subwoofer: Subwoofer,
 
     pub linked: Option<Vec<LinkedApp>>,
+}
+
+impl State for AudioState {
+    fn location(&self) -> &DeviceLocation {
+        &self.device_definition.location
+    }
+
+    fn definition(&self) -> &DeviceDefinition {
+        &self.device_definition
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone)]
