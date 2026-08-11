@@ -121,7 +121,10 @@ fn main() -> Result<()> {
         || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
 
     // Firstly, create a message bus which allows threads to message back to here
-    let (main_tx, main_rx) = unbounded();
+    let (window_tx, window_rx) = unbounded();
+    if !hide_initial {
+        window_tx.send(WindowMessage::OpenWindow)?;
+    }
 
     // Check whether an existing instance is running, and bail if so
     if tokio_rt.block_on(handle_active_instance()) {
@@ -130,20 +133,20 @@ fn main() -> Result<()> {
 
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = unbounded();
-    let ipc_main_tx = main_tx.clone();
-    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_main_tx));
+    let ipc_window_tx = window_tx.clone();
+    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_window_tx));
 
     // Ok, spawn up the Tray Handler
     #[cfg_attr(not(unix), allow(unused))]
     let (tray_tx, tray_rx) = unbounded();
 
     #[cfg_attr(not(unix), allow(unused))]
-    let tray_main_tx = main_tx.clone();
+    let tray_window_tx = window_tx.clone();
     let tray = task::spawn(async move {
         #[cfg(unix)]
         {
             use managers::tray::handle_tray;
-            if let Err(e) = handle_tray(tray_rx, tray_main_tx).await {
+            if let Err(e) = handle_tray(tray_rx, tray_window_tx).await {
                 error!("Failed to Spawn Tray: {e}");
             }
         }
@@ -159,7 +162,6 @@ fn main() -> Result<()> {
 
     // Wait for a message to do stuff
     debug!("Running Message Handler...");
-    let (window_tx, window_rx) = unbounded();
 
     // Honestly, we might not need this loop, the UI can read and manage its own channels
     let (signal_tx, signal_rx) = unbounded();
@@ -236,20 +238,11 @@ fn spawn_iced_window(
             let device_rx = device_rx.clone();
             let window_rx = window_rx.clone();
 
-            let (mut app_state, boot) = BeacnUtility::new(Flags {
+            BeacnUtility::new(Flags {
                 window_settings: window_settings.clone(),
                 device_rx,
                 window_rx,
-            });
-
-            let (initial_id, open_task) = window::open(window_settings.clone());
-            app_state.active_id = Some(initial_id);
-
-            let mapped_open_task = open_task.map(move |_| Message::WindowOpened(initial_id));
-            let combined_task = Task::batch(vec![boot, mapped_open_task]);
-
-            // Track your initial_id in your state here if needed, then yield:
-            (app_state, combined_task)
+            })
         },
         BeacnUtility::update,
         BeacnUtility::view,
