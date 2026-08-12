@@ -22,14 +22,12 @@ impl ConfigPage for SuppressorPage {
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
         let suppressor = state.suppressor;
-        let enabled = checkbox(suppressor.enabled).on_toggle(move |v| {
-            let msg = Message::Suppressor(Suppressor::Enabled(v));
-            ChildMessage::State(msg)
-        });
-
-        let enabled = row![enabled, "Enabled"]
-            .spacing(6)
-            .align_y(Alignment::Center);
+        let enabled = checkbox(suppressor.enabled)
+            .label("Enabled")
+            .on_toggle(move |v| {
+                let msg = Message::Suppressor(Suppressor::Enabled(v));
+                ChildMessage::State(msg)
+            });
 
         let enabled = column![enabled, Space::new().height(10.0)];
 

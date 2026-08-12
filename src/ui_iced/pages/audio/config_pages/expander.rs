@@ -48,9 +48,11 @@ impl ConfigPage for ExpanderPage {
         let expander = &state.expander;
         let values = &expander.values[expander_mode];
 
-        let enabled = checkbox(values.enabled).on_toggle(|v| ExpanderMessage::SetEnabled(v));
+        let enabled = checkbox(values.enabled)
+            .label("Enabled")
+            .on_toggle(|v| ExpanderMessage::SetEnabled(v));
+
         let enabled = Element::from(enabled).map(ChildMessage::Expander);
-        let enabled = row![enabled, "Enabled"].spacing(6).align_y(Center);
 
         let enabled = column![enabled, Space::new().height(10.0)];
 

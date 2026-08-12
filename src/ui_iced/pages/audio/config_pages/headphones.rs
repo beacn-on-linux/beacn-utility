@@ -112,11 +112,10 @@ impl ConfigPage for HeadphonesPage {
 
         // Headphones EQ
         let value = state.headphones.fx_enabled;
-        let enabled = checkbox(value).on_toggle(|v| HeadphonesMessage::SetEQEnabled(v));
+        let enabled = checkbox(value)
+            .label("Equalizer")
+            .on_toggle(|v| HeadphonesMessage::SetEQEnabled(v));
         let enabled = Element::from(enabled).map(ChildMessage::Headphones);
-        let enabled = row![enabled, "Equalizer"]
-            .spacing(6)
-            .align_y(Alignment::Center);
 
         let value = state.headphone_eq.eq[HPEQType::Bass].amount;
         let range = HPEQValue::range();

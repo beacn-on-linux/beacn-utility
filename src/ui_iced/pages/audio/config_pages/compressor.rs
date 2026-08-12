@@ -48,9 +48,10 @@ impl ConfigPage for CompressorPage {
         let compressor = &state.compressor;
         let values = &compressor.values[compressor_mode];
 
-        let enabled = checkbox(values.enabled).on_toggle(|v| CompressorMessage::SetEnabled(v));
+        let enabled = checkbox(values.enabled)
+            .label("Enabled")
+            .on_toggle(|v| CompressorMessage::SetEnabled(v));
         let enabled = Element::from(enabled).map(ChildMessage::Compressor);
-        let enabled = row![enabled, "Enabled"].spacing(6).align_y(Center);
 
         let enabled = column![enabled, Space::new().height(10.0)];
 
