@@ -1,7 +1,7 @@
 use crate::devices::states::audio::AudioState;
 use crate::ui_iced::pages::audio::config_pages::compressor::CompressorPage;
 use crate::ui_iced::pages::audio::config_pages::expander::ExpanderPage;
-use crate::ui_iced::pages::audio::config_pages::headphones::Headphones;
+use crate::ui_iced::pages::audio::config_pages::headphones::HeadphonesPage;
 use crate::ui_iced::pages::audio::config_pages::mic_equaliser::{MicEqualiser, MicEqualiserEvent};
 use crate::ui_iced::pages::audio::config_pages::mic_setup::MicrophoneSetup;
 use crate::ui_iced::pages::audio::config_pages::suppressor::SuppressorPage;
@@ -42,7 +42,7 @@ impl Configuration {
                 Box::new(SuppressorPage),
                 Box::new(ExpanderPage),
                 Box::new(CompressorPage),
-                Box::new(Headphones),
+                Box::new(HeadphonesPage),
             ],
         }
     }
