@@ -263,6 +263,30 @@ impl AudioState {
         Ok(())
     }
 
+    pub async fn get_linked_async(&mut self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Linked(LinkedCommands::GetLinked(tx));
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send_async(message).await?;
+                let message = rx.await?;
+
+                debug!("Result: {message:?}");
+
+                // TODO: Should probably better error handle here.. :D
+                if let Ok(apps) = message {
+                    self.linked = apps;
+                } else {
+                    self.linked = None;
+                }
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+        Ok(())
+    }
+
     pub fn set_link(&mut self, app: LinkedApp) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Linked(LinkedCommands::SetLinked(app, tx));
@@ -411,7 +435,9 @@ impl AudioState {
         }
 
         if state.device_definition.device_type == DeviceType::BeacnStudio {
-            let _ = state.get_linked();
+            if let Some(false) = state.headphones.studio_driverless {
+                let _ = state.get_linked_async().await;
+            }
         }
         state.device_state.state = LoadState::Running;
         state
