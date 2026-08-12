@@ -6,7 +6,7 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity, SuppressorStyle};
 use beacn_lib::types::{HasRange, Percent};
 use iced::widget::{Space, checkbox, column, row};
-use iced::{Alignment, Element, Length, Padding, Task};
+use iced::{Alignment, Element, Length, Task};
 use std::ops::RangeInclusive;
 
 pub struct SuppressorPage;
@@ -50,13 +50,13 @@ impl ConfigPage for SuppressorPage {
         let value = suppressor.amount;
         let range = Percent::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
-        let amount = draw_horizontal_range("Amount", value, range, 1, "%", |v| {
+        let amount = draw_horizontal_range("Amount", value, range, "%", |v| {
             let msg = Message::Suppressor(Suppressor::Amount(Percent(v as f32)));
             ChildMessage::State(msg)
         });
 
         let value = suppressor.sense;
-        let sense = draw_horizontal_range("Sensitivity", value, 0..=100, 1, "%", |v| {
+        let sense = draw_horizontal_range("Sensitivity", value, 0..=100, "%", |v| {
             let value = -120.0 + (60.0 * (v as f32 / 100.0));
 
             let msg = Message::Suppressor(Suppressor::Sensitivity(SuppressorSensitivity(value)));

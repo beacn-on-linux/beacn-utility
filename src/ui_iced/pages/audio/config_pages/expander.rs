@@ -72,7 +72,7 @@ impl ConfigPage for ExpanderPage {
         let value = values.threshold;
         let range = ExpanderThreshold::range();
         let range = (*range.start() as i8)..=(*range.end() as i8);
-        let threshold = draw_horizontal_range("Threshold", value, range, 1, "dB", move |v| {
+        let threshold = draw_horizontal_range("Threshold", value, range, "dB", move |v| {
             let msg = Expander::Threshold(expander_mode, ExpanderThreshold(v as f32));
             let msg = Message::Expander(msg);
             ChildMessage::State(msg)
@@ -80,7 +80,7 @@ impl ConfigPage for ExpanderPage {
 
         // In simple mode, we just have an 'amount', but that internally maps to the Ratio
         let value = Self::ratio_to_precent(values.ratio);
-        let amount = draw_horizontal_range("Amount", value, 0..=100, 1, "%", |v| {
+        let amount = draw_horizontal_range("Amount", value, 0..=100, "%", |v| {
             let ratio = ExpanderRatio(Self::percent_to_ratio(v));
             let msg = Message::Expander(Expander::Ratio(ExpanderMode::Simple, ratio));
 
@@ -90,7 +90,7 @@ impl ConfigPage for ExpanderPage {
         // For everything else, there's mastercard
         let value = values.ratio;
         let range = ExpanderRatio::range();
-        let ratio = draw_horizontal_range("Ratio", value, range, 0.1, ":1", move |v| {
+        let ratio = draw_horizontal_range("Ratio", value, range, ":1", move |v| {
             let msg = Message::Expander(Expander::Ratio(expander_mode, ExpanderRatio(v)));
             ChildMessage::State(msg)
         });
@@ -98,7 +98,7 @@ impl ConfigPage for ExpanderPage {
         let value = values.attack;
         let range = TimeFrame::range();
         let range = (*range.start() as u16)..=(*range.end() as u16);
-        let attack = draw_horizontal_range("Attack", value, range, 10, "ms", move |v| {
+        let attack = draw_horizontal_range("Attack", value, range, "ms", move |v| {
             let msg = Message::Expander(Expander::Attack(expander_mode, TimeFrame(v as f32)));
             ChildMessage::State(msg)
         });
@@ -106,7 +106,7 @@ impl ConfigPage for ExpanderPage {
         let value = values.release;
         let range = TimeFrame::range();
         let range = (*range.start() as u16)..=(*range.end() as u16);
-        let release = draw_horizontal_range("Release", value, range, 10, "ms", move |v| {
+        let release = draw_horizontal_range("Release", value, range, "ms", move |v| {
             let msg = Message::Expander(Expander::Release(expander_mode, TimeFrame(v as f32)));
             ChildMessage::State(msg)
         });

@@ -9,7 +9,8 @@ use crate::ui_iced::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui_iced::pages::page::{AudioPage, PageMessage};
 use crate::ui_iced::widgets::helpers::composite::draw_range;
 use crate::ui_iced::widgets::helpers::tabs::render_tab;
-use beacn_lib::audio::messages::headphones::HPMicOutputGain;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::types::HasRange;
 use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
@@ -81,7 +82,6 @@ impl Configuration {
             "Output Gain",
             value,
             range,
-            1.0,
             "dB",
             ConfigMessage::OutputGainChanged,
         );
@@ -128,7 +128,10 @@ impl AudioPage for Configuration {
                 }
 
                 ConfigMessage::OutputGainChanged(gain) => {
-                    state.headphones.output_gain = gain;
+                    let msg = Headphones::MicOutputGain(HPMicOutputGain(gain));
+                    let msg = Message::Headphones(msg);
+                    let _ = state.handle_message(msg);
+
                     Task::none()
                 }
 

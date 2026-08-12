@@ -71,7 +71,7 @@ impl ConfigPage for HeadphonesPage {
         let device_type = state.device_definition.device_type.clone();
         let value = state.headphones.mic_monitor;
         let range = HPMicMonitorLevel::range();
-        let mic_monitor = draw_range("Mic Monitor", value, range, 1.0, "dB", move |v| {
+        let mic_monitor = draw_range("Mic Monitor", value, range, "dB", move |v| {
             let command = match device_type {
                 DeviceType::BeacnMic => Headphones::MicMonitor(HPMicMonitorLevel(v)),
                 DeviceType::BeacnStudio => Headphones::StudioMicMonitor(HPMicMonitorLevel(v)),
@@ -99,7 +99,7 @@ impl ConfigPage for HeadphonesPage {
 
         let value = state.headphones.level;
         let range = HPLevel::range();
-        let headphones = draw_range("Headphones", value, range, 1.0, "dB", |v| {
+        let headphones = draw_range("Headphones", value, range, "dB", |v| {
             let msg = Message::Headphones(Headphones::HeadphoneLevel(HPLevel(v)));
             ChildMessage::State(msg)
         });
@@ -120,21 +120,21 @@ impl ConfigPage for HeadphonesPage {
 
         let value = state.headphone_eq.eq[HPEQType::Bass].amount;
         let range = HPEQValue::range();
-        let bass = draw_range("Bass", value, range, 1.0, "dB", |v| {
+        let bass = draw_range("Bass", value, range, "dB", |v| {
             let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Bass, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
         let value = state.headphone_eq.eq[HPEQType::Mids].amount;
         let range = HPEQValue::range();
-        let mids = draw_range("Mids", value, range, 1.0, "dB", |v| {
+        let mids = draw_range("Mids", value, range, "dB", |v| {
             let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Mids, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
         let value = state.headphone_eq.eq[HPEQType::Treble].amount;
         let range = HPEQValue::range();
-        let treble = draw_range("Treble", value, range, 1.0, "dB", |v| {
+        let treble = draw_range("Treble", value, range, "dB", |v| {
             let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Treble, HPEQValue(v)));
             ChildMessage::State(msg)
         });
@@ -142,7 +142,7 @@ impl ConfigPage for HeadphonesPage {
         let value = state.subwoofer.amount;
         let range = SubwooferAmount::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
-        let woofer = draw_range("Subwoofer", value, range, 1, "", |v| {
+        let woofer = draw_range("Subwoofer", value, range, "", |v| {
             let message = HeadphonesMessage::SetSubwooferAmount(v);
             ChildMessage::Headphones(message)
         });

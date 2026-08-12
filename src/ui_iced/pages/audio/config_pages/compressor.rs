@@ -72,7 +72,7 @@ impl ConfigPage for CompressorPage {
         let value = values.threshold;
         let range = CompressorThreshold::range();
         let range = (*range.start() as i8)..=(*range.end() as i8);
-        let threshold = draw_horizontal_range("Threshold", value, range, 1, "dB", move |v| {
+        let threshold = draw_horizontal_range("Threshold", value, range, "dB", move |v| {
             let msg = Compressor::Threshold(compressor_mode, CompressorThreshold(v as f32));
             let msg = Message::Compressor(msg);
             ChildMessage::State(msg)
@@ -80,7 +80,7 @@ impl ConfigPage for CompressorPage {
 
         // In simple mode, we just have an 'amount', but that internally maps to the Ratio
         let value = map_to_range(values.ratio, 1.0, 10.0, 0.0, 10.0).round() as u8;
-        let amount = draw_horizontal_range("Amount", value, 0..=10, 1, "", |v| {
+        let amount = draw_horizontal_range("Amount", value, 0..=10, "", |v| {
             let ratio = map_to_range(v as f32, 0.0, 10.0, 1.0, 10.0);
             let ratio = (ratio * 100.0).round() / 100.0;
             let ratio = CompressorRatio(ratio);
@@ -92,7 +92,7 @@ impl ConfigPage for CompressorPage {
         // For everything else, there's mastercard
         let value = values.ratio;
         let range = CompressorRatio::range();
-        let ratio = draw_horizontal_range("Ratio", value, range, 0.1, ":1", move |v| {
+        let ratio = draw_horizontal_range("Ratio", value, range, ":1", move |v| {
             let msg = Message::Compressor(Compressor::Ratio(compressor_mode, CompressorRatio(v)));
             ChildMessage::State(msg)
         });
@@ -100,7 +100,7 @@ impl ConfigPage for CompressorPage {
         let value = values.attack;
         let range = TimeFrame::range();
         let range = (*range.start() as u16)..=(*range.end() as u16);
-        let attack = draw_horizontal_range("Attack", value, range, 10, "ms", move |v| {
+        let attack = draw_horizontal_range("Attack", value, range, "ms", move |v| {
             let msg = Message::Compressor(Compressor::Attack(compressor_mode, TimeFrame(v as f32)));
             ChildMessage::State(msg)
         });
@@ -108,7 +108,7 @@ impl ConfigPage for CompressorPage {
         let value = values.release;
         let range = TimeFrame::range();
         let range = (*range.start() as u16)..=(*range.end() as u16);
-        let release = draw_horizontal_range("Release", value, range, 10, "ms", move |v| {
+        let release = draw_horizontal_range("Release", value, range, "ms", move |v| {
             let msg = Compressor::Release(compressor_mode, TimeFrame(v as f32));
             let msg = Message::Compressor(msg);
             ChildMessage::State(msg)
@@ -116,7 +116,7 @@ impl ConfigPage for CompressorPage {
 
         let value = values.makeup;
         let range = MakeUpGain::range();
-        let makeup = draw_range("Make-Up Gain", value, range, 0.1, "dB", move |v| {
+        let makeup = draw_range("Make-Up Gain", value, range, "dB", move |v| {
             let msg = Compressor::MakeupGain(compressor_mode, MakeUpGain(v));
             let msg = Message::Compressor(msg);
             ChildMessage::State(msg)

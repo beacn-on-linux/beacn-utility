@@ -9,7 +9,6 @@ pub fn draw_range<'a, T, V>(
     title: &'a str,
     value: V,
     range: RangeInclusive<V>,
-    step: V,
     suffix: &'a str,
     on_change: impl Fn(V) -> T + Clone + 'a,
 ) -> Element<'a, T>
@@ -22,9 +21,7 @@ where
     let title_spacer = Space::new().height(8.0);
 
     let slider_on_change = on_change.clone();
-    let mut slider = themed_slider(range.clone(), value, slider_on_change)
-        .vertical()
-        .step(step);
+    let mut slider = themed_slider(range.clone(), value, slider_on_change).vertical();
 
     // If we're a float, force it to 1 decimal place.
     if !V::INTEGRAL {
@@ -49,7 +46,6 @@ pub fn draw_horizontal_range<'a, T, V>(
     title: &'a str,
     value: V,
     range: RangeInclusive<V>,
-    step: V,
     suffix: &'a str,
     on_change: impl Fn(V) -> T + Clone + 'a,
 ) -> Element<'a, T>
@@ -62,7 +58,7 @@ where
     let title_spacer = Space::new().width(10.0);
 
     let slider_on_change = on_change.clone();
-    let mut slider = themed_slider(range.clone(), value, slider_on_change).step(step);
+    let mut slider = themed_slider(range.clone(), value, slider_on_change);
 
     // If we're a float, force it to 1 decimal place.
     if !V::INTEGRAL {
@@ -80,7 +76,6 @@ where
         .width(Length::Fill)
         .height(Length::Fill)
         .align_y(Alignment::Center);
-    // .align_x(Alignment::Center);
 
     container(layout)
         .width(Length::Fill)
