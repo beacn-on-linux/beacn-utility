@@ -3,17 +3,19 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::app::DeviceState;
+use crate::ui_iced::pages::audio::about::AboutMessage;
 use crate::ui_iced::pages::audio::config::ConfigMessage;
 use crate::ui_iced::pages::common::error_page::ErrorPageMessages;
 use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
+    AboutPage(AboutMessage),
+    ConfigPage(ConfigMessage),
     ErrorPage(ErrorPageMessages),
-    ConfigPage(ConfigMessage), // Empty for now
 }
 
-pub trait Page {
+pub(crate) trait Page {
     /// The icon to show in the left panel
     fn icon(&self) -> &'static str {
         "error"
@@ -40,7 +42,7 @@ pub trait Page {
 // Page trait, so we can transparently handle different types, will map x_fn() -> x()
 macro_rules! page_trait {
     ($trait_name:ident, $wrapper_name:ident, $state_type:ty, $variant:ident) => {
-        pub trait $trait_name {
+        pub(crate) trait $trait_name {
             fn icon(&self) -> &'static str {
                 "error"
             }
@@ -59,7 +61,7 @@ macro_rules! page_trait {
             fn view(&self, state: &$state_type) -> Element<'_, PageMessage>;
         }
 
-        pub struct $wrapper_name<T: $trait_name>(pub T);
+        pub(crate) struct $wrapper_name<T: $trait_name>(pub T);
 
         impl<T: $trait_name> Page for $wrapper_name<T> {
             fn icon(&self) -> &'static str {
