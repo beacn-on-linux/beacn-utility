@@ -121,7 +121,7 @@ impl ConfigPage for CompressorPage {
             let msg = Message::Compressor(msg);
             ChildMessage::State(msg)
         });
-        let makeup = container(makeup).padding(10);
+        let makeup = container(makeup).padding(7);
 
         let fields = if is_simple {
             column![threshold, amount]
