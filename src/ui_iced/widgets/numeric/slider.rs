@@ -227,10 +227,6 @@ where
 
     /// Resolves value to the best value matching the configuration
     fn resolve_value(&self, mut value: f64) -> f64 {
-        if self.clamping != Clamping::Never {
-            value = clamp_to_range(value, &self.range);
-        }
-
         if let Some(step) = self.step {
             let start = *self.range.start();
             value = start + ((value - start) / step).round() * step;
@@ -238,6 +234,10 @@ where
 
         if let Some(max_decimals) = self.max_decimals {
             value = emath::round_to_decimals(value, max_decimals);
+        }
+
+        if self.clamping != Clamping::Never {
+            value = clamp_to_range(value, &self.range);
         }
 
         value
