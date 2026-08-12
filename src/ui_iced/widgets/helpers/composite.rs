@@ -42,7 +42,7 @@ where
         .height(Length::Fill)
         .align_x(Alignment::Center);
 
-    container(layout).width(80).height(Length::Fill).into()
+    container(layout).width(85).height(Length::Fill).into()
 }
 
 pub fn draw_horizontal_range<'a, T, V>(
