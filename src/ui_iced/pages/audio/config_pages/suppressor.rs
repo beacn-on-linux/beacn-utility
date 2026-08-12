@@ -29,13 +29,9 @@ impl ConfigPage for SuppressorPage {
 
         let enabled = row![enabled, "Enabled"]
             .spacing(6)
-            .padding({
-                Padding {
-                    bottom: 10.0,
-                    ..Default::default()
-                }
-            })
             .align_y(Alignment::Center);
+
+        let enabled = column![enabled, Space::new().height(10.0)];
 
         let is_adaptive = suppressor.style == SuppressorStyle::Adaptive;
         let adaptive = toggle_button("Adaptive", is_adaptive).on_press_with(|| {
