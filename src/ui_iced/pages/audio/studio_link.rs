@@ -2,6 +2,7 @@ use crate::devices::manager::DefinitionState;
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::ui_iced::pages::page::{AudioPage, PageMessage};
+use beacn_lib::manager::DeviceType;
 use iced::Task;
 use iced::widget::{container, text};
 
@@ -18,11 +19,10 @@ impl AudioPage for StudioLink {
     }
 
     fn should_show(&self, state: &AudioState) -> bool {
-        !matches!(state.definition().state, DefinitionState::Error(_))
-
-        // state.definition().device_type == DeviceType::BeacnStudio
-        //     && state.headphones.studio_driverless == Some(false)
-        //true
+        // We're a Beacn Studio, we're not errored, and we're not driverless :D
+        state.definition().device_type == DeviceType::BeacnStudio
+            && !matches!(state.definition().state, DefinitionState::Error(_))
+            && state.headphones.studio_driverless == Some(false)
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
