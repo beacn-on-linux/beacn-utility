@@ -1,24 +1,87 @@
 use crate::devices::states::audio::AudioState;
 use crate::ui_iced::pages::audio::config_pages::{ChildMessage, ConfigPage};
-use iced::widget::container;
-use iced::widget::text;
-use iced::{Element, Task};
+use crate::ui_iced::widgets::helpers::buttons::toggle_button;
+use crate::ui_iced::widgets::helpers::composite::draw_horizontal_range;
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity, SuppressorStyle};
+use beacn_lib::types::{HasRange, Percent};
+use iced::widget::{Space, checkbox, column, row};
+use iced::{Alignment, Element, Length, Padding, Task};
+use std::ops::RangeInclusive;
 
-pub struct Suppressor;
+pub struct SuppressorPage;
 
-#[derive(Debug, Clone)]
-pub(crate) enum SuppressorMessage {}
-
-impl ConfigPage for Suppressor {
+impl ConfigPage for SuppressorPage {
     fn title(&self) -> &'static str {
         "Noise Suppression"
     }
 
-    fn update(&mut self, device: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
+    fn update(&mut self, _state: &mut AudioState, _message: ChildMessage) -> Task<ChildMessage> {
         Task::none()
     }
 
-    fn view(&self, device: &AudioState) -> Element<'_, ChildMessage> {
-        container(text("Suppressor")).into()
+    fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
+        let suppressor = state.suppressor;
+        let enabled = checkbox(suppressor.enabled).on_toggle(move |v| {
+            let msg = Message::Suppressor(Suppressor::Enabled(v));
+            ChildMessage::State(msg)
+        });
+
+        let enabled = row![enabled, "Enabled"]
+            .spacing(6)
+            .padding({
+                Padding {
+                    bottom: 10.0,
+                    ..Default::default()
+                }
+            })
+            .align_y(Alignment::Center);
+
+        let is_adaptive = suppressor.style == SuppressorStyle::Adaptive;
+        let adaptive = toggle_button("Adaptive", is_adaptive).on_press_with(|| {
+            let msg = Message::Suppressor(Suppressor::Style(SuppressorStyle::Adaptive));
+            ChildMessage::State(msg)
+        });
+
+        let is_snapshot = suppressor.style == SuppressorStyle::Snapshot;
+        let snapshot = toggle_button("Snapshot", is_snapshot).on_press_with(|| {
+            let msg = Message::Suppressor(Suppressor::Style(SuppressorStyle::Snapshot));
+            ChildMessage::State(msg)
+        });
+
+        let mode = row![adaptive, snapshot].spacing(8.0).height(20);
+
+        let value = suppressor.amount;
+        let range = Percent::range();
+        let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
+        let amount = draw_horizontal_range("Amount", value, range, 1, "%", |v| {
+            let msg = Message::Suppressor(Suppressor::Amount(Percent(v as f32)));
+            ChildMessage::State(msg)
+        });
+
+        let value = suppressor.sense;
+        let sense = draw_horizontal_range("Sensitivity", value, 0..=100, 1, "%", |v| {
+            let value = -120.0 + (60.0 * (v as f32 / 100.0));
+
+            let msg = Message::Suppressor(Suppressor::Sensitivity(SuppressorSensitivity(value)));
+            ChildMessage::State(msg)
+        });
+
+        let snap_spacer = Space::new().height(10.0);
+        let snap_button = toggle_button("Snapshot Not Supported", false).height(20.0);
+
+        let mut sliders = column![amount].height(Length::Shrink).spacing(10.0);
+        if is_adaptive {
+            sliders = sliders.push(sense);
+        } else {
+            sliders = sliders.push(snap_spacer);
+            sliders = sliders.push(snap_button);
+        }
+
+        column![enabled, mode, sliders]
+            .padding(10.0)
+            .spacing(10.0)
+            .width(330)
+            .into()
     }
 }

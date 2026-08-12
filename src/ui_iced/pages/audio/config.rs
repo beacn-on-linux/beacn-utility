@@ -4,7 +4,7 @@ use crate::ui_iced::pages::audio::config_pages::expander::Expander;
 use crate::ui_iced::pages::audio::config_pages::headphones::Headphones;
 use crate::ui_iced::pages::audio::config_pages::mic_equaliser::{MicEqualiser, MicEqualiserEvent};
 use crate::ui_iced::pages::audio::config_pages::mic_setup::MicrophoneSetup;
-use crate::ui_iced::pages::audio::config_pages::suppressor::Suppressor;
+use crate::ui_iced::pages::audio::config_pages::suppressor::SuppressorPage;
 use crate::ui_iced::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui_iced::pages::page::{AudioPage, PageMessage};
 use crate::ui_iced::widgets::helpers::composite::draw_range;
@@ -39,7 +39,7 @@ impl Configuration {
             selected_tab: 0,
             tab_pages: vec![
                 Box::new(MicrophoneSetup),
-                Box::new(Suppressor),
+                Box::new(SuppressorPage),
                 Box::new(Expander),
                 Box::new(Compressor),
                 Box::new(Headphones),
