@@ -1,4 +1,3 @@
-use crate::WindowMessage;
 use crate::devices::manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
@@ -11,6 +10,7 @@ use crate::ui_iced::pages::{audio, common, control};
 use crate::ui_iced::widgets::helpers::navigation::{
     pipeweaver_sidebar_item, round_nav_button, settings_sidebar_item,
 };
+use crate::{APP_TITLE, WindowMessage};
 use beacn_lib::flume::Receiver;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
 use iced::alignment::{Horizontal, Vertical};
@@ -135,7 +135,7 @@ impl BeacnUtility {
     }
 
     pub fn title(&self, _window_id: window::Id) -> String {
-        "Beacn Utility".into()
+        APP_TITLE.into()
     }
 
     pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
