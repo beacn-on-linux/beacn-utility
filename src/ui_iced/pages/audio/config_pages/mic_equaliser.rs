@@ -138,6 +138,7 @@ impl MicEqualiser {
                         let _ = state.handle_message(Message::Equaliser(msg));
 
                         // Invalidate existing renders for this band
+                        self.view.set_active(self.active_band);
                         self.view.invalidate_band(band);
                     }
                 }
