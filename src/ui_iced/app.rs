@@ -3,7 +3,7 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::events::channel::TrackedReceiver;
-use crate::ui_iced::pages::app::pipeweaver::PipeweaverPage;
+use crate::ui_iced::pages::app::pipeweaver::{PipeweaverMessage, PipeweaverPage};
 use crate::ui_iced::pages::app::settings::{SettingsMessage, SettingsPage};
 use crate::ui_iced::pages::page::{AP, CP, Page, PageMessage};
 use crate::ui_iced::pages::{audio, common, control};
@@ -66,6 +66,7 @@ pub(crate) enum Message {
     Device(DeviceMessage),
 
     ActivatePipeweaver,
+    Pipeweaver(PipeweaverMessage),
 
     ActivateSettings,
     Settings(SettingsMessage),
@@ -118,7 +119,7 @@ impl BeacnUtility {
                 active_device: None,
                 active_page: None,
 
-                pipeweaver_page: PipeweaverPage {},
+                pipeweaver_page: PipeweaverPage::new(),
                 mixer_active: false,
 
                 settings_page: SettingsPage::new(),
@@ -200,6 +201,10 @@ impl BeacnUtility {
                 if let Some(id) = self.active_id {
                     return self.settings_page.update(id, msg).map(Message::Settings);
                 }
+            }
+
+            Message::Pipeweaver(msg) => {
+                return self.pipeweaver_page.update(msg).map(Message::Pipeweaver);
             }
 
             Message::SelectDeviceAndPage { device_id, page_id } => {
@@ -361,7 +366,7 @@ impl BeacnUtility {
 
         // Generate the page content
         let content_area = if self.mixer_active {
-            container(text("Pipeweaver")).into()
+            self.pipeweaver_page.view().map(Message::Pipeweaver)
         } else if self.settings_active {
             self.settings_page.view().map(Message::Settings)
         } else {
