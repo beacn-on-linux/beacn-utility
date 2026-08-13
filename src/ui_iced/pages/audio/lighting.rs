@@ -101,7 +101,6 @@ impl AudioPage for LightingPage {
         ]
         .spacing(15)
         .align_y(Alignment::Start);
-        //let top = row![];
 
         let bottom = row![
             self.mute_options(state),
@@ -111,8 +110,6 @@ impl AudioPage for LightingPage {
         .height(130)
         .spacing(15)
         .align_y(Alignment::Start);
-
-        //let bottom = row![];
 
         let ele = Element::from(
             column![
@@ -201,16 +198,8 @@ impl LightingPage {
     ) -> Element<'a, LightingMessage> {
         let msg = LightingMessage::State(Message::Lighting(msg));
 
-        let text_colour = if active {
-            Color::WHITE
-        } else {
-            Color::from_rgb8(120, 120, 120)
-        };
-
-        let text = text(label).color(text_colour);
-
         // Assemble the button with your precise state colors mapped
-        button(text)
+        button(label)
             .style(move |theme: &Theme, status: Status| {
                 let palette = theme.palette();
 
@@ -222,6 +211,16 @@ impl LightingPage {
                         Status::Hovered | Status::Pressed => Color::from_rgb8(0x46, 0x46, 0x46),
                         _ => Color::TRANSPARENT,
                     }
+                };
+
+                let text_colour = match active {
+                    true => Color::WHITE,
+                    false => match status {
+                        Status::Hovered => Color::WHITE,
+                        Status::Active | Status::Pressed | Status::Disabled => {
+                            Color::from_rgb8(120, 120, 120)
+                        }
+                    },
                 };
 
                 let border_style = match status {
@@ -241,7 +240,7 @@ impl LightingPage {
 
                 button::Style {
                     background: Some(bg_color.into()),
-                    text_color: Color::TRANSPARENT,
+                    text_color: text_colour.into(),
                     border: border_style,
                     shadow: iced::Shadow::default(),
                     snap: false,
