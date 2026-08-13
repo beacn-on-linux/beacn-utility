@@ -115,12 +115,12 @@ impl AudioPage for Configuration {
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
         match message {
-            PageMessage::ConfigPage(msg) => match msg {
+            PageMessage::AudioConfigPage(msg) => match msg {
                 ConfigMessage::Equaliser(event) => self
                     .equaliser
                     .update(state, event)
                     .map(ConfigMessage::Equaliser)
-                    .map(PageMessage::ConfigPage),
+                    .map(PageMessage::AudioConfigPage),
 
                 ConfigMessage::SelectTab(tab_index) => {
                     self.selected_tab = tab_index;
@@ -146,7 +146,7 @@ impl AudioPage for Configuration {
                         Some(page) => page
                             .update(state, child_msg)
                             .map(ConfigMessage::Child)
-                            .map(PageMessage::ConfigPage),
+                            .map(PageMessage::AudioConfigPage),
 
                         None => Task::none(),
                     }
@@ -162,15 +162,15 @@ impl AudioPage for Configuration {
             .equaliser
             .view(state)
             .map(ConfigMessage::Equaliser)
-            .map(PageMessage::ConfigPage);
+            .map(PageMessage::AudioConfigPage);
 
         let controls = self
             .equaliser
             .eq_controls(state)
             .map(ConfigMessage::Equaliser)
-            .map(PageMessage::ConfigPage);
+            .map(PageMessage::AudioConfigPage);
 
-        let bottom = self.bottom_view(state).map(PageMessage::ConfigPage);
+        let bottom = self.bottom_view(state).map(PageMessage::AudioConfigPage);
         column![
             // Remaining space
             container(equaliser)

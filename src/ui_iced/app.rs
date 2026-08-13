@@ -4,8 +4,8 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::events::channel::TrackedReceiver;
-use crate::ui_iced::pages::page::{AP, Page, PageMessage};
-use crate::ui_iced::pages::{audio, common};
+use crate::ui_iced::pages::page::{AP, CP, Page, PageMessage};
+use crate::ui_iced::pages::{audio, common, control};
 use crate::ui_iced::widgets::helpers::navigation::{
     pipeweaver_sidebar_item, round_nav_button, settings_sidebar_item,
 };
@@ -393,7 +393,7 @@ fn create_pages_audio() -> Vec<Box<dyn Page>> {
 
 fn create_pages_controller() -> Vec<Box<dyn Page>> {
     vec![
-        // Box::new(CPW(control_pages::about::About::new())),
+        Box::new(CP(control::about::About::new())),
         Box::new(common::error_page::ErrorPage::new()),
     ]
 }

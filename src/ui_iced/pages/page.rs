@@ -7,14 +7,18 @@ use crate::ui_iced::pages::audio::about::AboutMessage;
 use crate::ui_iced::pages::audio::config::ConfigMessage;
 use crate::ui_iced::pages::audio::lighting::LightingMessage;
 use crate::ui_iced::pages::common::error_page::ErrorPageMessages;
+use crate::ui_iced::pages::control::about::ControlAboutMessage;
 use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
-    AboutPage(AboutMessage),
-    ConfigPage(ConfigMessage),
+    AudioAboutPage(AboutMessage),
+    AudioConfigPage(ConfigMessage),
+    AudioLightingPage(LightingMessage),
+
+    ControlAboutPage(ControlAboutMessage),
+
     ErrorPage(ErrorPageMessages),
-    LightingPage(LightingMessage),
 }
 
 pub(crate) trait Page {
@@ -112,4 +116,4 @@ macro_rules! page_trait {
 }
 
 page_trait!(AudioPage, AP, AudioState, Audio);
-page_trait!(ControllerPage, CPW, ControlState, Control);
+page_trait!(ControllerPage, CP, ControlState, Control);

@@ -62,7 +62,7 @@ impl AudioPage for LightingPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::LightingPage(message) = message else {
+        let PageMessage::AudioLightingPage(message) = message else {
             return Task::none();
         };
 
@@ -125,7 +125,7 @@ impl AudioPage for LightingPage {
         );
 
         // Everything returns state messages, so we'll just map them directly back.
-        ele.map(PageMessage::LightingPage)
+        ele.map(PageMessage::AudioLightingPage)
     }
 }
 

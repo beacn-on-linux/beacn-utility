@@ -32,7 +32,7 @@ impl AudioPage for About {
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::AboutPage(message) = message else {
+        let PageMessage::AudioAboutPage(message) = message else {
             return Task::none();
         };
 
@@ -129,6 +129,6 @@ impl AudioPage for About {
         }
 
         let content = Element::from(content.spacing(8).padding(20));
-        content.map(PageMessage::AboutPage).into()
+        content.map(PageMessage::AudioAboutPage).into()
     }
 }
