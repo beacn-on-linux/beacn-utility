@@ -26,13 +26,14 @@ impl Page for ErrorPage {
     }
 
     fn update_fn(&mut self, _: &mut DeviceState, message: PageMessage) -> Task<PageMessage> {
+        let PageMessage::ErrorPage(message) = message else {
+            return Task::none();
+        };
+
         match message {
-            PageMessage::ErrorPage(url) => match url {
-                ErrorPageMessages::OpenUrl(url) => {
-                    let _ = open::that_detached(url);
-                }
-            },
-            _ => {}
+            ErrorPageMessages::OpenUrl(url) => {
+                let _ = open::that_detached(url);
+            }
         }
 
         Task::none()

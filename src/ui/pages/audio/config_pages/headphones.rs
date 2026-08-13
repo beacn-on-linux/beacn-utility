@@ -21,9 +21,9 @@ pub struct HeadphonesPage;
 
 #[derive(Debug, Clone)]
 pub(crate) enum HeadphonesMessage {
-    SetEQEnabled(bool),
-    SetSubwooferAmount(u8),
-    SetHeadphoneType(HeadphoneTypes),
+    EQEnabled(bool),
+    SubwooferAmount(u8),
+    HeadphoneType(HeadphoneTypes),
 }
 
 impl ConfigPage for HeadphonesPage {
@@ -38,7 +38,7 @@ impl ConfigPage for HeadphonesPage {
 
         match message {
             // Custom message here, need to mass enable / disable
-            HeadphonesMessage::SetEQEnabled(enabled) => {
+            HeadphonesMessage::EQEnabled(enabled) => {
                 let messages = vec![
                     Message::Headphones(Headphones::FXEnabled(enabled)),
                     Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Bass, enabled)),
@@ -51,14 +51,14 @@ impl ConfigPage for HeadphonesPage {
                 }
             }
 
-            HeadphonesMessage::SetSubwooferAmount(amount) => {
+            HeadphonesMessage::SubwooferAmount(amount) => {
                 let messages = Subwoofer::get_amount_messages(amount);
                 for message in messages {
                     let _ = state.handle_message(message);
                 }
             }
 
-            HeadphonesMessage::SetHeadphoneType(headphone_type) => {
+            HeadphonesMessage::HeadphoneType(headphone_type) => {
                 let message = Message::Headphones(Headphones::HeadphoneType(headphone_type));
                 let _ = state.handle_message(message);
             }
@@ -68,7 +68,7 @@ impl ConfigPage for HeadphonesPage {
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
-        let device_type = state.device_definition.device_type.clone();
+        let device_type = state.device_definition.device_type;
         let value = state.headphones.mic_monitor;
         let range = HPMicMonitorLevel::range();
         let mic_monitor = draw_range("Mic Monitor", value, range, "dB", move |v| {
@@ -114,7 +114,7 @@ impl ConfigPage for HeadphonesPage {
         let value = state.headphones.fx_enabled;
         let enabled = checkbox(value)
             .label("Equalizer")
-            .on_toggle(|v| HeadphonesMessage::SetEQEnabled(v));
+            .on_toggle(HeadphonesMessage::EQEnabled);
         let enabled = Element::from(enabled).map(ChildMessage::Headphones);
 
         let value = state.headphone_eq.eq[HPEQType::Bass].amount;
@@ -142,7 +142,7 @@ impl ConfigPage for HeadphonesPage {
         let range = SubwooferAmount::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
         let woofer = draw_range("Subwoofer", value, range, "", |v| {
-            let message = HeadphonesMessage::SetSubwooferAmount(v);
+            let message = HeadphonesMessage::SubwooferAmount(v);
             ChildMessage::Headphones(message)
         });
 
@@ -153,7 +153,7 @@ impl ConfigPage for HeadphonesPage {
             .align_x(Alignment::Center);
 
         let value = Some(state.headphones.headphone_type);
-        let message = |v| ChildMessage::Headphones(HeadphonesMessage::SetHeadphoneType(v));
+        let message = |v| ChildMessage::Headphones(HeadphonesMessage::HeadphoneType(v));
         let amp_power = column![
             radio("In Ear Monitors", InEarMonitors, value, message),
             radio("Line Level", LineLevel, value, message),

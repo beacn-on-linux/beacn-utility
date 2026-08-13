@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum DeviceState {
     Audio(AudioState),
     Control(ControlState),
@@ -63,6 +64,7 @@ pub(crate) struct Flags {
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Message {
     Device(DeviceMessage),
 
@@ -181,7 +183,7 @@ impl BeacnUtility {
                             self.active_page = None;
 
                             for (hash, device) in &mut self.devices {
-                                if let Some(page) = visible_pages(&device).first() {
+                                if let Some(page) = visible_pages(device).first() {
                                     self.active_device = Some(hash.clone());
                                     self.active_page = Some(*page);
 
@@ -249,12 +251,12 @@ impl BeacnUtility {
                 }
 
                 // Firstly, find the new page
-                if let Some(device) = self.devices.get_mut(&device_id) {
-                    if device.pages[page_id].should_show_fn(&device.state) {
-                        self.active_device = Some(device_id.clone());
-                        self.active_page = Some(page_id);
-                        device.pages[page_id].on_open_fn(&device.state);
-                    }
+                if let Some(device) = self.devices.get_mut(&device_id)
+                    && device.pages[page_id].should_show_fn(&device.state)
+                {
+                    self.active_device = Some(device_id.clone());
+                    self.active_page = Some(page_id);
+                    device.pages[page_id].on_open_fn(&device.state);
                 }
             }
 
@@ -299,8 +301,6 @@ impl BeacnUtility {
             Message::WindowResized((_, size)) => {
                 self.window_settings.size = size;
             }
-
-            _ => {}
         }
         Task::none()
     }

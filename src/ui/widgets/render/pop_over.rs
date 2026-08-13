@@ -263,15 +263,15 @@ where
         let is_over = cursor.is_over(layout.bounds());
 
         // Close when clicking outside the popup content.
-        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event {
-            if !is_over {
-                if let Some(message) = self.on_close.clone() {
-                    shell.publish(message);
-                }
-
-                //shell.capture_event();
-                return;
+        if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = event
+            && !is_over
+        {
+            if let Some(message) = self.on_close.clone() {
+                shell.publish(message);
             }
+
+            //shell.capture_event();
+            return;
         }
 
         self.content.as_widget_mut().update(

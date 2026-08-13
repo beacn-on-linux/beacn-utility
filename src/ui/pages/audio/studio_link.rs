@@ -5,9 +5,8 @@ use crate::ui::pages::page::{AudioPage, PageMessage};
 use beacn_lib::audio::LinkChannel;
 use beacn_lib::manager::DeviceType;
 use iced::widget::{button, column, pick_list, row, text};
-use iced::{Alignment, Element, Length, Task};
+use iced::{Alignment, Element, Task};
 use std::fmt::{Display, Formatter};
-use strum::IntoEnumIterator;
 
 #[derive(Debug, Clone)]
 pub(crate) enum StudioLinkMessage {
@@ -35,19 +34,19 @@ impl AudioPage for StudioLink {
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::AudioStudioLinkPage(message) = message else {
+        let PageMessage::AudioStudioLink(message) = message else {
             return Task::none();
         };
 
         match message {
             StudioLinkMessage::LinkChannelChanged(index, channel) => {
-                if let Some(apps) = &mut state.linked {
-                    if let Some(app) = apps.get_mut(index) {
-                        app.channel = channel;
+                if let Some(apps) = &mut state.linked
+                    && let Some(app) = apps.get_mut(index)
+                {
+                    app.channel = channel;
 
-                        let app = app.clone();
-                        let _ = state.set_link(app);
-                    }
+                    let app = app.clone();
+                    let _ = state.set_link(app);
                 }
 
                 Task::none()
@@ -105,7 +104,7 @@ impl AudioPage for StudioLink {
             .padding(10);
 
         let element = Element::from(content);
-        element.map(PageMessage::AudioStudioLinkPage).into()
+        element.map(PageMessage::AudioStudioLink)
     }
 }
 

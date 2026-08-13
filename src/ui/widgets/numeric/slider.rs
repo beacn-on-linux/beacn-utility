@@ -271,20 +271,6 @@ where
     }
 }
 
-/// Shorthand constructor, mirroring iced's `slider(...)`
-pub fn slider<'a, Num, Message, Theme, Renderer>(
-    range: RangeInclusive<Num>,
-    value: Num,
-    on_change: impl Fn(Num) -> Message + 'a,
-) -> Slider<'a, Num, Message, Theme, Renderer>
-where
-    Num: Numeric,
-    Theme: iced_slider::Catalog,
-    Renderer: renderer::Renderer,
-{
-    Slider::new(range, value, on_change)
-}
-
 #[derive(Default)]
 struct State {
     is_dragging: bool,
@@ -300,14 +286,6 @@ where
     Theme: iced_slider::Catalog,
     Renderer: renderer::Renderer,
 {
-    fn tag(&self) -> tree::Tag {
-        tree::Tag::of::<State>()
-    }
-
-    fn state(&self) -> tree::State {
-        tree::State::new(State::default())
-    }
-
     fn size(&self) -> Size<Length> {
         match self.orientation {
             Orientation::Horizontal => Size {
@@ -330,191 +308,6 @@ where
         match self.orientation {
             Orientation::Horizontal => layout::atomic(limits, self.length, self.thickness),
             Orientation::Vertical => layout::atomic(limits, self.thickness, self.length),
-        }
-    }
-
-    fn operate(
-        &mut self,
-        tree: &mut Tree,
-        layout: Layout<'_>,
-        _renderer: &Renderer,
-        operation: &mut dyn widget::Operation,
-    ) {
-        let state = tree.state.downcast_mut::<State>();
-        let bounds = layout.bounds();
-
-        struct SliderFocusable<'s> {
-            state: &'s mut State,
-        }
-
-        impl widget::operation::Focusable for SliderFocusable<'_> {
-            fn is_focused(&self) -> bool {
-                self.state.is_focused
-            }
-
-            fn focus(&mut self) {
-                self.state.is_focused = true;
-            }
-
-            fn unfocus(&mut self) {
-                self.state.is_focused = false;
-            }
-        }
-
-        operation.focusable(None, bounds, &mut SliderFocusable { state });
-    }
-
-    fn update(
-        &mut self,
-        tree: &mut Tree,
-        event: &Event,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        _renderer: &Renderer,
-        _clipboard: &mut dyn Clipboard,
-        shell: &mut Shell<'_, Message>,
-        _viewport: &Rectangle,
-    ) {
-        let bounds = layout.bounds();
-        let state = tree.state.downcast_mut::<State>();
-
-        let position_range = match self.orientation {
-            Orientation::Horizontal => (bounds.x, bounds.x + bounds.width),
-            Orientation::Vertical => (bounds.y + bounds.height, bounds.y),
-        };
-        let axis = |point: iced::Point| match self.orientation {
-            Orientation::Horizontal => point.x,
-            Orientation::Vertical => point.y,
-        };
-        let axis_sign: f32 = match self.orientation {
-            Orientation::Horizontal => 1.0,
-            Orientation::Vertical => -1.0,
-        };
-
-        if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
-            let now_hovered = cursor.is_over(bounds);
-            if now_hovered != state.is_hovered {
-                state.is_hovered = now_hovered;
-                shell.request_redraw();
-            }
-        }
-
-        if let Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
-            state.modifiers = *modifiers;
-        }
-
-        match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(iced::touch::Event::FingerPressed { .. }) => {
-                if let Some(position) = cursor.position_over(bounds) {
-                    let new_value = self.locate_with_aim(axis(position), position_range);
-                    self.commit(new_value, shell);
-                    state.is_dragging = true;
-                    state.is_focused = true;
-                    shell.capture_event();
-                } else if state.is_focused {
-                    state.is_focused = false;
-                }
-            }
-
-            Event::Mouse(mouse::Event::CursorMoved { .. })
-            | Event::Touch(iced::touch::Event::FingerMoved { .. }) => {
-                if state.is_dragging {
-                    if let Some(position) = cursor.land().position() {
-                        let new_value = self.locate_with_aim(axis(position), position_range);
-                        self.commit(new_value, shell);
-                    }
-                    shell.capture_event();
-                }
-            }
-
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(iced::touch::Event::FingerLifted { .. })
-            | Event::Touch(iced::touch::Event::FingerLost { .. }) => {
-                if state.is_dragging {
-                    state.is_dragging = false;
-                    shell.capture_event();
-                }
-            }
-
-            Event::Keyboard(keyboard::Event::KeyPressed {
-                key: pressed_key, ..
-            }) if state.is_focused => {
-                let step_sign = match (self.orientation, pressed_key) {
-                    (Orientation::Horizontal, keyboard::Key::Named(key::Named::ArrowRight)) => {
-                        Some(1.0)
-                    }
-                    (Orientation::Horizontal, keyboard::Key::Named(key::Named::ArrowLeft)) => {
-                        Some(-1.0)
-                    }
-                    (Orientation::Vertical, keyboard::Key::Named(key::Named::ArrowUp)) => Some(1.0),
-                    (Orientation::Vertical, keyboard::Key::Named(key::Named::ArrowDown)) => {
-                        Some(-1.0)
-                    }
-                    _ => None,
-                };
-
-                if let Some(kb_step) = step_sign {
-                    let prev_value = self.effective_value();
-                    let prev_position = self.position_from_value(prev_value, position_range);
-                    let new_position = prev_position + kb_step as f32 * axis_sign;
-
-                    let mut new_value = match self.step {
-                        Some(step) => prev_value + kb_step * step,
-                        None if self.smart_aim => {
-                            let aim_delta = 0.49;
-                            emath::smart_aim::best_in_range_f64(
-                                self.value_from_position(new_position - aim_delta, position_range),
-                                self.value_from_position(new_position + aim_delta, position_range),
-                            )
-                        }
-                        _ => self.value_from_position(new_position, position_range),
-                    };
-
-                    if let Some(max_decimals) = self.max_decimals {
-                        let min_increment = 1.0 / 10.0_f64.powi(max_decimals as i32);
-                        new_value = if new_value > prev_value {
-                            f64::max(new_value, prev_value + min_increment * 1.001)
-                        } else if new_value < prev_value {
-                            f64::min(new_value, prev_value - min_increment * 1.001)
-                        } else {
-                            new_value
-                        };
-                    }
-
-                    self.commit(new_value, shell);
-                    shell.capture_event();
-                }
-            }
-
-            _ => {}
-        }
-    }
-
-    fn mouse_interaction(
-        &self,
-        tree: &Tree,
-        layout: Layout<'_>,
-        cursor: mouse::Cursor,
-        _viewport: &Rectangle,
-        _renderer: &Renderer,
-    ) -> mouse::Interaction {
-        let state = tree.state.downcast_ref::<State>();
-
-        if state.is_dragging {
-            if cfg!(target_os = "windows") {
-                mouse::Interaction::Pointer
-            } else {
-                mouse::Interaction::Grabbing
-            }
-        } else if cursor.is_over(layout.bounds()) {
-            if cfg!(target_os = "windows") {
-                mouse::Interaction::Pointer
-            } else {
-                mouse::Interaction::Grab
-            }
-        } else {
-            mouse::Interaction::default()
         }
     }
 
@@ -773,6 +566,199 @@ where
                     style.handle.background,
                 );
             }
+        }
+    }
+
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<State>()
+    }
+
+    fn state(&self) -> tree::State {
+        tree::State::new(State::default())
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        _renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        let state = tree.state.downcast_mut::<State>();
+        let bounds = layout.bounds();
+
+        struct SliderFocusable<'s> {
+            state: &'s mut State,
+        }
+
+        impl widget::operation::Focusable for SliderFocusable<'_> {
+            fn is_focused(&self) -> bool {
+                self.state.is_focused
+            }
+
+            fn focus(&mut self) {
+                self.state.is_focused = true;
+            }
+
+            fn unfocus(&mut self) {
+                self.state.is_focused = false;
+            }
+        }
+
+        operation.focusable(None, bounds, &mut SliderFocusable { state });
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _renderer: &Renderer,
+        _clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        _viewport: &Rectangle,
+    ) {
+        let bounds = layout.bounds();
+        let state = tree.state.downcast_mut::<State>();
+
+        let position_range = match self.orientation {
+            Orientation::Horizontal => (bounds.x, bounds.x + bounds.width),
+            Orientation::Vertical => (bounds.y + bounds.height, bounds.y),
+        };
+        let axis = |point: iced::Point| match self.orientation {
+            Orientation::Horizontal => point.x,
+            Orientation::Vertical => point.y,
+        };
+        let axis_sign: f32 = match self.orientation {
+            Orientation::Horizontal => 1.0,
+            Orientation::Vertical => -1.0,
+        };
+
+        if let Event::Mouse(mouse::Event::CursorMoved { .. }) = event {
+            let now_hovered = cursor.is_over(bounds);
+            if now_hovered != state.is_hovered {
+                state.is_hovered = now_hovered;
+                shell.request_redraw();
+            }
+        }
+
+        if let Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) = event {
+            state.modifiers = *modifiers;
+        }
+
+        match event {
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
+            | Event::Touch(iced::touch::Event::FingerPressed { .. }) => {
+                if let Some(position) = cursor.position_over(bounds) {
+                    let new_value = self.locate_with_aim(axis(position), position_range);
+                    self.commit(new_value, shell);
+                    state.is_dragging = true;
+                    state.is_focused = true;
+                    shell.capture_event();
+                } else if state.is_focused {
+                    state.is_focused = false;
+                }
+            }
+
+            Event::Mouse(mouse::Event::CursorMoved { .. })
+            | Event::Touch(iced::touch::Event::FingerMoved { .. }) => {
+                if state.is_dragging {
+                    if let Some(position) = cursor.land().position() {
+                        let new_value = self.locate_with_aim(axis(position), position_range);
+                        self.commit(new_value, shell);
+                    }
+                    shell.capture_event();
+                }
+            }
+
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(iced::touch::Event::FingerLifted { .. })
+            | Event::Touch(iced::touch::Event::FingerLost { .. }) => {
+                if state.is_dragging {
+                    state.is_dragging = false;
+                    shell.capture_event();
+                }
+            }
+
+            Event::Keyboard(keyboard::Event::KeyPressed {
+                key: pressed_key, ..
+            }) if state.is_focused => {
+                let step_sign = match (self.orientation, pressed_key) {
+                    (Orientation::Horizontal, keyboard::Key::Named(key::Named::ArrowRight)) => {
+                        Some(1.0)
+                    }
+                    (Orientation::Horizontal, keyboard::Key::Named(key::Named::ArrowLeft)) => {
+                        Some(-1.0)
+                    }
+                    (Orientation::Vertical, keyboard::Key::Named(key::Named::ArrowUp)) => Some(1.0),
+                    (Orientation::Vertical, keyboard::Key::Named(key::Named::ArrowDown)) => {
+                        Some(-1.0)
+                    }
+                    _ => None,
+                };
+
+                if let Some(kb_step) = step_sign {
+                    let prev_value = self.effective_value();
+                    let prev_position = self.position_from_value(prev_value, position_range);
+                    let new_position = prev_position + kb_step as f32 * axis_sign;
+
+                    let mut new_value = match self.step {
+                        Some(step) => prev_value + kb_step * step,
+                        None if self.smart_aim => {
+                            let aim_delta = 0.49;
+                            emath::smart_aim::best_in_range_f64(
+                                self.value_from_position(new_position - aim_delta, position_range),
+                                self.value_from_position(new_position + aim_delta, position_range),
+                            )
+                        }
+                        _ => self.value_from_position(new_position, position_range),
+                    };
+
+                    if let Some(max_decimals) = self.max_decimals {
+                        let min_increment = 1.0 / 10.0_f64.powi(max_decimals as i32);
+                        new_value = if new_value > prev_value {
+                            f64::max(new_value, prev_value + min_increment * 1.001)
+                        } else if new_value < prev_value {
+                            f64::min(new_value, prev_value - min_increment * 1.001)
+                        } else {
+                            new_value
+                        };
+                    }
+
+                    self.commit(new_value, shell);
+                    shell.capture_event();
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        _viewport: &Rectangle,
+        _renderer: &Renderer,
+    ) -> mouse::Interaction {
+        let state = tree.state.downcast_ref::<State>();
+
+        if state.is_dragging {
+            if cfg!(target_os = "windows") {
+                mouse::Interaction::Pointer
+            } else {
+                mouse::Interaction::Grabbing
+            }
+        } else if cursor.is_over(layout.bounds()) {
+            if cfg!(target_os = "windows") {
+                mouse::Interaction::Pointer
+            } else {
+                mouse::Interaction::Grab
+            }
+        } else {
+            mouse::Interaction::default()
         }
     }
 }

@@ -1,10 +1,8 @@
 use enum_map::EnumMap;
 use iced::{Point, Rectangle, Size};
 
-use crate::devices::states::audio::{
-    EqualiserBand, EqualiserBandConfig, EqualiserBandType,
-};
 use crate::devices::states::audio::EqualiserBandType::*;
+use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
 
 /// A full set of equaliser bands, keyed by `EqualiserBand`.
 pub type Bands = EnumMap<EqualiserBand, EqualiserBandConfig>;
@@ -101,11 +99,7 @@ impl EqGeometry {
     ///
     /// This is deliberately kept in the geometry/interaction layer rather
     /// than inside the drawing widget.
-    pub fn hit_test(
-        plot_rect: Rectangle,
-        pointer: Point,
-        bands: &Bands,
-    ) -> Option<EqualiserBand> {
+    pub fn hit_test(plot_rect: Rectangle, pointer: Point, bands: &Bands) -> Option<EqualiserBand> {
         let mut closest_dist = f32::MAX;
         let mut closest_band = None;
 

@@ -62,7 +62,7 @@ impl AudioPage for LightingPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::AudioLightingPage(message) = message else {
+        let PageMessage::AudioLighting(message) = message else {
             return Task::none();
         };
 
@@ -125,7 +125,7 @@ impl AudioPage for LightingPage {
         );
 
         // Everything returns state messages, so we'll just map them directly back.
-        ele.map(PageMessage::AudioLightingPage)
+        ele.map(PageMessage::AudioLighting)
     }
 }
 
@@ -238,7 +238,7 @@ impl LightingPage {
 
                 button::Style {
                     background: Some(bg_color.into()),
-                    text_color: text_colour.into(),
+                    text_color: text_colour,
                     border: border_style,
                     shadow: iced::Shadow::default(),
                     snap: false,
@@ -423,7 +423,7 @@ impl LightingPage {
         .into()
     }
 
-    fn mute_options<'a>(&self, state: &AudioState) -> Element<'_, LightingMessage> {
+    fn mute_options(&self, state: &AudioState) -> Element<'_, LightingMessage> {
         let mode = state.lighting.mute_mode;
 
         let mut content = column![
@@ -463,7 +463,7 @@ impl LightingPage {
         content.into()
     }
 
-    fn suspend_options<'a>(&self, state: &AudioState) -> Element<'_, LightingMessage> {
+    fn suspend_options(&self, state: &AudioState) -> Element<'_, LightingMessage> {
         let mode = state.lighting.suspend_mode;
 
         let mut content = column![
@@ -504,10 +504,7 @@ impl LightingPage {
         }
 
         let content = Element::from(content);
-        content
-            .map(Message::Lighting)
-            .map(LightingMessage::State)
-            .into()
+        content.map(Message::Lighting).map(LightingMessage::State)
     }
 
     fn colour<'a>(
@@ -538,7 +535,7 @@ impl LightingPage {
                 value,
             ))))
         };
-        draw_lighting_range("Ring Brightness", value, range, "", width, on_change).into()
+        draw_lighting_range("Ring Brightness", value, range, "", width, on_change)
     }
 
     fn speed(&self, state: &AudioState, width: Length) -> Element<'_, LightingMessage> {
@@ -581,7 +578,6 @@ impl LightingPage {
         })
         .map(Message::Lighting)
         .map(LightingMessage::State)
-        .into()
     }
 
     fn meter_source(&self, state: &AudioState, width: Length) -> Element<'_, LightingMessage> {
@@ -602,10 +598,7 @@ impl LightingPage {
         .align_y(Alignment::Center);
 
         let content = Element::from(content);
-        content
-            .map(Message::Lighting)
-            .map(LightingMessage::State)
-            .into()
+        content.map(Message::Lighting).map(LightingMessage::State)
     }
 
     fn colour_swatch<'a>(

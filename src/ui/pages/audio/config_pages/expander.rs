@@ -50,7 +50,7 @@ impl ConfigPage for ExpanderPage {
 
         let enabled = checkbox(values.enabled)
             .label("Enabled")
-            .on_toggle(|v| ExpanderMessage::SetEnabled(v));
+            .on_toggle(ExpanderMessage::SetEnabled);
 
         let enabled = Element::from(enabled).map(ChildMessage::Expander);
 

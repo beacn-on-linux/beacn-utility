@@ -1,19 +1,17 @@
 use crate::devices::states::control::ControlState;
-use crate::ui::pages::audio::about::AboutMessage;
 use crate::ui::pages::info_row;
 use crate::ui::pages::page::{ControllerPage, PageMessage};
 use crate::ui::widgets::helpers::composite::draw_horizontal_range;
-use crate::ui::widgets::helpers::svg::svg_button_unstyled;
 use beacn_lib::manager::DeviceType;
-use iced::widget::{Space, checkbox, column, container, row, rule, text};
-use iced::{Alignment, Element, Length, Task};
+use iced::widget::{Space, container, row, rule, text};
+use iced::{Alignment, Element, Task};
 use std::time::Duration;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum ControlAboutMessage {
-    SetButtonBrightness(u8),
-    SetDisplayBrightness(u8),
-    SetDisplayDim(Duration),
+    ButtonBrightness(u8),
+    DisplayBrightness(u8),
+    DisplayDim(Duration),
 }
 
 pub struct About;
@@ -30,17 +28,17 @@ impl ControllerPage for About {
     }
 
     fn update(&mut self, state: &mut ControlState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::ControlAboutPage(msg) = message else {
+        let PageMessage::ControlAbout(msg) = message else {
             return Task::none();
         };
         match msg {
-            ControlAboutMessage::SetButtonBrightness(brightness) => {
+            ControlAboutMessage::ButtonBrightness(brightness) => {
                 let _ = state.set_button_brightness(brightness, true);
             }
-            ControlAboutMessage::SetDisplayBrightness(brightness) => {
+            ControlAboutMessage::DisplayBrightness(brightness) => {
                 let _ = state.set_display_brightness(brightness, true);
             }
-            ControlAboutMessage::SetDisplayDim(duration) => {
+            ControlAboutMessage::DisplayDim(duration) => {
                 let _ = state.set_display_dim(duration, true);
             }
         }
@@ -63,21 +61,21 @@ impl ControllerPage for About {
         let label = text("Display Brightness:").width(120);
         let value = state.saved_settings.display_brightness;
         let range = 1..=100;
-        let msg = ControlAboutMessage::SetDisplayBrightness;
+        let msg = ControlAboutMessage::DisplayBrightness;
         let display_brightness = draw_horizontal_range("", value, range, "%", msg);
         let display_brightness = row![label, display_brightness].align_y(Alignment::Center);
 
         let label = text("Display Timeout:").width(120);
         let value = state.saved_settings.display_dim.as_secs();
         let range = 30..=300;
-        let msg = |v| ControlAboutMessage::SetDisplayDim(Duration::from_secs(v));
+        let msg = |v| ControlAboutMessage::DisplayDim(Duration::from_secs(v));
         let display_dim = draw_horizontal_range("", value, range, "s", msg);
         let display_dim = row![label, display_dim].align_y(Alignment::Center);
 
         let label = text("Button Brightness:").width(120);
         let value = state.saved_settings.button_brightness;
         let range = 1..=10;
-        let msg = ControlAboutMessage::SetButtonBrightness;
+        let msg = ControlAboutMessage::ButtonBrightness;
         let button_brightness = draw_horizontal_range("", value, range, "", msg);
         let button_brightness = row![label, button_brightness].align_y(Alignment::Center);
 
@@ -101,6 +99,6 @@ impl ControllerPage for About {
         content = content.push(display_dim).spacing(8);
 
         let element = Element::from(container(content).padding(20));
-        element.map(PageMessage::ControlAboutPage)
+        element.map(PageMessage::ControlAbout)
     }
 }

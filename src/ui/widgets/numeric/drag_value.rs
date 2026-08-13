@@ -366,18 +366,6 @@ where
     }
 }
 
-/// Shorthand constructor, mirroring iced's `text_input(...)`
-pub fn drag_value<'a, Num, Message, Theme, Renderer>(
-    value: Num,
-) -> DragValue<'a, Num, Message, Theme, Renderer>
-where
-    Num: Numeric,
-    Theme: text_input::Catalog,
-    Renderer: text::Renderer,
-{
-    DragValue::new(value)
-}
-
 struct Focus {
     updated_at: Instant,
 }
@@ -533,7 +521,7 @@ where
 
                     let last_blink = Instant::now().saturating_duration_since(focus.updated_at);
                     let blink_phase = last_blink.as_millis() / CURSOR_BLINK_INTERVAL_MILLIS;
-                    let is_visible = blink_phase % 2 == 0;
+                    let is_visible = blink_phase.is_multiple_of(2);
 
                     if is_visible {
                         renderer.fill_quad(
@@ -920,7 +908,7 @@ where
                                 let sel = selection_range(state.edit_value.len(), state.cursor);
                                 let current = &state.edit_value;
 
-                                if self.valid_edit(&current, sel, state.cursor, &pasted) {
+                                if self.valid_edit(current, sel, state.cursor, &pasted) {
                                     let insert_at = if let Some((s, e)) = sel {
                                         state.edit_value.remove_many(s, e);
                                         s
@@ -949,37 +937,37 @@ where
                     }
                 }
 
-                if let Some(text) = text {
-                    if let Some(c) = text.chars().next().filter(|c| !c.is_control()) {
-                        // Character input only gets here.
+                if let Some(text) = text
+                    && let Some(c) = text.chars().next().filter(|c| !c.is_control())
+                {
+                    // Character input only gets here.
 
-                        let sel = selection_range(state.edit_value.len(), state.cursor);
-                        let current = &state.edit_value;
-                        let inserted = c.to_string();
+                    let sel = selection_range(state.edit_value.len(), state.cursor);
+                    let current = &state.edit_value;
+                    let inserted = c.to_string();
 
-                        if self.valid_edit(&current, sel, state.cursor, &inserted) {
-                            let insert_at = if let Some((s, e)) = sel {
-                                state.edit_value.remove_many(s, e);
-                                s
-                            } else {
-                                cursor_index(state.edit_value.len(), state.cursor)
-                            };
+                    if self.valid_edit(current, sel, state.cursor, &inserted) {
+                        let insert_at = if let Some((s, e)) = sel {
+                            state.edit_value.remove_many(s, e);
+                            s
+                        } else {
+                            cursor_index(state.edit_value.len(), state.cursor)
+                        };
 
-                            state.edit_value.insert(insert_at, c);
-                            state.cursor = CursorState::Index(insert_at + 1);
+                        state.edit_value.insert(insert_at, c);
+                        state.cursor = CursorState::Index(insert_at + 1);
 
-                            self.update_paragraph(state, renderer);
+                        self.update_paragraph(state, renderer);
 
-                            if self.update_while_editing {
-                                self.apply_edit_buffer(state, shell);
-                            }
-
-                            shell.request_redraw();
+                        if self.update_while_editing {
+                            self.apply_edit_buffer(state, shell);
                         }
 
-                        shell.capture_event();
-                        return;
+                        shell.request_redraw();
                     }
+
+                    shell.capture_event();
+                    return;
                 }
 
                 // Any other keys that may be useful

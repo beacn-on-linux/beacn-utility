@@ -32,7 +32,6 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use log::debug;
 use strum_macros::EnumIter;
 
 type Rgb = [u8; 3];
@@ -426,10 +425,10 @@ impl AudioState {
             }
         }
 
-        if state.device_definition.device_type == DeviceType::BeacnStudio {
-            if let Some(false) = state.headphones.studio_driverless {
-                let _ = state.get_linked_async().await;
-            }
+        if state.device_definition.device_type == DeviceType::BeacnStudio
+            && let Some(false) = state.headphones.studio_driverless
+        {
+            let _ = state.get_linked_async().await;
         }
         state.device_state.state = LoadState::Running;
         state

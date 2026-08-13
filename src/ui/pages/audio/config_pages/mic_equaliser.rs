@@ -421,7 +421,7 @@ impl MicEqualiser {
                 ),
             ];
 
-            let eq_buttons = eq_types
+            eq_types
                 .iter()
                 .copied()
                 .enumerate()
@@ -473,9 +473,7 @@ impl MicEqualiser {
                     }
                 })
                 .fold(row![], |row, button| row.push(button))
-                .spacing(1.0);
-
-            eq_buttons
+                .spacing(1.0)
         } else {
             row![]
         };
@@ -615,12 +613,10 @@ impl MicEqualiser {
 }
 
 fn padded_button(text: &str) -> Button<'_, MicEqualiserEvent> {
-    button(text)
-        .padding(Padding {
-            top: 2.0,
-            right: 4.0,
-            bottom: 2.0,
-            left: 4.0,
-        })
-        .into()
+    button(text).padding(Padding {
+        top: 2.0,
+        right: 4.0,
+        bottom: 2.0,
+        left: 4.0,
+    })
 }

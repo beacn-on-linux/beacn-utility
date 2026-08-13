@@ -39,7 +39,6 @@ const LEGACY_BACKGROUND_PARAM: &str = "--startup";
 const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
 const APP_TITLE: &str = "Beacn Utility";
-const AUTO_START_KEY: &str = "autostart";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
 
 static TOKIO_RUNTIME: OnceLock<Handle> = OnceLock::new();

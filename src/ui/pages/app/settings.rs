@@ -39,9 +39,6 @@ impl SettingsPage {
     pub(crate) fn view(&self) -> Element<'_, SettingsMessage> {
         let title = "About the Beacn Utility";
 
-        let version_text = format!("{}", VERSION);
-        let hash_text = format!("{}", HASH);
-
         let autostart: Element<'_, SettingsMessage> =
             if let Ok(autostart_enabled) = self.autostart_enabled {
                 checkbox(autostart_enabled)
@@ -57,8 +54,8 @@ impl SettingsPage {
             Space::new().height(10),
             rule::horizontal(1),
             Space::new().height(10),
-            info_row("Version:", version_text),
-            info_row("Revision:", hash_text),
+            info_row("Version:", VERSION.to_string()),
+            info_row("Revision:", HASH.to_string()),
             Space::new().height(10),
             rule::horizontal(1),
             Space::new().height(10),
@@ -67,7 +64,7 @@ impl SettingsPage {
         .spacing(8)
         .padding(20);
 
-        Element::from(content).into()
+        Element::from(content)
     }
 
     #[cfg(not(target_os = "linux"))]

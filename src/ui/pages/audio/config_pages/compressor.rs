@@ -50,7 +50,7 @@ impl ConfigPage for CompressorPage {
 
         let enabled = checkbox(values.enabled)
             .label("Enabled")
-            .on_toggle(|v| CompressorMessage::SetEnabled(v));
+            .on_toggle(CompressorMessage::SetEnabled);
         let enabled = Element::from(enabled).map(ChildMessage::Compressor);
 
         let enabled = column![enabled, Space::new().height(10.0)];

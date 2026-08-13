@@ -6,7 +6,7 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
 use iced::widget::{Space, checkbox, column, row, rule, text};
-use iced::{Alignment, Element, Length, Task};
+use iced::{Alignment, Element, Task};
 use log::error;
 
 const COMPLIANCE_MODE_INFO_URL: &str =
@@ -33,7 +33,7 @@ impl AudioPage for About {
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
-        let PageMessage::AudioAboutPage(message) = message else {
+        let PageMessage::AudioAbout(message) = message else {
             return Task::none();
         };
 
@@ -121,6 +121,6 @@ impl AudioPage for About {
         }
 
         let content = Element::from(content.spacing(8).padding(20));
-        content.map(PageMessage::AudioAboutPage).into()
+        content.map(PageMessage::AudioAbout)
     }
 }

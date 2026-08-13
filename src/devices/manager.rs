@@ -474,12 +474,14 @@ enum DeviceEntry {
     ),
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum DeviceMessage {
     DeviceArrived(DeviceArriveMessage),
     DeviceRemoved(DeviceLocation),
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub(crate) enum DeviceArriveMessage {
     Audio(AudioState),

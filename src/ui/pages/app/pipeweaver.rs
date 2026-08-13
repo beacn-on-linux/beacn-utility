@@ -1,7 +1,4 @@
-use crate::ui::app::Message;
-use crate::ui::pages::app::settings::SettingsMessage;
-use crate::{HASH, VERSION};
-use iced::widget::{Space, button, checkbox, container, rule, text};
+use iced::widget::{Space, button, container, rule, text};
 use iced::{Alignment, Element, Length, Task};
 
 const PIPEWEAVER_URL: &str = "https://github.com/pipeweaver/pipeweaver";
@@ -67,6 +64,6 @@ impl PipeweaverPage {
         .spacing(8)
         .padding(20);
 
-        Element::from(content).into()
+        Element::from(content)
     }
 }

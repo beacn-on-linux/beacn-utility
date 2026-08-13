@@ -537,7 +537,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         }));
 
         // This is a slightly smaller plot for drawing, just to keep us inside the lines.
-        let mut plot_rect = plot_rect.clone();
+        let mut plot_rect = plot_rect;
         plot_rect.x += EQ_PLOT_BORDER_WIDTH;
         plot_rect.width -= EQ_PLOT_BORDER_WIDTH * 2.0;
 

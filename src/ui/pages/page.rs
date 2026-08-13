@@ -13,12 +13,12 @@ use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
-    AudioAboutPage(AboutMessage),
-    AudioConfigPage(ConfigMessage),
-    AudioLightingPage(LightingMessage),
-    AudioStudioLinkPage(StudioLinkMessage),
+    AudioAbout(AboutMessage),
+    AudioConfig(ConfigMessage),
+    AudioLighting(LightingMessage),
+    AudioStudioLink(StudioLinkMessage),
 
-    ControlAboutPage(ControlAboutMessage),
+    ControlAbout(ControlAboutMessage),
 
     ErrorPage(ErrorPageMessages),
 }
