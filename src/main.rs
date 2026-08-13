@@ -20,16 +20,15 @@ use std::{env, fs};
 use tokio::runtime::{Handle, Runtime};
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
-use crate::ui_iced::app::{BeacnUtility, Flags};
-use crate::ui_iced::runtime::SharedTokioExecutor;
-use crate::ui_iced::widgets::theme::build_beacn_theme;
+use crate::ui::app::{BeacnUtility, Flags};
+use crate::ui::runtime::SharedTokioExecutor;
+use crate::ui::widgets::theme::build_beacn_theme;
 use tokio::{join, task};
 
 pub mod devices;
 mod integrations;
 mod managers;
-mod ui_egui;
-pub mod ui_iced;
+mod ui;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
