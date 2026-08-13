@@ -47,6 +47,7 @@ glutin = "0.32.3"
 # UI Framework (iced)
 iced = { version = "0.14.0", features = ["advanced", "svg", "canvas"] }
 iced_futures = "0.14.0"
+iced_color_picker = "0.14.0"
 
 unicode-segmentation = "1"
 emath = "0.36.1"
@@ -54,8 +55,8 @@ emath = "0.36.1"
 
 # Grab beacn-mic-lib for comms
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["tokio"] }
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.2.2", features = ["tokio"] }
-#beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
+#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.2.2", features = ["tokio"] }
+beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
 # Image Handling
 image = "0.25.10"

@@ -16,34 +16,25 @@ pub fn toggle_button<T>(value: &str, active: bool) -> Button<'_, T> {
         .width(Length::Fill)
         .height(Length::Fill);
 
-    // Assemble the button with your precise state colors mapped
     button(text).style(move |theme: &Theme, status: Status| {
         let palette = theme.palette();
-
-        // Map your explicit background colors based on interaction and presence states
         let bg_color = if active {
             palette.primary
         } else {
             match status {
-                // Hovered state background: #464646
                 Status::Hovered | Status::Pressed => Color::from_rgb8(0x46, 0x46, 0x46),
-
-                // Deselected/Idle background: #3C3C3C
                 _ => Color::from_rgb8(0x3C, 0x3C, 0x3C),
             }
         };
 
-        // Map your custom border stroke rule selection
         let border_style = match status {
-            // Hovered border color: #969696 (apply 1px line thickness)
             Status::Hovered if !active => Border {
                 radius: 5.0.into(),
                 width: 1.0,
                 color: Color::from_rgb8(0x96, 0x96, 0x96),
             },
-            // All other states have clean, borderless edges
             _ => Border {
-                radius: 5.0.into(), // Maintains your soft corner_radius(5)
+                radius: 5.0.into(),
                 width: 0.0,
                 color: Color::TRANSPARENT,
             },

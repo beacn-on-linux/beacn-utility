@@ -384,7 +384,7 @@ impl BeacnUtility {
 fn create_pages_audio() -> Vec<Box<dyn Page>> {
     vec![
         Box::new(AP(audio::config::Configuration::new())),
-        Box::new(AP(audio::lighting::Lighting::new())),
+        Box::new(AP(audio::lighting::LightingPage::new())),
         Box::new(AP(audio::studio_link::StudioLink::new())),
         Box::new(AP(audio::about::About::new())),
         Box::new(common::error_page::ErrorPage::new()),

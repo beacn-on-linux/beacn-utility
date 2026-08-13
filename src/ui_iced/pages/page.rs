@@ -5,6 +5,7 @@ use crate::devices::states::control::ControlState;
 use crate::ui_iced::app::DeviceState;
 use crate::ui_iced::pages::audio::about::AboutMessage;
 use crate::ui_iced::pages::audio::config::ConfigMessage;
+use crate::ui_iced::pages::audio::lighting::LightingMessage;
 use crate::ui_iced::pages::common::error_page::ErrorPageMessages;
 use iced::{Element, Task};
 
@@ -13,6 +14,7 @@ pub(crate) enum PageMessage {
     AboutPage(AboutMessage),
     ConfigPage(ConfigMessage),
     ErrorPage(ErrorPageMessages),
+    LightingPage(LightingMessage),
 }
 
 pub(crate) trait Page {

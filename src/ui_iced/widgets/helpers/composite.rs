@@ -82,3 +82,47 @@ where
         .height(Length::Shrink)
         .into()
 }
+
+// TODO: We should realistically have variants with different params, or a builder
+// We got a lot of copy/pasta here :D
+pub fn draw_lighting_range<'a, T, V>(
+    title: &'a str,
+    value: V,
+    range: RangeInclusive<V>,
+    suffix: &'a str,
+    title_width: Length,
+    on_change: impl Fn(V) -> T + Clone + 'a,
+) -> Element<'a, T>
+where
+    T: Clone + 'a,
+    V: Numeric,
+{
+    // Ok, lets build the components first.
+    let title = text(format!("{title}:")).width(title_width);
+    let title_spacer = Space::new().width(10.0);
+
+    let slider_on_change = on_change.clone();
+    let mut slider = themed_slider(range.clone(), value, slider_on_change);
+
+    // If we're a float, force it to 1 decimal place.
+    if !V::INTEGRAL {
+        slider = slider.max_decimals(1);
+    }
+
+    let slider_spacer = Space::new().width(10.0);
+    let input = styled_drag_value(value, range)
+        .width(Length::Fixed(40.0))
+        .suffix(suffix)
+        .on_change(on_change);
+
+    // Build the layout
+    let layout = row![title, title_spacer, slider, slider_spacer, input]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_y(Alignment::Center);
+
+    container(layout)
+        .width(Length::Fill)
+        .height(Length::Shrink)
+        .into()
+}
