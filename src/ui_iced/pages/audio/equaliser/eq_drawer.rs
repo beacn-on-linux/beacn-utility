@@ -15,6 +15,9 @@ use std::cell::{Cell, RefCell};
 use strum::IntoEnumIterator;
 use wide::f32x8;
 
+// The width of the Plot Border
+const EQ_PLOT_BORDER_WIDTH: f32 = 2.0;
+
 // The number of points to actually use in the curves
 const EQ_CURVE_RESOLUTION: usize = 512;
 
@@ -187,20 +190,19 @@ impl EQDrawView {
 
         frame.fill_rectangle(plot_rect.position(), plot_rect.size(), background);
 
-        let border_width = 2.0;
-        let half = border_width / 2.0;
+        let half = EQ_PLOT_BORDER_WIDTH / 2.0;
         let border_rect = Rectangle::new(
             Point::new(plot_rect.x + half, plot_rect.y + half),
             iced::Size::new(
-                plot_rect.width - border_width,
-                plot_rect.height - border_width,
+                plot_rect.width - EQ_PLOT_BORDER_WIDTH,
+                plot_rect.height - EQ_PLOT_BORDER_WIDTH,
             ),
         );
         frame.stroke(
             &Path::rectangle(border_rect.position(), border_rect.size()),
             Stroke::default()
                 .with_color(axis_stroke_colour)
-                .with_width(border_width),
+                .with_width(EQ_PLOT_BORDER_WIDTH),
         );
 
         for &freq in &freq_ticks {
@@ -208,8 +210,8 @@ impl EQDrawView {
 
             frame.stroke(
                 &Path::line(
-                    Point::new(x, plot_rect.y),
-                    Point::new(x, plot_rect.y + plot_rect.height),
+                    Point::new(x, plot_rect.y + EQ_PLOT_BORDER_WIDTH),
+                    Point::new(x, plot_rect.y + plot_rect.height - EQ_PLOT_BORDER_WIDTH),
                 ),
                 Stroke::default().with_color(grid_colour).with_width(1.0),
             );
@@ -533,6 +535,11 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         geometries.push(self.grid_cache.draw(renderer, bounds.size(), |frame| {
             self.draw_grid(frame, local_rect, plot_rect);
         }));
+
+        // This is a slightly smaller plot for drawing, just to keep us inside the lines.
+        let mut plot_rect = plot_rect.clone();
+        plot_rect.x += EQ_PLOT_BORDER_WIDTH;
+        plot_rect.width -= EQ_PLOT_BORDER_WIDTH * 2.0;
 
         for (index, band) in EqualiserBand::iter().enumerate() {
             if self.bands[band].enabled {
