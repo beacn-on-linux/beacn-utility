@@ -38,7 +38,7 @@ pub(crate) fn settings_sidebar_item(active: bool) -> Element<'static, Message> {
     .into()
 }
 
-pub fn round_nav_button<'a>(img_key: &str, active: bool) -> Button<'a, Message> {
+pub(crate) fn round_nav_button<'a>(img_key: &str, active: bool) -> Button<'a, Message> {
     let tint_color = if active {
         Color::WHITE
     } else {

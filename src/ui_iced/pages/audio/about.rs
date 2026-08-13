@@ -1,11 +1,10 @@
-use crate::devices::manager::AudioMessage;
 use crate::devices::states::audio::AudioState;
 use crate::ui_iced::pages::page::{AudioPage, PageMessage};
-use crate::ui_iced::widgets::helpers::svg::{svg_button, svg_button_unstyled};
+use crate::ui_iced::widgets::helpers::svg::svg_button_unstyled;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
 use beacn_lib::manager::DeviceType;
-use iced::widget::{Space, button, checkbox, column, container, row, rule, text};
+use iced::widget::{Space, checkbox, column, row, rule, text};
 use iced::{Alignment, Element, Length, Task};
 use log::error;
 

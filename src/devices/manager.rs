@@ -38,7 +38,7 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-pub async fn spawn_device_manager(
+pub(crate) async fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,
     event_tx: Sender<DeviceMessage>,
 ) {
@@ -475,13 +475,13 @@ enum DeviceEntry {
 }
 
 #[derive(Debug, Clone)]
-pub enum DeviceMessage {
+pub(crate) enum DeviceMessage {
     DeviceArrived(DeviceArriveMessage),
     DeviceRemoved(DeviceLocation),
 }
 
 #[derive(Debug, Clone)]
-pub enum DeviceArriveMessage {
+pub(crate) enum DeviceArriveMessage {
     Audio(AudioState),
     Control(ControlState),
 }

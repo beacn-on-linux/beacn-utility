@@ -38,7 +38,7 @@ use strum_macros::EnumIter;
 type Rgb = [u8; 3];
 
 #[derive(Debug, Default, Clone)]
-pub struct AudioState {
+pub(crate) struct AudioState {
     pub device_definition: DeviceDefinition,
     pub device_state: DeviceLoadState,
     pub device_sender: Option<Sender<AudioMessage>>,

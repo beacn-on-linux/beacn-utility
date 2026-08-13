@@ -25,10 +25,12 @@ impl Page for ErrorPage {
         matches!(device.definition().state, DefinitionState::Error(_))
     }
 
-    fn update_fn(&mut self, device: &mut DeviceState, message: PageMessage) -> Task<PageMessage> {
+    fn update_fn(&mut self, _: &mut DeviceState, message: PageMessage) -> Task<PageMessage> {
         match message {
             PageMessage::ErrorPage(url) => match url {
-                ErrorPageMessages::OpenUrl(url) => println!("Opening {}", url),
+                ErrorPageMessages::OpenUrl(url) => {
+                    let _ = open::that_detached(url);
+                }
             },
             _ => {}
         }

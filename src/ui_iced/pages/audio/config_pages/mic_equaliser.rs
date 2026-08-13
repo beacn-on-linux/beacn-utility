@@ -89,7 +89,7 @@ impl MicEqualiser {
                 }
                 EQMouseEvent::Moved(position) => {
                     // Check to see whether we're dragging, and have passed the lockout
-                    if let Some(band) = self.active_band_drag
+                    if self.active_band_drag.is_some()
                         && let Some(pressed_at) = self.pressed_at
                         && pressed_at.elapsed() >= DRAG_DELAY
                     {
@@ -218,20 +218,19 @@ impl MicEqualiser {
 
             let value = EQGain(gain);
             let msg = Equaliser::Gain(self.eq_mode, active.into(), value);
-            //let _ = state.handle_message(Message::Equaliser(msg));
+            let _ = state.handle_message(Message::Equaliser(msg));
         }
 
         self.view.invalidate_band(active);
     }
 
-    pub(crate) fn view(&self, state: &AudioState) -> Element<'_, MicEqualiserEvent> {
-        let eq: Element<'_, EQMouseEvent> = Canvas::new(&self.view)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into();
-
-        //column![eq, self.eq_controls(),].into()
-        let eq = eq.map(MicEqualiserEvent::Equaliser);
+    pub(crate) fn view(&self, _: &AudioState) -> Element<'_, MicEqualiserEvent> {
+        let eq = Element::from(
+            Canvas::new(&self.view)
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
+        .map(MicEqualiserEvent::Equaliser);
 
         container(eq)
             .padding(Padding {
@@ -377,13 +376,10 @@ impl MicEqualiser {
                 false => 0.0,
             };
             let range = EQGain::range();
-            let mut gain = styled_drag_value(value, range)
+            let gain = styled_drag_value(value, range)
                 .suffix("dB")
+                .on_change_maybe(enabled)
                 .width(Length::Fixed(75.0));
-
-            if has_gain {
-                gain = gain.on_change(SetGain)
-            }
 
             let gain_text = text("Gain: ");
             row![gain_text, gain]

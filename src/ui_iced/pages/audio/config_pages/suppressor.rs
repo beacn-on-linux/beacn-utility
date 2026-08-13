@@ -6,7 +6,7 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity, SuppressorStyle};
 use beacn_lib::types::{HasRange, Percent};
 use iced::widget::{Space, checkbox, column, row};
-use iced::{Alignment, Element, Length, Task};
+use iced::{Element, Length, Task};
 use std::ops::RangeInclusive;
 
 pub struct SuppressorPage;

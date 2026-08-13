@@ -11,7 +11,7 @@ use beacn_lib::manager::DeviceType;
 use beacn_lib::types::{HasRange, Percent};
 use iced::widget::{Space, column, container, row};
 use iced::widget::{rule, text};
-use iced::{Alignment, Element, Length, Padding, Task};
+use iced::{Alignment, Element, Length, Padding};
 use std::ops::RangeInclusive;
 
 pub struct MicrophoneSetup;
@@ -19,10 +19,6 @@ pub struct MicrophoneSetup;
 impl ConfigPage for MicrophoneSetup {
     fn title(&self) -> &'static str {
         "Mic Setup"
-    }
-
-    fn update(&mut self, device: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
-        Task::none()
     }
 
     fn view(&self, device: &AudioState) -> Element<'_, ChildMessage> {

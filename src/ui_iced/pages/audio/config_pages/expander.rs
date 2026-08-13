@@ -8,7 +8,7 @@ use beacn_lib::audio::messages::expander::{
 };
 use beacn_lib::types::{HasRange, TimeFrame};
 use iced::widget::{Space, checkbox, column, row};
-use iced::{Center, Element, Length, Task};
+use iced::{Element, Length, Task};
 use strum::IntoEnumIterator;
 
 pub struct ExpanderPage;

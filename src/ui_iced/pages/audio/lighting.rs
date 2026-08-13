@@ -662,7 +662,7 @@ impl LightingPage {
         .spacing(4);
 
         let show_button = button("")
-            .style(move |t, s| button::Style {
+            .style(move |_, _| button::Style {
                 background: Some(Background::Color(colour)),
                 text_color: Color::TRANSPARENT,
                 border: Border {

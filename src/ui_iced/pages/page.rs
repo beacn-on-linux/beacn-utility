@@ -29,13 +29,15 @@ pub(crate) trait Page {
     }
 
     /// Called when the page is first opened, allows it to perform setup
-    fn on_open_fn(&mut self, state: &DeviceState) {}
+    fn on_open_fn(&mut self, _: &DeviceState) {}
 
     /// Called when the page is closed, allows it to perform cleanup
     fn on_close_fn(&mut self) {}
 
     /// Maps against an iced update() call for the page
-    fn update_fn(&mut self, device: &mut DeviceState, message: PageMessage) -> Task<PageMessage>;
+    fn update_fn(&mut self, _device: &mut DeviceState, _message: PageMessage) -> Task<PageMessage> {
+        Task::none()
+    }
 
     /// Maps against an iced view() call for the page
     fn view_fn(&self, device: &DeviceState) -> Element<'_, PageMessage>;
@@ -54,12 +56,10 @@ macro_rules! page_trait {
 
             fn on_open(&mut self, _state: &$state_type) {}
             fn on_close(&mut self) {}
+            fn update(&mut self, _state: &mut $state_type, _msg: PageMessage) -> Task<PageMessage> {
+                Task::none()
+            }
 
-            fn update(
-                &mut self,
-                state: &mut $state_type,
-                message: PageMessage,
-            ) -> Task<PageMessage>;
             fn view(&self, state: &$state_type) -> Element<'_, PageMessage>;
         }
 

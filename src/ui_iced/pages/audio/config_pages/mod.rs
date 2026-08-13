@@ -24,7 +24,10 @@ pub(crate) enum ChildMessage {
 pub trait ConfigPage {
     fn title(&self) -> &'static str;
 
-    fn update(&mut self, device: &mut AudioState, message: ChildMessage) -> Task<ChildMessage>;
+    fn update(&mut self, _device: &mut AudioState, _msg: ChildMessage) -> Task<ChildMessage> {
+        Task::none()
+    }
+
     fn view(&self, device: &AudioState) -> Element<'_, ChildMessage>;
 }
 

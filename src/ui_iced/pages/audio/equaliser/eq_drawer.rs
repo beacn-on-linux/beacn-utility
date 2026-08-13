@@ -100,6 +100,7 @@ impl EQDrawView {
     }
 
     /// The full Boundary
+    #[allow(unused)]
     pub fn bounds(&self) -> Rectangle {
         self.bounds.get()
     }
@@ -111,6 +112,7 @@ impl EQDrawView {
     }
 
     /// List of the Bands
+    #[allow(unused)]
     pub fn bands(&self) -> &Bands {
         &self.bands
     }
@@ -127,6 +129,7 @@ impl EQDrawView {
     }
 
     /// Replace a single band's data
+    #[allow(unused)]
     pub fn set_band(&mut self, band: EqualiserBand, config: EqualiserBandConfig) {
         self.bands[band] = config;
         self.invalidate_band(band);
@@ -138,6 +141,7 @@ impl EQDrawView {
     }
 
     /// Sets the border colour of the grid
+    #[allow(unused)]
     pub fn set_border_colour(&mut self, colour: Option<Color>) {
         if self.border_colour != colour {
             self.border_colour = colour;

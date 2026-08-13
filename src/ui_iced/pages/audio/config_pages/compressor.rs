@@ -8,7 +8,7 @@ use beacn_lib::audio::messages::compressor::{
 };
 use beacn_lib::types::{HasRange, MakeUpGain, TimeFrame};
 use iced::widget::{Space, checkbox, column, container, row};
-use iced::{Center, Element, Length, Task};
+use iced::{Element, Length, Task};
 use strum::IntoEnumIterator;
 
 pub struct CompressorPage;

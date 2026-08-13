@@ -19,7 +19,7 @@ use std::collections::HashMap;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction
-pub enum DeviceState {
+pub(crate) enum DeviceState {
     Audio(AudioState),
     Control(ControlState),
 }
@@ -42,7 +42,7 @@ impl State for DeviceState {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // Unlike egui, we actually attach the pages to the device to keep the state synced
 
-pub struct Device {
+pub(crate) struct Device {
     pub state: DeviceState,
     pub pages: Vec<Box<dyn Page>>,
 }
@@ -50,7 +50,7 @@ pub struct Device {
 ////////////////////////////////////////////////////////////////////////////////////////////
 // These are ingress flags, and are passed to the app
 
-pub struct Flags {
+pub(crate) struct Flags {
     pub window_settings: window::Settings,
 
     pub window_rx: Receiver<WindowMessage>,
@@ -60,7 +60,7 @@ pub struct Flags {
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub(crate) enum Message {
     Device(DeviceMessage),
 
     ActivatePipeweaver,
@@ -102,7 +102,7 @@ pub struct BeacnUtility {
 }
 
 impl BeacnUtility {
-    pub fn new(flags: Flags) -> (Self, Task<Message>) {
+    pub(crate) fn new(flags: Flags) -> (Self, Task<Message>) {
         (
             Self {
                 devices: HashMap::new(),
@@ -127,7 +127,7 @@ impl BeacnUtility {
         "Beacn Utility".into()
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Device(msg) => {
                 match msg {
@@ -242,7 +242,7 @@ impl BeacnUtility {
         Task::none()
     }
 
-    pub fn view(&self, _window_id: window::Id) -> Element<'_, Message> {
+    pub(crate) fn view(&self, _window_id: window::Id) -> Element<'_, Message> {
         // If no devices, display no devices message.
         if self.devices.is_empty() {
             return container(
@@ -354,7 +354,7 @@ impl BeacnUtility {
         .into()
     }
 
-    pub fn subscription(&self) -> Subscription<Message> {
+    pub(crate) fn subscription(&self) -> Subscription<Message> {
         let device = TrackedReceiver {
             id: "device_rx",
             rx: self.device_rx.clone(),
