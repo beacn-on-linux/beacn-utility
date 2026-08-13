@@ -326,6 +326,7 @@ pub fn get_cache_path() -> Result<PathBuf> {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn get_autostart_file() -> Result<PathBuf> {
     let base = BaseDirs::new().ok_or(anyhow!("Failed to find Base Directories"))?;
     let config_dir = base.config_dir();
@@ -348,6 +349,11 @@ pub fn get_autostart_file() -> Result<PathBuf> {
     }
 
     Ok(path)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn get_autostart_file() -> Result<PathBuf> {
+    bail!("Autostart is not supported on this platform");
 }
 
 #[cfg(unix)]
