@@ -4,6 +4,8 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::events::channel::TrackedReceiver;
+use crate::ui_iced::pages::app::pipeweaver::PipeweaverPage;
+use crate::ui_iced::pages::app::settings::{SettingsMessage, SettingsPage};
 use crate::ui_iced::pages::page::{AP, CP, Page, PageMessage};
 use crate::ui_iced::pages::{audio, common, control};
 use crate::ui_iced::widgets::helpers::navigation::{
@@ -64,7 +66,9 @@ pub(crate) enum Message {
     Device(DeviceMessage),
 
     ActivatePipeweaver,
+
     ActivateSettings,
+    Settings(SettingsMessage),
 
     // Page Selection
     SelectDeviceAndPage { device_id: String, page_id: usize },
@@ -88,6 +92,10 @@ pub struct BeacnUtility {
     active_device: Option<String>,
     active_page: Option<usize>,
 
+    // Hard Coded Pages
+    pipeweaver_page: PipeweaverPage,
+    settings_page: SettingsPage,
+
     // These are overrides for showing the pipeweaver and settings pages
     mixer_active: bool,
     settings_active: bool,
@@ -110,7 +118,10 @@ impl BeacnUtility {
                 active_device: None,
                 active_page: None,
 
+                pipeweaver_page: PipeweaverPage {},
                 mixer_active: false,
+
+                settings_page: SettingsPage::new(),
                 settings_active: false,
 
                 device_rx: flags.device_rx,
@@ -167,7 +178,35 @@ impl BeacnUtility {
                 }
             }
 
+            Message::ActivatePipeweaver => {
+                self.mixer_active = true;
+                self.settings_active = false;
+
+                self.active_device = None;
+                self.active_device = None;
+            }
+
+            Message::ActivateSettings => {
+                self.mixer_active = false;
+                self.settings_active = true;
+
+                self.active_device = None;
+                self.active_device = None;
+            }
+
+            Message::Settings(msg) => {
+                // Settings will need access to things like portals, which require the window
+                // ID, so pass it along to messages.
+                if let Some(id) = self.active_id {
+                    return self.settings_page.update(id, msg).map(Message::Settings);
+                }
+            }
+
             Message::SelectDeviceAndPage { device_id, page_id } => {
+                // A device page has been clicked, we should clear out of pipewire / about
+                self.mixer_active = false;
+                self.settings_active = false;
+
                 // Check if the requested selection is already exactly what is active
                 let is_active_device = self.active_device.as_ref() == Some(&device_id);
                 let is_active_page = self.active_page == Some(page_id);
@@ -321,17 +360,23 @@ impl BeacnUtility {
             .push(settings_sidebar_item(self.settings_active));
 
         // Generate the page content
-        let content_area = match (&self.active_device, self.active_page) {
-            (Some(id), Some(index)) => {
-                if let Some(device) = self.devices.get(id) {
-                    device.pages[index]
-                        .view_fn(&device.state)
-                        .map(Message::Page)
-                } else {
-                    container(text("Select a device")).into()
+        let content_area = if self.mixer_active {
+            container(text("Pipeweaver")).into()
+        } else if self.settings_active {
+            self.settings_page.view().map(Message::Settings)
+        } else {
+            match (&self.active_device, self.active_page) {
+                (Some(id), Some(index)) => {
+                    if let Some(device) = self.devices.get(id) {
+                        device.pages[index]
+                            .view_fn(&device.state)
+                            .map(Message::Page)
+                    } else {
+                        container(text("Select a device")).into()
+                    }
                 }
+                _ => container(text("No page active")).into(),
             }
-            _ => container(text("No page active")).into(),
         };
 
         // Assemble the final layout

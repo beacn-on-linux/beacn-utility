@@ -1,8 +1,7 @@
-use crate::ui_iced::app::Message;
 use iced::widget::{Row, row, text};
 use iced::{Alignment, Length};
 
-pub mod about;
+pub mod app;
 pub mod audio;
 pub mod common;
 pub mod control;
