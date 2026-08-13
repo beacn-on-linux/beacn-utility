@@ -570,7 +570,7 @@ impl LightingPage {
         let slider_spacer = Space::new().width(10.0);
 
         let input = styled_drag_value(value, range)
-            .width(Length::Fixed(40.0))
+            .width(Length::Fixed(60.0))
             .on_change(on_change);
 
         // Build the layout
