@@ -2,6 +2,7 @@ use crate::devices::manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessa
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
+use crate::integrations::pipeweaver::launch_pipeweaver_ui;
 use crate::ui_iced::events::channel::TrackedReceiver;
 use crate::ui_iced::pages::app::pipeweaver::{PipeweaverMessage, PipeweaverPage};
 use crate::ui_iced::pages::app::settings::{SettingsMessage, SettingsPage};
@@ -173,18 +174,32 @@ impl BeacnUtility {
                         }
                     }
                     DeviceMessage::DeviceRemoved(location) => {
-                        // TODO: If active device is removed, switch to another device.
                         self.devices.remove(&location.hash);
+
+                        if self.active_device.as_ref() == Some(&location.hash) {
+                            self.active_device = None;
+                            self.active_page = None;
+
+                            for (id, device) in &self.devices {
+                                if let Some(page) = visible_pages(&device).first() {
+                                    self.active_device = Some(id.clone());
+                                    self.active_page = Some(*page);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             Message::ActivatePipeweaver => {
-                self.mixer_active = true;
-                self.settings_active = false;
+                if !launch_pipeweaver_ui() {
+                    self.mixer_active = true;
+                    self.settings_active = false;
 
-                self.active_device = None;
-                self.active_device = None;
+                    self.active_device = None;
+                    self.active_device = None;
+                }
             }
 
             Message::ActivateSettings => {
