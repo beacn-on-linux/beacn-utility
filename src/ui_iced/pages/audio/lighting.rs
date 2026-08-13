@@ -224,15 +224,13 @@ impl LightingPage {
                 };
 
                 let border_style = match status {
-                    // Hovered border color: #969696 (apply 1px line thickness)
                     Status::Hovered if !active => Border {
                         radius: 5.0.into(),
                         width: 1.0,
                         color: Color::from_rgb8(0x96, 0x96, 0x96),
                     },
-                    // All other states have clean, borderless edges
                     _ => Border {
-                        radius: 5.0.into(), // Maintains your soft corner_radius(5)
+                        radius: 5.0.into(),
                         width: 0.0,
                         color: Color::TRANSPARENT,
                     },
