@@ -54,8 +54,14 @@ where
     V: Numeric,
 {
     // Ok, lets build the components first.
-    let title = text(format!("{title}:")).align_x(Alignment::End).width(60);
-    let title_spacer = Space::new().width(10.0);
+    let (title, title_spacer) = if title.is_empty() {
+        (text(""), Space::new().width(0.0))
+    } else {
+        (
+            text(format!("{title}:")).align_x(Alignment::End).width(60),
+            Space::new().width(10.0),
+        )
+    };
 
     let slider_on_change = on_change.clone();
     let mut slider = themed_slider(range.clone(), value, slider_on_change);
