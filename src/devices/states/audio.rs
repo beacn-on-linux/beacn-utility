@@ -248,10 +248,6 @@ impl AudioState {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
                 let message = rx.recv()?;
-
-                debug!("Result: {message:?}");
-
-                // TODO: Should probably better error handle here.. :D
                 if let Ok(apps) = message {
                     self.linked = apps;
                 } else {
@@ -273,9 +269,6 @@ impl AudioState {
                 sender.send_async(message).await?;
                 let message = rx.await?;
 
-                debug!("Result: {message:?}");
-
-                // TODO: Should probably better error handle here.. :D
                 if let Ok(apps) = message {
                     self.linked = apps;
                 } else {
@@ -294,9 +287,7 @@ impl AudioState {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
-                let message = rx.recv()?;
-
-                debug!("Result: {message:?}");
+                let _ = rx.recv()?;
             }
             None => bail!("Device Sender not Ready"),
         }
@@ -304,6 +295,7 @@ impl AudioState {
         Ok(())
     }
 
+    #[allow(unused)]
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
 

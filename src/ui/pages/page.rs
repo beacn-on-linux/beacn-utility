@@ -6,6 +6,7 @@ use crate::ui::app::DeviceState;
 use crate::ui::pages::audio::about::AboutMessage;
 use crate::ui::pages::audio::config::ConfigMessage;
 use crate::ui::pages::audio::lighting::LightingMessage;
+use crate::ui::pages::audio::studio_link::StudioLinkMessage;
 use crate::ui::pages::common::error_page::ErrorPageMessages;
 use crate::ui::pages::control::about::ControlAboutMessage;
 use iced::{Element, Task};
@@ -15,6 +16,7 @@ pub(crate) enum PageMessage {
     AudioAboutPage(AboutMessage),
     AudioConfigPage(ConfigMessage),
     AudioLightingPage(LightingMessage),
+    AudioStudioLinkPage(StudioLinkMessage),
 
     ControlAboutPage(ControlAboutMessage),
 
