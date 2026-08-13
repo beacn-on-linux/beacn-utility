@@ -423,17 +423,6 @@ impl LightingPage {
         .into()
     }
 
-    fn labeled_slider<'a>(
-        label: &'a str,
-        value: i32,
-        range: std::ops::RangeInclusive<i32>,
-        width: Length,
-        on_change: impl Fn(i32) -> Lighting + Clone + 'a,
-    ) -> Element<'a, LightingMessage> {
-        let on_change = move |value| LightingMessage::State(Message::Lighting(on_change(value)));
-        draw_lighting_range(label, value, range, "", width, on_change).into()
-    }
-
     fn mute_options<'a>(&self, state: &AudioState) -> Element<'_, LightingMessage> {
         let mode = state.lighting.mute_mode;
 
@@ -504,17 +493,13 @@ impl LightingPage {
         if mode == LightingSuspendMode::Brightness {
             content = content.push(Space::new().height(2));
 
+            let title = "Suspend Brightness";
+            let length = Length::Fixed(140.0);
+            let on_change = |v| Lighting::SuspendBrightness(LightingSuspendBrightness(v));
             let value = state.lighting.suspend_brightness;
             let range = LightingSuspendBrightness::range();
 
-            let brightness = draw_lighting_range(
-                "Suspend Brightness",
-                value,
-                range,
-                "",
-                Length::Fixed(140.0),
-                |v| Lighting::SuspendBrightness(LightingSuspendBrightness(v)),
-            );
+            let brightness = draw_lighting_range(title, value, range, "", length, on_change);
             content = content.push(brightness);
         }
 
@@ -548,10 +533,12 @@ impl LightingPage {
         let value = state.lighting.brightness;
         let range = LightingBrightness::range();
 
-        Self::labeled_slider("Ring Brightness", value, range, width, |value| {
-            Lighting::Brightness(LightingBrightness(value))
-        })
-        .into()
+        let on_change = move |value| {
+            LightingMessage::State(Message::Lighting(Lighting::Brightness(LightingBrightness(
+                value,
+            ))))
+        };
+        draw_lighting_range("Ring Brightness", value, range, "", width, on_change).into()
     }
 
     fn speed(&self, state: &AudioState, width: Length) -> Element<'_, LightingMessage> {
