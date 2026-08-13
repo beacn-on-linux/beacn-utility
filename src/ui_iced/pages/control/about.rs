@@ -1,5 +1,6 @@
 use crate::devices::states::control::ControlState;
 use crate::ui_iced::pages::audio::about::AboutMessage;
+use crate::ui_iced::pages::info_row;
 use crate::ui_iced::pages::page::{ControllerPage, PageMessage};
 use crate::ui_iced::widgets::helpers::composite::draw_horizontal_range;
 use crate::ui_iced::widgets::helpers::svg::svg_button_unstyled;
@@ -58,15 +59,6 @@ impl ControllerPage for About {
         let location_text = format!("{}:{}", location.bus_id, location.device_address);
         let serial_text = state.device_definition.device_info.serial.clone();
         let version_text = state.device_definition.device_info.version.to_string();
-
-        let info_row = |label: &'static str, value: String| {
-            row![
-                text(label).size(14).width(Length::Fixed(100.0)),
-                text(value).size(14),
-            ]
-            .spacing(5)
-            .align_y(Alignment::Center)
-        };
 
         let label = text("Display Brightness:").width(120);
         let value = state.saved_settings.display_brightness;

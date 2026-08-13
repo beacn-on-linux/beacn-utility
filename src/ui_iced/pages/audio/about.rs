@@ -1,4 +1,5 @@
 use crate::devices::states::audio::AudioState;
+use crate::ui_iced::pages::info_row;
 use crate::ui_iced::pages::page::{AudioPage, PageMessage};
 use crate::ui_iced::widgets::helpers::svg::svg_button_unstyled;
 use beacn_lib::audio::messages::Message;
@@ -74,15 +75,6 @@ impl AudioPage for About {
         let location_text = format!("{}:{}", location.bus_id, location.device_address);
         let serial_text = state.device_definition.device_info.serial.clone();
         let version_text = state.device_definition.device_info.version.to_string();
-
-        let info_row = |label: &'static str, value: String| {
-            row![
-                text(label).size(14).width(Length::Fixed(100.0)),
-                text(value).size(14),
-            ]
-            .spacing(5)
-            .align_y(Alignment::Center)
-        };
 
         let mut content = column![
             text(title).size(24),
