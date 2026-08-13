@@ -84,19 +84,24 @@ impl SettingsPage {
         use ini::Ini;
         use std::{env, fs};
 
-        window::run(id, move |window| {
-            if ashpd::is_sandboxed() {
-                println!("Running inside Flatpak, using Background Portal");
+        if ashpd::is_sandboxed() {
+            println!("Running inside Flatpak, using Background Portal");
 
+            return window::run(id, move |window| {
                 let window_handle = window.window_handle().unwrap().as_raw();
                 let display_handle = window.display_handle().ok().map(|d| d.as_raw());
 
-                let reason = "Manage Beacn Devices on Startup";
-
-                run_async_blocking(async {
-                    let identifier =
-                        WindowIdentifier::from_raw_handle(&window_handle, display_handle.as_ref())
-                            .await;
+                // This needs to be blocked, the handles aren't safely sendable across threads
+                // and this lookup is async, so we need to block here.
+                run_async_blocking(WindowIdentifier::from_raw_handle(
+                    &window_handle,
+                    display_handle.as_ref(),
+                ))
+            })
+            .then(move |identifier| {
+                // We can send this directly into an iced task, rather than blocking
+                Task::future(async move {
+                    let reason = "Manage Beacn Devices on Startup";
 
                     let request = Background::request()
                         .identifier(identifier)
@@ -122,45 +127,47 @@ impl SettingsPage {
                         },
                         Err(e) => warn!("Failed to request background access: {e}"),
                     }
-                });
-                SettingsMessage::AutoStartChanged
-            } else {
-                debug!("Running Outside Flatpak, manually handling");
-                let result = match get_autostart_file() {
-                    Ok(path) => {
-                        if path.exists() && fs::remove_file(path.clone()).is_err() {
-                            Err(anyhow!("Unable to remove existing AutoStart"))
-                        } else if enabled {
-                            if let Ok(exe) = env::current_exe() {
-                                let mut conf = Ini::new();
-                                let exe = exe.to_string_lossy().to_string();
 
-                                conf.with_section(Some("Desktop Entry"))
-                                    .set("Type", "Application")
-                                    .set("Name", "Beacn Utility")
-                                    .set("Comment", "A Tool for Configuring Beacn Devices")
-                                    .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
-                                    .set("Terminal", "false");
+                    SettingsMessage::AutoStartChanged
+                })
+            });
+        }
 
-                                match conf.write_to_file(path) {
-                                    Ok(()) => Ok(()),
-                                    Err(e) => Err(anyhow!("Failed to Write File, {}", e)),
-                                }
-                            } else {
-                                Err(anyhow!("Unable to Determine Executable"))
-                            }
-                        } else {
-                            Ok(())
+        debug!("Running Outside Flatpak, manually handling");
+        let result = match get_autostart_file() {
+            Ok(path) => {
+                if path.exists() && fs::remove_file(path.clone()).is_err() {
+                    Err(anyhow!("Unable to remove existing AutoStart"))
+                } else if enabled {
+                    if let Ok(exe) = env::current_exe() {
+                        let mut conf = Ini::new();
+                        let exe = exe.to_string_lossy().to_string();
+
+                        conf.with_section(Some("Desktop Entry"))
+                            .set("Type", "Application")
+                            .set("Name", "Beacn Utility")
+                            .set("Comment", "A Tool for Configuring Beacn Devices")
+                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
+                            .set("Terminal", "false");
+
+                        match conf.write_to_file(path) {
+                            Ok(()) => Ok(()),
+                            Err(e) => Err(anyhow!("Failed to Write File, {}", e)),
                         }
+                    } else {
+                        Err(anyhow!("Unable to Determine Executable"))
                     }
-                    Err(e) => Err(anyhow!(e)),
-                };
-                if let Err(e) = result {
-                    warn!("Failed to set autostart: {e}");
+                } else {
+                    Ok(())
                 }
-
-                SettingsMessage::AutoStartChanged
             }
-        })
+            Err(e) => Err(anyhow!(e)),
+        };
+
+        if let Err(e) = result {
+            warn!("Failed to set autostart: {e}");
+        }
+
+        Task::done(SettingsMessage::AutoStartChanged)
     }
 }
