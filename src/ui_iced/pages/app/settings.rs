@@ -37,7 +37,7 @@ impl SettingsPage {
     }
 
     pub(crate) fn view(&self) -> Element<'_, SettingsMessage> {
-        let title = "About the GoXLR Utility";
+        let title = "About the Beacn Utility";
 
         let version_text = format!("{}", VERSION);
         let hash_text = format!("{}", HASH);
