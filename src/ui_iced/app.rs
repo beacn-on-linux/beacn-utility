@@ -180,10 +180,14 @@ impl BeacnUtility {
                             self.active_device = None;
                             self.active_page = None;
 
-                            for (id, device) in &self.devices {
+                            for (hash, device) in &mut self.devices {
                                 if let Some(page) = visible_pages(&device).first() {
-                                    self.active_device = Some(id.clone());
+                                    self.active_device = Some(hash.clone());
                                     self.active_page = Some(*page);
+
+                                    // Trigger the on_open callback for this page
+                                    device.pages[*page].on_open_fn(&device.state);
+
                                     break;
                                 }
                             }
