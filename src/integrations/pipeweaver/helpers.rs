@@ -3,11 +3,11 @@ use anyhow::Error;
 use directories::BaseDirs;
 use enum_map::Enum;
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::{env, fs};
-use strum_macros::{Display, EnumIter};
+use strum_macros::EnumIter;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(super) fn get_pipeweaver_socket_path() -> anyhow::Result<PathBuf> {
@@ -46,31 +46,24 @@ pub(super) async fn read_json(stream: &mut LocalSocketStream) -> anyhow::Result<
     Ok(serde_json::from_slice(&data)?)
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
 pub enum Mix {
     #[default]
     A,
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
 pub enum MuteTarget {
     #[default]
     TargetA,
     TargetB,
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
 pub enum OrderGroup {
     #[default]
     Default,
     Pinned,
     Hidden,
 }
-
-// #[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
-// pub enum MuteState {
-//     #[default]
-//     Unmuted,
-//     Muted,
-// }

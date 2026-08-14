@@ -2,6 +2,7 @@
 // the Mix / Mix Create display
 
 use crate::integrations::pipeweaver::ChannelType;
+use crate::integrations::pipeweaver::helpers::{Mix, MuteTarget};
 use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, TopToBottom};
 use crate::integrations::pipeweaver::layout::*;
 use anyhow::{Result, anyhow};
@@ -9,8 +10,6 @@ use beacn_lib::manager::DeviceType;
 use enum_map::{EnumMap, enum_map};
 use image::imageops::{crop, crop_imm};
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
-//use pipeweaver_shared::{Mix, MuteTarget};
-use crate::integrations::pipeweaver::helpers::{Mix, MuteTarget};
 use serde_json::Value;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
