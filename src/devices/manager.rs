@@ -424,7 +424,7 @@ async fn handle_device_attached(
             // Reserve a Slot in the Queue
             let (arrive_tx, arrive_rx) = oneshot::channel();
             let _ = order_tx.send(arrive_rx);
-            tokio::task::spawn_blocking(move || {
+            tokio::spawn(async move {
                 let state = ControlState::load_settings(data, tx);
                 let arrived = DeviceArriveMessage::Control(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
