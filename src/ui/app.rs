@@ -1,569 +1,477 @@
-use crate::ToMainMessages;
-use crate::device_manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
+use crate::devices::manager::{DeviceArriveMessage, DeviceDefinition, DeviceMessage};
+use crate::devices::states::State;
+use crate::devices::states::audio::AudioState;
+use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
-use crate::ui::audio_pages::AudioPage;
-use crate::ui::controller_pages::ControllerPage;
-use crate::ui::pages::{pipeweaver_ui, settings_ui};
-use crate::ui::states::LoadState;
-use crate::ui::states::audio_state::BeacnAudioState;
-use crate::ui::states::controller_state::BeacnControllerState;
-use crate::ui::widgets::{pipeweaver_button, round_nav_button};
-use crate::ui::{audio_pages, controller_pages};
-use crate::window_handle::App;
-use beacn_lib::flume::{Receiver, Sender};
-use beacn_lib::manager::DeviceType;
-use egui::{
-    Align, Button, Context, FontData, FontDefinitions, FontFamily, FontId, FontTweak, Id, RichText,
-    Ui,
+use crate::ui::events::channel::TrackedReceiver;
+use crate::ui::pages::app::pipeweaver::{PipeweaverMessage, PipeweaverPage};
+use crate::ui::pages::app::settings::{SettingsMessage, SettingsPage};
+use crate::ui::pages::page::{AP, CP, Page, PageMessage};
+use crate::ui::pages::{audio, common, control};
+use crate::ui::widgets::helpers::navigation::{
+    pipeweaver_sidebar_item, round_nav_button, settings_sidebar_item,
 };
+use crate::{APP_TITLE, WindowMessage};
+use beacn_lib::flume::Receiver;
+use beacn_lib::manager::{DeviceLocation, DeviceType};
+use iced::alignment::{Horizontal, Vertical};
+use iced::widget::{Space, column, container, row, rule, text};
+use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, window};
+use iced_futures::subscription::from_recipe;
 use std::collections::HashMap;
 
-pub struct BeacnMicApp {
-    #[cfg_attr(unix, allow(unused))]
-    main_sender: Sender<ToMainMessages>,
+////////////////////////////////////////////////////////////////////////////////////////////
+// This should probably be separated, but it's only a small abstraction
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum DeviceState {
+    Audio(AudioState),
+    Control(ControlState),
+}
 
-    show_close_modal: bool,
+impl State for DeviceState {
+    fn location(&self) -> &DeviceLocation {
+        match self {
+            DeviceState::Audio(state) => state.location(),
+            DeviceState::Control(state) => state.location(),
+        }
+    }
 
-    device_list: Vec<DeviceDefinition>,
-    active_device: Option<DeviceDefinition>,
+    fn definition(&self) -> &DeviceDefinition {
+        match self {
+            DeviceState::Audio(state) => state.definition(),
+            DeviceState::Control(state) => state.definition(),
+        }
+    }
+}
+////////////////////////////////////////////////////////////////////////////////////////////
+// Unlike egui, we actually attach the pages to the device to keep the state synced
 
-    audio_device_list: HashMap<DeviceDefinition, BeacnAudioState>,
-    control_device_list: HashMap<DeviceDefinition, BeacnControllerState>,
+pub(crate) struct Device {
+    pub state: DeviceState,
+    pub pages: Vec<Box<dyn Page>>,
+}
 
-    audio_pages: Vec<Box<dyn AudioPage>>,
-    control_pages: Vec<Box<dyn ControllerPage>>,
+////////////////////////////////////////////////////////////////////////////////////////////
+// These are ingress flags, and are passed to the app
 
-    device_recv: Receiver<DeviceMessage>,
-    active_page: usize,
+pub(crate) struct Flags {
+    pub window_settings: window::Settings,
 
-    // We can probably do better here
+    pub window_rx: Receiver<WindowMessage>,
+    pub device_rx: Receiver<DeviceMessage>,
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum Message {
+    Device(DeviceMessage),
+
+    ActivatePipeweaver,
+    Pipeweaver(PipeweaverMessage),
+
+    ActivateSettings,
+    Settings(SettingsMessage),
+
+    // Page Selection
+    SelectDeviceAndPage { device_id: String, page_id: usize },
+
+    // Messages that are passed to the current page
+    Page(PageMessage),
+
+    // Window Related Tasks
+    Quit,
+    WindowOpen,
+    WindowOpened(window::Id),
+    WindowCloseRequested(window::Id),
+    WindowResized((window::Id, Size)),
+}
+
+pub struct BeacnUtility {
+    // List of devices we're currently aware of
+    devices: HashMap<String, Device>,
+
+    // Current active device and page
+    active_device: Option<String>,
+    active_page: Option<usize>,
+
+    // Hard Coded Pages
+    pipeweaver_page: PipeweaverPage,
+    settings_page: SettingsPage,
+
+    // These are overrides for showing the pipeweaver and settings pages
     mixer_active: bool,
     settings_active: bool,
 
-    // Happens on the initial load when selecting default pages
-    needs_page_open: bool,
+    // Receiver for device notifications
+    device_rx: Receiver<DeviceMessage>,
 
-    // Toast state for Pipeweaver button
-    pipeweaver_toast_timer: Option<std::time::Instant>,
+    // Window Tracking and Management
+    window_settings: window::Settings,
+    window_rx: Receiver<WindowMessage>,
+    pub(crate) active_id: Option<window::Id>,
 }
 
-impl BeacnMicApp {
-    pub fn new(main_sender: Sender<ToMainMessages>, device_recv: Receiver<DeviceMessage>) -> Self {
-        Self {
-            main_sender,
+impl BeacnUtility {
+    pub(crate) fn new(flags: Flags) -> (Self, Task<Message>) {
+        (
+            Self {
+                devices: HashMap::new(),
 
-            show_close_modal: false,
+                active_device: None,
+                active_page: None,
 
-            device_list: vec![],
-            active_device: None,
+                pipeweaver_page: PipeweaverPage::new(),
+                mixer_active: false,
 
-            audio_device_list: HashMap::default(),
-            control_device_list: HashMap::default(),
+                settings_page: SettingsPage::new(),
+                settings_active: false,
 
-            audio_pages: vec![
-                Box::new(audio_pages::config::Configuration::new()),
-                Box::new(audio_pages::lighting::LightingPage::new()),
-                Box::new(audio_pages::link::Linked::new()),
-                Box::new(audio_pages::about::About::new()),
-                Box::new(audio_pages::error::ErrorPage::new()),
-            ],
+                device_rx: flags.device_rx,
 
-            control_pages: vec![
-                Box::new(controller_pages::about::About::new()),
-                Box::new(controller_pages::error::ErrorPage::new()),
-            ],
-
-            device_recv,
-            active_page: 0,
-
-            mixer_active: false,
-            settings_active: false,
-
-            needs_page_open: false,
-
-            pipeweaver_toast_timer: None,
-        }
-    }
-}
-
-impl App for BeacnMicApp {
-    fn with_context(&mut self, ctx: &Context) {
-        egui_extras::install_image_loaders(ctx);
-        setup_fonts(ctx);
-    }
-
-    fn update(&mut self, ui: &mut Ui) {
-        // Grab any device information that's been sent since the last update
-        let messages: Vec<DeviceMessage> = self.device_recv.try_iter().collect();
-        for message in messages {
-            self.handle_device_message(message);
-        }
-
-        // Is our Device List empty?
-        if self.device_list.is_empty() {
-            egui::CentralPanel::default().show(ui, |ui: &mut Ui| {
-                ui.add_sized(ui.available_size(), |ui: &mut Ui| {
-                    ui.label("No Devices Detected")
-                });
-            });
-            return;
-        }
-
-        // We need to trigger the page open if we need one
-        if self.needs_page_open {
-            self.open_current_page(ui.ctx());
-            self.needs_page_open = false;
-        }
-
-        // Ok, next we need a modal for 'Close' behaviours
-        let modal = egui::Modal::new(Id::new("close_behaviour"));
-        if self.show_close_modal {
-            modal.show(ui.ctx(), |ui| self.draw_close_modal(ui));
-        }
-
-        egui::Panel::left("left_panel")
-            .resizable(false)
-            .default_size(80.0)
-            .show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(5.0);
-                    let pipeweaver_btn = pipeweaver_button(ui, "pipeweaver", self.mixer_active);
-
-                    if pipeweaver_btn.clicked() {
-                        self.settings_active = false;
-                        let should_toast = launch_pipeweaver_ui();
-
-                        if should_toast {
-                            self.mixer_active = false;
-                            self.pipeweaver_toast_timer = Some(std::time::Instant::now());
-                        } else {
-                            self.close_current_page(ui.ctx());
-                            self.settings_active = false;
-                            self.mixer_active = true;
-                            self.pipeweaver_toast_timer = None;
-                        }
-                    }
-
-                    // Show toast if needed
-                    if let Some(start) = self.pipeweaver_toast_timer {
-                        let toast_duration = std::time::Duration::from_secs(2);
-                        if start.elapsed() < toast_duration {
-                            let pos = pipeweaver_btn.rect.right_center();
-                            egui::Area::new(egui::Id::new("pipeweaver_toast"))
-                                .fixed_pos([pos.x + 8.0, pos.y - 16.0])
-                                .show(ui.ctx(), |ui| {
-                                    egui::Frame::popup(ui.style()).show(ui, |ui| {
-                                        ui.label("Pipeweaver UI Launched, check your task bar or app grid for notifications");
-                                    });
-                                });
-                        } else {
-                            self.pipeweaver_toast_timer = None;
-                        }
-                    }
-                    ui.add_space(5.0);
-                    ui.separator();
-
-                    // Grab the device list, and reorder it based on type
-                    let mut devices = self.device_list.clone();
-                    devices.sort_by_key(|d| d.device_type);
-                    for device in devices {
-                        self.draw_device_buttons(ui, device);
-                    }
-                    ui.add_space(ui.available_height() - 55.0);
-                    ui.separator();
-                    if round_nav_button(ui, "gear", self.settings_active).clicked() {
-                        self.close_current_page(ui.ctx());
-                        self.mixer_active = false;
-                        self.settings_active = true;
-                    }
-                });
-            });
-
-        // Render the main page
-        self.render_content(ui);
-    }
-
-    fn should_close(&mut self) -> bool {
-        #[cfg(not(unix))]
-        {
-            self.show_close_modal = true;
-            false
-        }
-
-        // TODO: This should prompt the user, and / or check the settings
-        #[cfg(unix)]
-        true
-    }
-
-    fn on_close(&mut self) {
-        #[cfg(not(unix))]
-        {
-            // // Quit the App completely.
-            // let _ = self.main_sender.send(ToMainMessages::Quit);
-        }
-
-        for audio_page in &mut self.audio_pages {
-            audio_page.on_close();
-        }
-
-        for controller_pages in &mut self.control_pages {
-            controller_pages.on_close();
-        }
-    }
-
-    fn handle_device_message(&mut self, message: DeviceMessage) {
-        match message {
-            DeviceMessage::DeviceArrived(device) => match device {
-                DeviceArriveMessage::Audio(definition, sender) => {
-                    // Load the Device State
-                    let state = BeacnAudioState::load_settings(definition.clone(), sender);
-
-                    // Store the Device, and the device state
-                    self.device_list.push(definition.clone());
-                    self.audio_device_list.insert(definition.clone(), state);
-
-                    if self.active_device.is_none() {
-                        self.active_device = Some(definition);
-                        self.needs_page_open = true;
-                    }
-                }
-                DeviceArriveMessage::Control(definition, sender) => {
-                    let state = BeacnControllerState::load_settings(definition.clone(), sender);
-                    self.device_list.push(definition.clone());
-                    self.control_device_list.insert(definition.clone(), state);
-
-                    if self.active_device.is_none() {
-                        self.active_device = Some(definition);
-                    }
-                }
+                window_settings: flags.window_settings,
+                window_rx: flags.window_rx,
+                active_id: None,
             },
-            DeviceMessage::DeviceRemoved(location) => {
-                // Find the index of this device in the device list
-                let position = self.device_list.iter().position(|d| d.location == location);
-                if let Some(position) = position {
-                    // This is a little complicated, first get the device definition, and
-                    // remove it from the relevant device list.
-                    let definition = &self.device_list[position].clone();
-                    match definition.device_type {
-                        DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                            // Remove this device from the audio device list
-                            self.audio_device_list.remove(definition);
-                        }
-                        DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                            self.control_device_list.remove(definition);
+            Task::none(),
+        )
+    }
+
+    pub fn title(&self, _window_id: window::Id) -> String {
+        APP_TITLE.into()
+    }
+
+    pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::Device(msg) => {
+                match msg {
+                    DeviceMessage::DeviceArrived(arrival) => {
+                        let device = match arrival {
+                            DeviceArriveMessage::Audio(state) => Device {
+                                state: DeviceState::Audio(state),
+                                pages: create_pages_audio(),
+                            },
+
+                            DeviceArriveMessage::Control(state) => Device {
+                                state: DeviceState::Control(state),
+                                pages: create_pages_controller(),
+                            },
+                        };
+
+                        let hash = device.state.location().hash.clone();
+                        self.devices.insert(hash.clone(), device);
+
+                        if self.active_device.is_none() {
+                            // Find a visible page for this device
+                            if let Some(page) = visible_pages(&self.devices[&hash]).first() {
+                                self.active_device = Some(hash.clone());
+                                self.active_page = Some(*page);
+
+                                // Trigger the on_open callback for the first visible page
+                                if let Some(device) = self.devices.get_mut(&hash) {
+                                    device.pages[*page].on_open_fn(&device.state);
+                                }
+                            }
                         }
                     }
+                    DeviceMessage::DeviceRemoved(location) => {
+                        self.devices.remove(&location.hash);
 
-                    // Now remove it from the main device list
-                    self.device_list.retain(|d| d != definition);
-
-                    // Make sure we're not referencing this device as active
-                    if let Some(active_device) = &self.active_device
-                        && active_device == definition
-                    {
-                        if self.device_list.is_empty() {
+                        if self.active_device.as_ref() == Some(&location.hash) {
                             self.active_device = None;
-                        } else {
-                            // Reset the State, set the active device as the first device
-                            let first = self.device_list.first().unwrap();
-                            self.active_device = Some(first.clone());
-                            self.active_page = 0;
+                            self.active_page = None;
+
+                            for (hash, device) in &mut self.devices {
+                                if let Some(page) = visible_pages(device).first() {
+                                    self.active_device = Some(hash.clone());
+                                    self.active_page = Some(*page);
+
+                                    // Trigger the on_open callback for this page
+                                    device.pages[*page].on_open_fn(&device.state);
+
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-    }
-}
 
-impl BeacnMicApp {
-    fn draw_close_modal(&mut self, ui: &mut Ui) {
-        ui.set_min_width(320.0);
+            Message::ActivatePipeweaver => {
+                if !launch_pipeweaver_ui() {
+                    self.mixer_active = true;
+                    self.settings_active = false;
 
-        ui.vertical_centered(|ui| {
-            ui.add_space(8.0);
-            ui.label(RichText::new("Confirm Exit").size(20.0).strong());
+                    self.active_device = None;
+                    self.active_device = None;
+                }
+            }
 
-            ui.add_space(12.0);
-            ui.label("Closing will quit the application.");
+            Message::ActivateSettings => {
+                self.mixer_active = false;
+                self.settings_active = true;
 
-            ui.add_space(20.0);
-            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| {
-                ui.add_space((ui.available_width() - 210.0).max(0.0) / 2.0);
+                self.active_device = None;
+                self.active_device = None;
+            }
 
-                if ui.add_sized([100.0, 32.0], Button::new("Cancel")).clicked() {
-                    self.show_close_modal = false;
+            Message::Settings(msg) => {
+                // Settings will need access to things like portals, which require the window
+                // ID, so pass it along to messages.
+                if let Some(id) = self.active_id {
+                    return self.settings_page.update(id, msg).map(Message::Settings);
+                }
+            }
+
+            Message::Pipeweaver(msg) => {
+                return self.pipeweaver_page.update(msg).map(Message::Pipeweaver);
+            }
+
+            Message::SelectDeviceAndPage { device_id, page_id } => {
+                // A device page has been clicked, we should clear out of pipewire / about
+                self.mixer_active = false;
+                self.settings_active = false;
+
+                // Check if the requested selection is already exactly what is active
+                let is_active_device = self.active_device.as_ref() == Some(&device_id);
+                let is_active_page = self.active_page == Some(page_id);
+                if is_active_device && is_active_page {
+                    return Task::none();
                 }
 
-                ui.add_space(10.0);
-                if ui.add_sized([100.0, 32.0], Button::new("Quit")).clicked() {
-                    self.show_close_modal = false;
-                    let _ = self.main_sender.send(ToMainMessages::Quit);
+                // 1. If we get here, we need to close the current page before opening the new one
+                if let Some(device) = &self.active_device
+                    && let Some(page) = self.active_page
+                {
+                    // We need to try and pull this device from our devices
+                    if let Some(device) = self.devices.get_mut(device) {
+                        device.pages[page].on_close_fn();
+                    }
                 }
-            });
 
-            ui.add_space(8.0);
-        });
-    }
+                // Firstly, find the new page
+                if let Some(device) = self.devices.get_mut(&device_id)
+                    && device.pages[page_id].should_show_fn(&device.state)
+                {
+                    self.active_device = Some(device_id.clone());
+                    self.active_page = Some(page_id);
+                    device.pages[page_id].on_open_fn(&device.state);
+                }
+            }
 
-    fn draw_device_buttons(&mut self, ui: &mut Ui, device: DeviceDefinition) {
-        if self.device_list.is_empty() || self.active_device.is_none() {
-            return;
-        }
-
-        let active_device = &self.active_device.clone().unwrap();
-        match device.device_type {
-            // These are probably going to eventually need to be separated, when
-            // Studio Link support is added, a new page will be needed
-            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                let device_state = self.audio_device_list.get(&device).unwrap();
-                ui.add_space(5.0);
-
-                match device.device_type {
-                    DeviceType::BeacnMic => ui.label("Mic"),
-                    DeviceType::BeacnStudio => ui.label("Studio"),
-                    _ => ui.label("ERROR"),
+            Message::Page(msg) => {
+                let Some(device_id) = &self.active_device else {
+                    return Task::none();
                 };
 
-                let mut action = None;
-                let audio_pages = self.audio_pages.iter_mut().enumerate();
-                for (index, page) in audio_pages {
-                    let selected = *active_device == device
-                        && self.active_page == index
-                        && !self.settings_active
-                        && !self.mixer_active;
-                    let error = matches!(
-                        device_state.device_state.state,
-                        LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
-                    );
-
-                    if page.show_on_error() == error
-                        && (page.should_show(device_state))
-                        && round_nav_button(ui, page.icon(), selected).clicked()
-                        && !selected
-                    {
-                        action = Some((device.clone(), index));
-                    }
-                }
-
-                if let Some((device, index)) = action {
-                    self.change_page(ui.ctx(), device, index);
-                }
-
-                ui.add_space(5.0);
-                ui.separator();
-            }
-            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                // This is identical to the above, except with a BeacnControllerState and ControllerPages
-                // There's probably a way we can simplify this :p
-                let device_state = self.control_device_list.get(&device).unwrap();
-                ui.add_space(5.0);
-
-                match device.device_type {
-                    DeviceType::BeacnMix => ui.label("Mix"),
-                    DeviceType::BeacnMixCreate => ui.label("Mix Create"),
-                    _ => ui.label("ERROR"),
+                let Some(page_index) = self.active_page else {
+                    return Task::none();
                 };
 
-                let mut action = None;
-                let control_pages = self.control_pages.iter().enumerate();
-                for (index, page) in control_pages {
-                    let selected = *active_device == device
-                        && self.active_page == index
-                        && !self.settings_active
-                        && !self.mixer_active;
+                let Some(device) = self.devices.get_mut(device_id) else {
+                    return Task::none();
+                };
 
-                    let error = matches!(
-                        device_state.device_state.state,
-                        LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
-                    );
-                    if page.show_on_error() == error
-                        && round_nav_button(ui, page.icon(), selected).clicked()
-                        && !selected
-                    {
-                        action = Some((device.clone(), index));
+                return device.pages[page_index]
+                    .update_fn(&mut device.state, msg)
+                    .map(Message::Page);
+            }
+
+            Message::Quit => {
+                return iced::exit();
+            }
+            Message::WindowOpen => {
+                if self.active_id.is_some() {
+                    return Task::none();
+                }
+
+                // Spawn up the window
+                let (id, task) = window::open(self.window_settings.clone());
+                self.active_id = Some(id);
+
+                // Trigger a callback on things to do when the window is actually opened.
+                return task.map(move |_| Message::WindowOpened(id));
+            }
+            Message::WindowOpened(_id) => {}
+            Message::WindowCloseRequested(id) => {
+                self.active_id = None;
+                return window::close(id);
+            }
+            Message::WindowResized((_, size)) => {
+                self.window_settings.size = size;
+            }
+        }
+        Task::none()
+    }
+
+    pub(crate) fn view(&self, _window_id: window::Id) -> Element<'_, Message> {
+        // If no devices, display no devices message.
+        if self.devices.is_empty() {
+            return container(
+                text("No Devices Detected")
+                    .size(20)
+                    .align_x(Horizontal::Center)
+                    .align_y(Vertical::Center),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into();
+        }
+
+        // Add the pipeweaver button at the top
+        let pipeweaver_button = pipeweaver_sidebar_item(self.mixer_active);
+        let mut sidebar_items = column![pipeweaver_button].align_x(Alignment::Center);
+
+        // Devices & Inner Pages Loop
+        let mut sorted_devices: Vec<&Device> = self.devices.values().collect();
+        sorted_devices.sort_by_key(|d| d.state.definition().device_type);
+        for device in sorted_devices {
+            let device_name = match &device.state.definition().device_type {
+                DeviceType::BeacnMic => "Mic",
+                DeviceType::BeacnStudio => "Studio",
+                DeviceType::BeacnMixCreate => "Mix Create",
+                DeviceType::BeacnMix => "Mix",
+            };
+
+            let mut device_group = column![].spacing(4).align_x(Alignment::Center);
+            device_group = device_group.push(
+                Space::new()
+                    .width(Length::Shrink)
+                    .height(Length::Fixed(6.0)),
+            );
+
+            // Add the section label text
+            device_group = device_group.push(text(device_name).size(12.2));
+
+            let hash = &device.state.location().hash;
+            let is_device_active = self.active_device.as_ref() == Some(hash);
+
+            // Nest the navigation icon buttons right underneath the label
+            for page_id in visible_pages(device) {
+                let img_key = device.pages[page_id].icon();
+                let is_page_selected = is_device_active && self.active_page == Some(page_id);
+
+                let mut btn = round_nav_button(img_key, is_page_selected);
+
+                if !is_page_selected {
+                    btn = btn.on_press(Message::SelectDeviceAndPage {
+                        device_id: hash.clone(),
+                        page_id,
+                    });
+                }
+
+                device_group = device_group.push(btn);
+            }
+
+            device_group = device_group
+                .push(
+                    Space::new()
+                        .width(Length::Shrink)
+                        .height(Length::Fixed(1.0)),
+                )
+                .push(rule::horizontal(1));
+
+            // Push the entire cleanly padded group into the master sidebar layout canvas
+            sidebar_items = sidebar_items.push(device_group);
+        }
+
+        // Finally, add the settings button to the bottom
+        sidebar_items = sidebar_items
+            .push(Space::new().width(Length::Shrink).height(Length::Fill))
+            .push(settings_sidebar_item(self.settings_active));
+
+        // Generate the page content
+        let content_area = if self.mixer_active {
+            self.pipeweaver_page.view().map(Message::Pipeweaver)
+        } else if self.settings_active {
+            self.settings_page.view().map(Message::Settings)
+        } else {
+            match (&self.active_device, self.active_page) {
+                (Some(id), Some(index)) => {
+                    if let Some(device) = self.devices.get(id) {
+                        device.pages[index]
+                            .view_fn(&device.state)
+                            .map(Message::Page)
+                    } else {
+                        container(text("Select a device")).into()
                     }
                 }
-
-                if let Some((device, index)) = action {
-                    self.change_page(ui.ctx(), device, index);
-                }
-
-                ui.add_space(5.0);
-                ui.separator();
+                _ => container(text("No page active")).into(),
             }
-        }
-    }
-    fn render_content(&mut self, ui: &mut Ui) {
-        if self.active_device.is_none() && !self.settings_active && !self.mixer_active {
-            return;
-        }
-
-        if self.mixer_active {
-            egui::CentralPanel::default().show(ui, |ui| {
-                pipeweaver_ui(ui);
-            });
-            return;
-        }
-
-        if self.settings_active {
-            egui::CentralPanel::default().show(ui, |ui| {
-                settings_ui(ui);
-            });
-            return;
-        }
-
-        let definition = &self.active_device.clone().unwrap();
-        match definition.device_type {
-            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                // Get the Settings from the definition
-                let settings = self.audio_device_list.get_mut(definition);
-                if settings.is_none() {
-                    return;
-                }
-                let settings = settings.unwrap();
-
-                let error = matches!(
-                    settings.device_state.state,
-                    LoadState::Error | LoadState::PermissionDenied | LoadState::ResourceBusy
-                );
-
-                // Are we in an error state, if so, show the error
-                if error {
-                    let position = self.audio_pages.iter().position(|p| p.show_on_error());
-                    if let Some(page) = position {
-                        self.active_page = page;
-                    }
-                }
-
-                egui::CentralPanel::default().show(ui, |ui| {
-                    self.audio_pages[self.active_page].ui(ui, settings);
-                });
-            }
-            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                let settings = self.control_device_list.get_mut(definition);
-                if settings.is_none() {
-                    return;
-                }
-
-                let settings = settings.unwrap();
-                egui::CentralPanel::default().show(ui, |ui| {
-                    self.control_pages[self.active_page].ui(ui, settings);
-                });
-            }
-        }
-    }
-
-    fn change_page(&mut self, ctx: &Context, device: DeviceDefinition, page: usize) {
-        self.close_current_page(ctx);
-
-        // Update state
-        self.active_device = Some(device);
-        self.active_page = page;
-        self.settings_active = false;
-        self.mixer_active = false;
-
-        self.open_current_page(ctx);
-    }
-
-    fn close_current_page(&mut self, ctx: &Context) {
-        if self.settings_active || self.mixer_active {
-            return;
-        }
-
-        let Some(device) = &self.active_device else {
-            return;
         };
 
-        match device.device_type {
-            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                self.audio_pages[self.active_page].on_page_close(ctx);
-            }
-            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                self.control_pages[self.active_page].on_page_close(ctx);
-            }
-        }
+        // Assemble the final layout
+        row![
+            // Left side navigation
+            container(sidebar_items)
+                .width(Length::Fixed(80.0))
+                .height(Length::Fill)
+                .padding(5)
+                .style(|theme: &Theme| container::Style {
+                    background: Some(theme.palette().background.into()),
+                    ..Default::default()
+                }),
+            rule::vertical(1),
+            // Right side content
+            container(content_area)
+                .width(Length::Fill)
+                .height(Length::Fill)
+        ]
+        .into()
     }
 
-    fn open_current_page(&mut self, ctx: &Context) {
-        if self.settings_active || self.mixer_active {
-            return;
-        }
-
-        let Some(device) = &self.active_device else {
-            return;
+    pub(crate) fn subscription(&self) -> Subscription<Message> {
+        let device = TrackedReceiver {
+            id: "device_rx",
+            rx: self.device_rx.clone(),
+            map_fn: |data| Message::Device(data),
         };
 
-        match device.device_type {
-            DeviceType::BeacnMic | DeviceType::BeacnStudio => {
-                self.audio_pages[self.active_page].on_page_open(ctx);
-            }
-            DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
-                self.control_pages[self.active_page].on_page_open(ctx);
-            }
-        }
+        let window = TrackedReceiver {
+            id: "window_rx",
+            rx: self.window_rx.clone(),
+            map_fn: |msg| match msg {
+                WindowMessage::OpenWindow => Message::WindowOpen,
+                WindowMessage::Quit => Message::Quit,
+            },
+        };
+
+        let device_sub = from_recipe(device);
+        let window_sub = from_recipe(window);
+        let resize_sub = window::resize_events().map(Message::WindowResized);
+        let close_sub = window::close_requests().map(Message::WindowCloseRequested);
+
+        Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub])
     }
 }
 
-pub fn setup_fonts(ctx: &egui::Context) {
-    let mut fonts = FontDefinitions::default();
-
-    fonts.font_data.insert(
-        "NotoSans-Regular".to_owned(),
-        FontData::from_static(include_bytes!(
-            "../../resources/fonts/noto/NotoSans-Regular.ttf"
-        ))
-        .tweak(FontTweak {
-            scale: 0.95,
-            ..Default::default()
-        })
-        .into(),
-    );
-    fonts.font_data.insert(
-        "NotoSans-Bold".to_owned(),
-        FontData::from_static(include_bytes!(
-            "../../resources/fonts/noto/NotoSans-Bold.ttf"
-        ))
-        .tweak(FontTweak {
-            scale: 0.95,
-            ..Default::default()
-        })
-        .into(),
-    );
-    fonts.font_data.insert(
-        "NotoSans-SemiBold".to_owned(),
-        FontData::from_static(include_bytes!(
-            "../../resources/fonts/noto/NotoSans-SemiBold.ttf"
-        ))
-        .tweak(FontTweak {
-            scale: 0.95,
-            ..Default::default()
-        })
-        .into(),
-    );
-
-    fonts
-        .families
-        .entry(FontFamily::Proportional)
-        .or_default()
-        .insert(0, "NotoSans-Regular".to_owned());
-
-    fonts.families.insert(
-        FontFamily::Name("NotoSans-Bold".into()),
-        vec!["NotoSans-Bold".to_owned()],
-    );
-    fonts.families.insert(
-        FontFamily::Name("NotoSans-SemiBold".into()),
-        vec!["NotoSans-SemiBold".to_owned()],
-    );
-
-    ctx.set_fonts(fonts);
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Page Helpers
+fn create_pages_audio() -> Vec<Box<dyn Page>> {
+    vec![
+        Box::new(AP(audio::config::Configuration::new())),
+        Box::new(AP(audio::lighting::LightingPage::new())),
+        Box::new(AP(audio::studio_link::StudioLink::new())),
+        Box::new(AP(audio::about::About::new())),
+        Box::new(common::error_page::ErrorPage::new()),
+    ]
 }
 
-#[allow(unused)]
-pub fn bold_text(text: impl Into<String>, size: f32) -> RichText {
-    RichText::new(text).font(FontId::new(
-        size,
-        FontFamily::Name("NotoSans-SemiBold".into()),
-    ))
+fn create_pages_controller() -> Vec<Box<dyn Page>> {
+    vec![
+        Box::new(CP(control::about::About::new())),
+        Box::new(common::error_page::ErrorPage::new()),
+    ]
+}
+
+fn visible_pages(device: &Device) -> Vec<usize> {
+    device
+        .pages
+        .iter()
+        .enumerate()
+        .filter_map(|(index, page)| page.should_show_fn(&device.state).then_some(index))
+        .collect()
 }

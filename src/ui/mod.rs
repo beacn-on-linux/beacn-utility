@@ -1,79 +1,84 @@
-use egui::{ImageSource, include_image};
+use iced::advanced::svg::Handle;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-pub(crate) mod app;
-mod audio_pages;
-mod controller_pages;
-mod numbers;
-mod pages;
-mod shared_pages;
-mod states;
-mod widgets;
+pub mod app;
+pub mod events;
+pub mod pages;
+pub mod runtime;
+pub mod widgets;
 
-// SVG Images
-pub static SVG: LazyLock<HashMap<&'static str, ImageSource>> = LazyLock::new(|| {
+pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {
     let mut map = HashMap::default();
     map.insert(
         "mic",
-        include_image!("../../resources/ui/icons/microphone.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/microphone.svg")),
     );
     map.insert(
         "headphones",
-        include_image!("../../resources/ui/icons/headphones.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/headphones.svg")),
     );
     map.insert(
         "bulb",
-        include_image!("../../resources/ui/icons/lightbulb.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/lightbulb.svg")),
     );
-    map.insert("gear", include_image!("../../resources/ui/icons/gear.svg"));
+    map.insert(
+        "gear",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/gear.svg")),
+    );
     map.insert(
         "left_right",
-        include_image!("../../resources/ui/icons/left-right.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/left-right.svg")),
     );
     map.insert(
         "error",
-        include_image!("../../resources/ui/icons/error.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/error.svg")),
     );
-    map.insert("info", include_image!("../../resources/ui/icons/info.svg"));
+    map.insert(
+        "info",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/info.svg")),
+    );
 
     // EQ Modes
-    map.insert("eq_bell", include_image!("../../resources/ui/eq/bell.svg"));
+    map.insert(
+        "eq_bell",
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/bell.svg")),
+    );
     map.insert(
         "eq_high_pass",
-        include_image!("../../resources/ui/eq/high_pass.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/high_pass.svg")),
     );
     map.insert(
         "eq_high_shelf",
-        include_image!("../../resources/ui/eq/high_shelf.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/high_shelf.svg")),
     );
     map.insert(
         "eq_low_pass",
-        include_image!("../../resources/ui/eq/low_pass.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/low_pass.svg")),
     );
     map.insert(
         "eq_low_shelf",
-        include_image!("../../resources/ui/eq/low_shelf.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/low_shelf.svg")),
     );
     map.insert(
         "eq_notch",
-        include_image!("../../resources/ui/eq/notch.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/eq/notch.svg")),
     );
 
     // Pipeweaver Logo
     map.insert(
         "pipeweaver",
-        include_image!("../../resources/ui/pipeweaver.svg"),
+        Handle::from_memory(include_bytes!("../../resources/ui/pipeweaver.svg")),
     );
 
     // Technically not SVGs, but I don't want a new struct..
     map.insert(
         "link",
-        include_image!("../../resources/ui/icons/linked.png"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/linked.png")),
     );
     map.insert(
         "unlink",
-        include_image!("../../resources/ui/icons/unlinked.png"),
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/unlinked.png")),
     );
 
     map

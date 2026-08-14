@@ -37,16 +37,18 @@ oneshot = "0.2.1"
 # Used for SIMD EQ calculations
 wide = "1.5.0"
 
-# UI Framework and Window Management
-egui = "0.35.0"
-egui_extras = { version = "0.35.0", features = ["svg", "image"] }
-egui-winit = "0.35.0"
-egui_glow = "0.35.0"
-glutin = "0.32.3"
+# UI Framework (iced)
+iced = { version = "0.14.0", features = ["advanced", "svg", "canvas"] }
+iced_futures = "0.14.0"
+iced_color_picker = "0.14.0"
+
+unicode-segmentation = "1"
+emath = "0.36.1"
+
 
 # Grab beacn-mic-lib for comms
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["tokio"] }
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.2.2", features = ["tokio"] }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.2.3", features = ["tokio"] }
 #beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
 # Image Handling

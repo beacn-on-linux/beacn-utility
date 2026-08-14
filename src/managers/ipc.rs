@@ -1,4 +1,4 @@
-use crate::{APP_NAME, ManagerMessages, ToMainMessages};
+use crate::{APP_NAME, ManagerMessages, WindowMessage};
 use anyhow::{Result, bail};
 use beacn_lib::flume::{Receiver, Sender};
 use directories::BaseDirs;
@@ -14,7 +14,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub async fn handle_ipc(
     manager_rx: Receiver<ManagerMessages>,
-    main_tx: Sender<ToMainMessages>,
+    main_tx: Sender<WindowMessage>,
 ) -> Result<()> {
     debug!("Spawning IPC Socket");
 
@@ -50,7 +50,7 @@ pub async fn handle_ipc(
                         }
                         match msg.as_str() {
                             "TRIGGER" => {
-                                let _ = main_tx.send(ToMainMessages::SpawnWindow);
+                                let _ = main_tx.send(WindowMessage::OpenWindow);
                             }
                             _ => {
                                 debug!("Unknown Message, aborting: {msg}");
