@@ -75,6 +75,10 @@ directories = "6.0.0"
 rayon = "1.12.0"
 futures = "0.3.33"
 
+# Used for Spectrum Analysis
+rustfft = "6.4.1"
+num-complex = "0.4.6"
+
 [target.'cfg(unix)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
