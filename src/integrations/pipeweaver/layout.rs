@@ -2,13 +2,13 @@
 // on how to render everything, positions, shapes, etc... I'll keep some level of documentation
 
 use crate::get_cache_path;
+use crate::integrations::pipeweaver::helpers::Mix;
 use anyhow::{Context, Result, anyhow, bail};
 use enum_map::{EnumMap, enum_map};
 use fontdue::Font;
 use image::codecs::jpeg::JpegEncoder;
 use image::{ExtendedColorType, ImageBuffer, Rgb, RgbImage, Rgba, RgbaImage, load_from_memory};
 use log::{debug, info, warn};
-use pipeweaver_shared::Mix;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::f32::consts::PI;
