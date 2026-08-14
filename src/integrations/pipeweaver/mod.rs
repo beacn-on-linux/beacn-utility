@@ -9,14 +9,14 @@ use crate::integrations::pipeweaver::layout::{
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
 use crate::runtime;
-use anyhow::{Error, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::flume::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
-use directories::BaseDirs;
 use enum_map::{EnumMap, enum_map};
-use futures_util::{SinkExt, StreamExt};
+use futures_lite::stream::StreamExt;
+use iced::futures::SinkExt;
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
 use interprocess::local_socket::traits::tokio::Stream;
@@ -28,9 +28,7 @@ use serde_json::{Value, from_value, json};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::io::ErrorKind;
-use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use std::{env, fs};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
 use tokio::sync::watch;
@@ -55,8 +53,6 @@ pub fn launch_pipeweaver_ui() -> bool {
         let rt = tokio::runtime::Runtime::new().unwrap();
         return rt.block_on(async move {
             if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
-                //let mut socket = Framed::new(stream, LengthDelimitedCodec::new());
-
                 let command = json!( {
                     "Daemon": "OpenInterface",
                 });
@@ -385,8 +381,6 @@ impl PipeweaverHandler {
                             let error = anyhow!("Failed to Read Status");
                             self.raw_status = data.get("Status").ok_or(error)?.clone();
 
-                            let raw = self.raw_status.clone();
-                            //self.status = serde_json::from_value::<DaemonStatus>(raw)?;
                             break;
                         }
                     }
@@ -529,8 +523,8 @@ impl PipeweaverHandler {
                                         let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
 
                                         let update = match self.channel_type {
-                                            ChannelType::Source => render.update_from_source_device_value(&dev),
-                                            ChannelType::Target => render.update_from_target_device_value(&dev),
+                                            ChannelType::Source => render.update_from_source_device_value(dev),
+                                            ChannelType::Target => render.update_from_target_device_value(dev),
                                         };
 
                                         for part in update {
@@ -927,13 +921,6 @@ impl PipeweaverHandler {
     }
 
     fn get_channel_renderer(&self, device: &String) -> Result<ChannelRenderer> {
-        // let sources = &self.status.audio.profile.devices.sources;
-        // let targets = &self.status.audio.profile.devices.targets;
-        // let dev = match self.channel_type {
-        //     ChannelType::Source => self.get_source_device_ref(device, sources)?,
-        //     ChannelType::Target => self.get_target_device_ref(device, targets)?,
-        // };
-
         let devices = &self.raw_status["audio"]["profile"]["devices"];
         let origin = match self.channel_type {
             ChannelType::Source => &devices["sources"],
@@ -1050,41 +1037,6 @@ impl PipeweaverHandler {
             OrderGroup::Hidden => parse("Hidden"),
         }
     }
-
-    // fn get_source_device_ref<'a>(
-    //     &self,
-    //     device: &String,
-    //     sources: &'a SourceDevices,
-    // ) -> Result<DeviceRef<'a>> {
-    //     sources
-    //         .physical_devices
-    //         .iter()
-    //         .map(DeviceRef::PhysicalSource)
-    //         .chain(sources.virtual_devices.iter().map(DeviceRef::VirtualSource))
-    //         .find(|dev| match dev {
-    //             DeviceRef::PhysicalSource(d) => d.description.id == *device,
-    //             DeviceRef::VirtualSource(d) => d.description.id == *device,
-    //             _ => false,
-    //         })
-    //         .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
-    // }
-    // fn get_target_device_ref<'a>(
-    //     &self,
-    //     device: &String,
-    //     targets: &'a TargetDevices,
-    // ) -> Result<DeviceRef<'a>> {
-    //     targets
-    //         .physical_devices
-    //         .iter()
-    //         .map(DeviceRef::PhysicalTarget)
-    //         .chain(targets.virtual_devices.iter().map(DeviceRef::VirtualTarget))
-    //         .find(|dev| match dev {
-    //             DeviceRef::PhysicalTarget(d) => d.description.id == *device,
-    //             DeviceRef::VirtualTarget(d) => d.description.id == *device,
-    //             _ => false,
-    //         })
-    //         .with_context(|| format!("Attempted to Display Non-existing Device: {}", device))
-    // }
 
     async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
         let (tx, rx) = oneshot::channel();
@@ -1287,11 +1239,6 @@ impl PipeweaverHandler {
                         "data": { "Pipewire": message },
                     });
                     let command = serde_json::to_string(&command)?;
-
-                    // let command = serde_json::to_string(&WebsocketRequest {
-                    //     id: self.get_command_index(),
-                    //     data: DaemonRequest::Pipewire(message),
-                    // })?;
                     stream.send(Message::Text(Utf8Bytes::from(command))).await?;
                 }
             }

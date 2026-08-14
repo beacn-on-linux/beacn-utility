@@ -58,7 +58,7 @@ pub(crate) struct RawImage {
 impl ChannelRenderer {
     pub fn from_source_device_value(device: &Value) -> Self {
         // Description Reading
-        let id = device["description"]["id"].as_str().unwrap();
+        //let id = device["description"]["id"].as_str().unwrap();
         let name = device["description"]["name"].as_str().unwrap();
         let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
         let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
@@ -101,7 +101,7 @@ impl ChannelRenderer {
 
     pub fn from_target_device_value(device: &Value) -> Self {
         // Description Reading
-        let id = device["description"]["id"].as_str().unwrap();
+        //let id = device["description"]["id"].as_str().unwrap();
         let name = device["description"]["name"].as_str().unwrap();
         let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
         let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
@@ -141,7 +141,7 @@ impl ChannelRenderer {
         device: &Value,
     ) -> Vec<ChannelChangedProperty> {
         // Description Reading
-        let id = device["description"]["id"].as_str().unwrap();
+        //let id = device["description"]["id"].as_str().unwrap();
         let name = device["description"]["name"].as_str().unwrap();
         let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
         let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
@@ -212,7 +212,7 @@ impl ChannelRenderer {
         device: &Value,
     ) -> Vec<ChannelChangedProperty> {
         // Description Reading
-        let id = device["description"]["id"].as_str().unwrap();
+        //let id = device["description"]["id"].as_str().unwrap();
         let name = device["description"]["name"].as_str().unwrap();
         let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
         let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;

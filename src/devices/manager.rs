@@ -27,7 +27,8 @@ use beacn_lib::manager::{
 use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-use futures::FutureExt;
+//use futures::FutureExt;
+use iced::futures::FutureExt;
 use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;

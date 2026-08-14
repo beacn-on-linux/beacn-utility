@@ -3,7 +3,7 @@ use anyhow::Error;
 use directories::BaseDirs;
 use enum_map::Enum;
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::{env, fs};
