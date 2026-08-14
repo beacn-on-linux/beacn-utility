@@ -30,47 +30,6 @@ impl State for ControlState {
 }
 
 impl ControlState {
-    pub fn load_settings(definition: DeviceDefinition, sender: Sender<ControlMessage>) -> Self {
-        let mut state = ControlState {
-            device_definition: definition,
-            device_sender: Some(sender),
-            ..Default::default()
-        };
-
-        // Before we do anything else, is this definition in an error state?
-        if let DefinitionState::Error(error) = &state.device_definition.state {
-            match error {
-                ErrorType::PermissionDenied => {
-                    state.device_state.state = LoadState::PermissionDenied
-                }
-                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
-                ErrorType::Other(s) => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: Some(format!("Device Definition Error: {s}")),
-                        failed_message: None,
-                    });
-                }
-                ErrorType::Unknown => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: Some("Unknown Error".to_string()),
-                        failed_message: None,
-                    });
-                }
-            }
-            return state;
-        }
-
-        // Grab the settings from a possible saved config file
-        state.load_from_file();
-        let _ = state.set_display_brightness(state.saved_settings.display_brightness, false);
-        let _ = state.set_button_brightness(state.saved_settings.button_brightness, false);
-        let _ = state.set_display_dim(state.saved_settings.display_dim, false);
-
-        state
-    }
-
     pub fn set_display_brightness(&mut self, brightness: u8, save: bool) -> Result<()> {
         let (tx, rx) = oneshot::channel();
 
@@ -111,6 +70,94 @@ impl ControlState {
     fn send_control(&self, message: ControlMessage) -> Result<()> {
         if let Some(tx) = &self.device_sender {
             tx.send(message)?;
+        }
+        Ok(())
+    }
+
+    pub async fn load_settings_async(
+        definition: DeviceDefinition,
+        sender: Sender<ControlMessage>,
+    ) -> Self {
+        let mut state = ControlState {
+            device_definition: definition,
+            device_sender: Some(sender),
+            ..Default::default()
+        };
+
+        // Before we do anything else, is this definition in an error state?
+        if let DefinitionState::Error(error) = &state.device_definition.state {
+            match error {
+                ErrorType::PermissionDenied => {
+                    state.device_state.state = LoadState::PermissionDenied
+                }
+                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::Other(s) => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some(format!("Device Definition Error: {s}")),
+                        failed_message: None,
+                    });
+                }
+                ErrorType::Unknown => {
+                    state.device_state.state = LoadState::Error;
+                    state.device_state.errors.push(ErrorMessage {
+                        error_text: Some("Unknown Error".to_string()),
+                        failed_message: None,
+                    });
+                }
+            }
+            return state;
+        }
+
+        // Grab the settings from a possible saved config file
+        state.load_from_file();
+        let _ = state.set_display_brightness_async(state.saved_settings.display_brightness, false);
+        let _ = state.set_button_brightness_async(state.saved_settings.button_brightness, false);
+        let _ = state.set_display_dim_async(state.saved_settings.display_dim, false);
+
+        state
+    }
+
+    pub async fn set_display_brightness_async(&mut self, brightness: u8, save: bool) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+
+        self.saved_settings.display_brightness = brightness;
+        let message = ControlMessage::DisplayBrightness(brightness, tx);
+        self.send_control_async(message).await?;
+        rx.await??;
+        if save {
+            self.save_to_file();
+        }
+        Ok(())
+    }
+
+    pub async fn set_button_brightness_async(&mut self, brightness: u8, save: bool) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.saved_settings.button_brightness = brightness;
+        let message = ControlMessage::ButtonBrightness(brightness, tx);
+        self.send_control_async(message).await?;
+        rx.await??;
+        if save {
+            self.save_to_file();
+        }
+        Ok(())
+    }
+
+    pub async fn set_display_dim_async(&mut self, timeout: Duration, save: bool) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        self.saved_settings.display_dim = timeout;
+        let message = ControlMessage::DimTimeout(timeout, tx);
+        self.send_control_async(message).await?;
+        rx.await??;
+        if save {
+            self.save_to_file();
+        }
+        Ok(())
+    }
+
+    async fn send_control_async(&self, message: ControlMessage) -> Result<()> {
+        if let Some(tx) = &self.device_sender {
+            tx.send_async(message).await?;
         }
         Ok(())
     }

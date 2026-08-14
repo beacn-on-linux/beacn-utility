@@ -425,7 +425,7 @@ async fn handle_device_attached(
             let (arrive_tx, arrive_rx) = oneshot::channel();
             let _ = order_tx.send(arrive_rx);
             tokio::spawn(async move {
-                let state = ControlState::load_settings(data, tx);
+                let state = ControlState::load_settings_async(data, tx).await;
                 let arrived = DeviceArriveMessage::Control(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
                 let _ = arrive_tx.send(message);
