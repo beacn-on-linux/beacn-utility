@@ -3,10 +3,10 @@ use crate::devices::states::audio::{AudioState, EqualiserBand, EqualiserBandType
 use crate::ui::pages::audio::config_pages::mic_equaliser::MicEqualiserEvent::{
     AddBand, LoadDefault, RemoveBand, SetAdvanced, SetFrequency, SetGain, SetQ, SetType,
 };
-use crate::ui::pages::audio::equaliser::eq_common::{
+use crate::ui::widgets::equaliser::eq_common::{
     EQ_MARGIN, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
-use crate::ui::pages::audio::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
+use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
 use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style};
 use beacn_lib::audio::messages::Message;

@@ -1,10 +1,10 @@
 use crate::devices::states::audio::EqualiserBandType::*;
 use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig};
 
-use crate::ui::pages::audio::equaliser::eq_common::{
+use crate::ui::widgets::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
 };
-use crate::ui::pages::audio::equaliser::eq_util::{BiquadCoefficient, EQUtil};
+use crate::ui::widgets::equaliser::eq_util::{BiquadCoefficient, EQUtil};
 use enum_map::EnumMap;
 use iced::alignment::Vertical;
 use iced::mouse;
