@@ -1,23 +1,123 @@
 use crate::devices::states::audio::AudioState;
+use crate::ui::pages::audio::config::ConfigMessage;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
+use crate::ui::pages::page::PageMessage;
 use crate::ui::widgets::helpers::buttons::toggle_button;
 use crate::ui::widgets::helpers::composite::draw_horizontal_range;
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity, SuppressorStyle};
+use beacn_lib::audio::messages::suppressor::{
+    Suppressor, SuppressorSensitivity, SuppressorStyle, SupressorAdaptTime,
+};
 use beacn_lib::types::{HasRange, Percent};
 use iced::widget::{Space, checkbox, column, row};
 use iced::{Element, Length, Task};
+use log::debug;
 use std::ops::RangeInclusive;
+use std::time::Duration;
+use tokio::time::sleep;
 
-pub struct SuppressorPage;
+// This is awkwardly positioned, we need to prevent things like page changes while this is running.
+#[derive(Debug, Clone)]
+pub(crate) enum SuppressorMessage {
+    Start,
+    Step(u64),
+    End,
+}
+
+pub struct SuppressorPage {
+    snapshot_running: bool,
+}
+
+impl SuppressorPage {
+    pub fn new() -> Self {
+        Self {
+            snapshot_running: false,
+        }
+    }
+}
 
 impl ConfigPage for SuppressorPage {
     fn title(&self) -> &'static str {
         "Noise Suppression"
     }
 
-    fn update(&mut self, _state: &mut AudioState, _message: ChildMessage) -> Task<ChildMessage> {
-        Task::none()
+    fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
+        let ChildMessage::Suppressor(message) = message else {
+            return Task::none();
+        };
+
+        match message {
+            SuppressorMessage::Start => {
+                self.snapshot_running = true;
+                debug!("Suppressor setup started");
+
+                // Ok, initial messages for setup
+                let msg = Message::Suppressor(Suppressor::Enabled(false));
+                let _ = state.handle_message(msg);
+
+                let msg = Message::Suppressor(Suppressor::Style(SuppressorStyle::Off));
+                let _ = state.handle_message(msg);
+
+                // No idea why this is set to 5%, but here we are.
+                // let msg = Message::Suppressor(Suppressor::Amount(Percent(5.0)));
+                // let _ = state.handle_message(msg);
+
+                Task::perform(
+                    async move {
+                        sleep(Duration::from_millis(1500)).await;
+                    },
+                    |_| ChildMessage::Suppressor(SuppressorMessage::Step(100)),
+                )
+            }
+            SuppressorMessage::Step(amount) => {
+                debug!("Suppressor step: {}", amount);
+                let msg =
+                    Message::Suppressor(Suppressor::AdaptTime(SupressorAdaptTime(amount as f32)));
+                let _ = state.handle_message(msg);
+
+                let next = match amount {
+                    100 => 1000,
+                    1000 => 2000,
+                    2000 => 5000,
+                    5000 => 0,
+                    _ => unreachable!(),
+                };
+
+                if next == 0 {
+                    Task::perform(
+                        async move {
+                            sleep(Duration::from_millis(3000)).await;
+                        },
+                        |_| ChildMessage::Suppressor(SuppressorMessage::End),
+                    )
+                } else {
+                    Task::perform(
+                        async move {
+                            sleep(Duration::from_millis(1500)).await;
+                        },
+                        move |_| ChildMessage::Suppressor(SuppressorMessage::Step(next)),
+                    )
+                }
+            }
+            SuppressorMessage::End => {
+                debug!("Suppressor setup complete");
+                let msg = Message::Suppressor(Suppressor::Enabled(true));
+                let _ = state.handle_message(msg);
+
+                let style = SuppressorStyle::Snapshot;
+                let msg = Message::Suppressor(Suppressor::Style(style));
+                let _ = state.handle_message(msg);
+
+                let time = SupressorAdaptTime(1000.0);
+                let msg = Message::Suppressor(Suppressor::AdaptTime(time));
+                let _ = state.handle_message(msg);
+
+                self.snapshot_running = false;
+                Task::none()
+            }
+        }
+
+        //Task::none()
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
@@ -62,7 +162,20 @@ impl ConfigPage for SuppressorPage {
         });
 
         let snap_spacer = Space::new().height(10.0);
-        let snap_button = toggle_button("Snapshot Not Supported", false).height(20.0);
+        let text = if self.snapshot_running {
+            "Snapshot in progress..."
+        } else {
+            "Run Snapshot"
+        };
+        let on_press = if self.snapshot_running {
+            None
+        } else {
+            Some(ChildMessage::Suppressor(SuppressorMessage::Start))
+        };
+
+        let snap_button = toggle_button(text, false)
+            .on_press_maybe(on_press)
+            .height(20.0);
 
         let mut sliders = column![amount].height(Length::Shrink).spacing(10.0);
         if is_adaptive {

@@ -10,6 +10,7 @@ use crate::ui::pages::audio::config_pages::compressor::CompressorMessage;
 use crate::ui::pages::audio::config_pages::expander::ExpanderMessage;
 
 use crate::ui::pages::audio::config_pages::headphones::HeadphonesMessage;
+use crate::ui::pages::audio::config_pages::suppressor::SuppressorMessage;
 use beacn_lib::audio::messages::Message;
 use iced::{Element, Task};
 
@@ -17,6 +18,7 @@ use iced::{Element, Task};
 pub(crate) enum ChildMessage {
     State(Message),
     Expander(ExpanderMessage),
+    Suppressor(SuppressorMessage),
     Compressor(CompressorMessage),
     Headphones(HeadphonesMessage),
 }
