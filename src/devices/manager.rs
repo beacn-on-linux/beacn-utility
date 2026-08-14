@@ -34,7 +34,6 @@ use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::time::Duration;
 use strum_macros::Display;
-use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
@@ -55,9 +54,21 @@ pub(crate) async fn spawn_device_manager(
     let mut devices: HashMap<DeviceLocation, DeviceEntry> = HashMap::new();
 
     // Small List of forwarding tasks
-    let (device_event_tx, mut device_event_rx) =
-        unbounded_channel::<(DeviceLocation, DeviceRequest)>();
+    let (device_event_tx, device_event_rx) = unbounded();
     let mut forwarders: HashMap<DeviceLocation, JoinHandle<()>> = HashMap::new();
+
+    // This is basically a FIFO channel for device arrivals
+    let (order_tx, order_rx) = unbounded();
+    {
+        let event_tx = event_tx.clone();
+        tokio::spawn(async move {
+            while let Ok(rx) = order_rx.recv_async().await {
+                if let Ok(msg) = rx.await {
+                    let _ = event_tx.send(msg);
+                }
+            }
+        });
+    }
 
     // watch_hotplug_devices is beacn-lib's async-native hotplug watcher -- spawn it as a
     // task instead of spawn_hotplug_handler, which would give us a dedicated OS thread we
@@ -104,7 +115,7 @@ pub(crate) async fn spawn_device_manager(
                                 &mut devices,
                                 &mut forwarders,
                                 &device_event_tx,
-                                &event_tx,
+                                &order_tx,
                             )
                             .await;
                         }
@@ -141,7 +152,7 @@ pub(crate) async fn spawn_device_manager(
                                 &mut devices,
                                 &mut forwarders,
                                 &device_event_tx,
-                                &event_tx,
+                                &order_tx,
                             )
                             .await;
                         }
@@ -164,7 +175,7 @@ pub(crate) async fn spawn_device_manager(
                 }
             }
 
-            Some((location, req)) = device_event_rx.recv() => {
+            Ok((location, req)) = device_event_rx.recv_async() => {
                 match req {
                     DeviceRequest::Audio(msg) => {
                         if let Some(DeviceEntry::Audio(dev)) = devices.get(&location) {
@@ -258,7 +269,7 @@ pub(crate) async fn spawn_device_manager(
         }
 
         tokio::select! {
-            Some((location, req)) = device_event_rx.recv() => {
+            Ok((location, req)) = device_event_rx.recv_async() => {
                 if let DeviceRequest::Control(msg) = req
                     && let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                         match msg {
@@ -289,8 +300,8 @@ async fn handle_device_attached(
     health_tx: Sender<()>,
     devices: &mut HashMap<DeviceLocation, DeviceEntry>,
     forwarders: &mut HashMap<DeviceLocation, JoinHandle<()>>,
-    device_event_tx: &UnboundedSender<(DeviceLocation, DeviceRequest)>,
-    event_tx: &Sender<DeviceMessage>,
+    device_event_tx: &Sender<(DeviceLocation, DeviceRequest)>,
+    order_tx: &Sender<oneshot::Receiver<DeviceMessage>>,
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
@@ -337,13 +348,16 @@ async fn handle_device_attached(
                 );
             }
 
-            debug!("Spawning Handler?");
-            let event_tx_inner = event_tx.clone();
+            // Reserve a Slot in the Queue
+            let (arrive_tx, arrive_rx) = oneshot::channel();
+            let _ = order_tx.send(arrive_rx);
+
+            // Complete against the queue
             tokio::spawn(async move {
                 let state = AudioState::load_settings_async(data, tx).await;
                 let arrived = DeviceArriveMessage::Audio(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                let _ = event_tx_inner.send(message);
+                let _ = arrive_tx.send(message);
             });
         }
         DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
@@ -407,15 +421,14 @@ async fn handle_device_attached(
                 );
             }
 
-            // Use the async runtime for this
-            debug!("Starting PipeWeaver Handler");
-
-            let event_tx_inner = event_tx.clone();
+            // Reserve a Slot in the Queue
+            let (arrive_tx, arrive_rx) = oneshot::channel();
+            let _ = order_tx.send(arrive_rx);
             tokio::task::spawn_blocking(move || {
                 let state = ControlState::load_settings(data, tx);
                 let arrived = DeviceArriveMessage::Control(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                let _ = event_tx_inner.send(message);
+                let _ = arrive_tx.send(message);
             });
         }
     }
@@ -430,7 +443,7 @@ async fn handle_device_attached(
 fn spawn_forwarder<M: Send + 'static>(
     location: DeviceLocation,
     rx: Receiver<M>,
-    device_event_tx: UnboundedSender<(DeviceLocation, DeviceRequest)>,
+    device_event_tx: Sender<(DeviceLocation, DeviceRequest)>,
     wrap: impl Fn(M) -> DeviceRequest + Send + 'static,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {

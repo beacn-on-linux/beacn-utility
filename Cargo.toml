@@ -77,13 +77,13 @@ futures = "0.3.33"
 
 [target.'cfg(unix)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
-ashpd = { version = "0.13.13", features = ["raw_handle", "background"] }
+ashpd = { version = "0.13.13", features = ["tokio", "raw_handle", "background"] }
 
 # Tray Handler
 ksni = { version = "0.3.6", features = ["blocking"] }
 
 # Sleep Management
-zbus = "5.18.0"
+zbus = { version = "5.18.0", features = ["tokio"] }
 
 # Packaging
 [package.metadata.deb]
