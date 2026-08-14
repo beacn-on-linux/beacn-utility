@@ -68,9 +68,9 @@ pub enum OrderGroup {
     Hidden,
 }
 
-#[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
-pub enum MuteState {
-    #[default]
-    Unmuted,
-    Muted,
-}
+// #[derive(Default, Debug, Copy, Clone, Hash, Eq, PartialEq, Enum, Display, EnumIter, Serialize)]
+// pub enum MuteState {
+//     #[default]
+//     Unmuted,
+//     Muted,
+// }

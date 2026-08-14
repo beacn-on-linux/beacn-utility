@@ -2,7 +2,7 @@ use crate::devices::manager::ControlMessage;
 use crate::devices::manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer};
 use crate::integrations::pipeweaver::helpers::{
-    Mix, MuteState, MuteTarget, OrderGroup, get_pipeweaver_socket_path, read_json, send_json,
+    Mix, MuteTarget, OrderGroup, get_pipeweaver_socket_path, read_json, send_json,
 };
 use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
@@ -1225,8 +1225,8 @@ impl PipeweaverHandler {
                         ChannelType::Target => {
                             let muted = current.mute_states[MuteTarget::TargetA].is_active;
                             let state = match muted {
-                                true => MuteState::Unmuted,
-                                false => MuteState::Muted,
+                                true => "Unmuted",
+                                false => "Muted",
                             };
                             json!({
                                 "SetTargetMuteState": [device, state]
