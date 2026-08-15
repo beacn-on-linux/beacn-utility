@@ -368,8 +368,8 @@ impl EQDrawView {
 
                 let x = plot_rect.x + (i as f32 / (bins.len() - 1) as f32) * plot_rect.width;
 
-                let mut plot_rect = plot_rect.clone();
-                plot_rect.height = plot_rect.height - (EQ_PLOT_BORDER_WIDTH / 2.0);
+                let mut plot_rect = plot_rect;
+                plot_rect.height -= EQ_PLOT_BORDER_WIDTH / 2.0;
 
                 let y = EqGeometry::db_to_y(mapped_db, plot_rect);
 
@@ -629,7 +629,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         self.draw_band_points(&mut points_frame, plot_rect);
         geometries.push(points_frame.into_geometry());
 
-        if self.spectrum_bins.len() > 0 {
+        if !self.spectrum_bins.is_empty() {
             geometries.push(self.spectrum_cache.draw(renderer, bounds.size(), |frame| {
                 self.draw_spectrum(frame, plot_rect);
             }));

@@ -42,11 +42,12 @@ impl ControlState {
                 let message = rx.recv()?;
 
                 // Quickly intercept the message, and set our local value
-                if let Ok(message) = &message {
-                    if self.set_local_value(message) && save {
-                        self.save_to_file();
-                    };
-                }
+                if let Ok(message) = &message
+                    && self.set_local_value(message)
+                    && save
+                {
+                    self.save_to_file();
+                };
                 Ok(message?)
             }
             None => bail!("Device Sender not Ready"),
@@ -64,11 +65,13 @@ impl ControlState {
                 let message = rx.await?;
 
                 // Quickly intercept the message, and set our local value
-                if let Ok(message) = &message {
-                    if self.set_local_value(message) && save {
-                        self.save_to_file();
-                    }
+                if let Ok(message) = &message
+                    && self.set_local_value(message)
+                    && save
+                {
+                    self.save_to_file();
                 }
+
                 Ok(message?)
             }
             None => bail!("Device Sender not Ready"),
@@ -194,10 +197,11 @@ impl ControlState {
         if let Ok(path) = get_config_path() {
             let config_file = path.join(file_name);
             match File::create(&config_file) {
-                Ok(file) => match serde_json::to_writer_pretty(file, &self.saved_settings) {
-                    Err(e) => warn!("Config Saving Failed: {e}"),
-                    _ => {}
-                },
+                Ok(file) => {
+                    if let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings) {
+                        warn!("Config Saving Failed: {e}");
+                    }
+                }
                 Err(e) => warn!("Config Saving Failed: {e}"),
             }
             return;

@@ -164,10 +164,10 @@ impl DynamicSpectrumAnalyzer {
 
         // Copy the chronological history straight into the FFT buffer
         let mut fft_buffer = vec![Complex::new(0.0, 0.0); self.fft_size];
-        for i in 0..self.fft_size {
+        for (i, buffer) in fft_buffer.iter_mut().enumerate().take(self.fft_size) {
             let sample = self.history[i];
             let window = 0.5 * (1.0 - ((2.0 * PI * i as f32) / (self.fft_size as f32 - 1.0)).cos());
-            fft_buffer[i] = Complex::new(sample * window, 0.0);
+            *buffer = Complex::new(sample * window, 0.0);
         }
 
         // 2. Perform Forward FFT
@@ -184,7 +184,7 @@ impl DynamicSpectrumAnalyzer {
         let max_valid_bin = self.fft_size / 2;
 
         // 3. Map the bins using a true band-aware bucket approach
-        for i in 0..num_points {
+        for (i, item) in output_db.iter_mut().enumerate().take(num_points) {
             let t_norm = i as f32 / ((num_points - 1).max(1)) as f32;
             let target_freq = (log_min + t_norm * (log_max - log_min)).exp();
 
@@ -201,8 +201,8 @@ impl DynamicSpectrumAnalyzer {
             let bin_high = (bin_high_f.ceil() as usize).clamp(0, max_valid_bin - 1);
 
             let mut peak_mag = 0.0_f32;
-            for bin in bin_low..=bin_high {
-                let m = fft_buffer[bin].norm() * scale_factor;
+            for bin in fft_buffer.iter().take(bin_high + 1).skip(bin_low) {
+                let m = bin.norm() * scale_factor;
                 if m > peak_mag {
                     peak_mag = m;
                 }
@@ -220,15 +220,10 @@ impl DynamicSpectrumAnalyzer {
             let mut db = 20.0 * (peak_mag + 1e-6).log10();
 
             // Strict clamp output boundaries to your required range
-            if db > 0.0 {
-                db = 0.0;
-            }
-            if db < MIN_DB {
-                db = MIN_DB;
-            }
+            db = db.clamp(MIN_DB, 0.0);
 
             // Ballistic damping across frames for fluid rendering
-            output_db[i] = (0.25 * db) + (0.75 * output_db[i]);
+            *item = (0.25 * db) + (0.75 * *item);
         }
     }
 }

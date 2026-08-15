@@ -21,7 +21,7 @@ log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 anyhow = "1.0.104"
 
 # Async Runtime
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal"] }
+tokio = { version = "1.53.1", features = ["process", "rt-multi-thread", "signal"] }
 
 # Opening Stuff
 open = "5.4.0"

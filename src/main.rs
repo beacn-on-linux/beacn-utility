@@ -8,9 +8,8 @@ use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
 use file_rotate::{ContentLimit, FileRotate};
 use iced::font::{Family, Weight};
-use iced::window::settings::PlatformSpecific;
 use iced::{Font, Size, window};
-use log::{LevelFilter, debug, error, info, warn};
+use log::{LevelFilter, debug, info, warn};
 use simplelog::{
     ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
 };
@@ -143,6 +142,7 @@ fn main() -> Result<()> {
     let tray = task::spawn(async move {
         #[cfg(unix)]
         {
+            use log::error;
             use managers::tray::handle_tray;
             if let Err(e) = handle_tray(tray_rx, tray_window_tx).await {
                 error!("Failed to Spawn Tray: {e}");
@@ -213,6 +213,7 @@ fn spawn_iced_window(
     };
 
     // Initial Window Settings and size
+    #[allow(unused_mut)]
     let mut window_settings = window::Settings {
         exit_on_close_request: false,
         icon: Some(load_icon_iced(ICON)),
@@ -225,6 +226,7 @@ fn spawn_iced_window(
     #[cfg(target_os = "linux")]
     {
         let application_id = format!("{APP_TLD}.{APP_NAME}");
+        use iced::window::settings::PlatformSpecific;
         window_settings.platform_specific = PlatformSpecific {
             application_id,
             ..Default::default()

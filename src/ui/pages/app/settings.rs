@@ -3,10 +3,11 @@ use crate::{HASH, VERSION, has_autostart};
 use anyhow::Result;
 use iced::widget::{Space, checkbox, column, rule, text};
 use iced::{Element, Task, window};
-use log::{debug, warn};
+use log::debug;
 use window::Id;
 
 #[derive(Debug, Copy, Clone)]
+#[allow(unused)]
 pub(crate) enum SettingsMessage {
     EnableAutostart(bool),
     AutoStartChanged,
@@ -68,7 +69,7 @@ impl SettingsPage {
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn set_autostart(&mut self, window_id: window::Id, enabled: bool) -> Task<SettingsMessage> {
+    fn set_autostart(&mut self, _: window::Id, _: bool) -> Task<SettingsMessage> {
         Task::none()
     }
 
@@ -79,6 +80,7 @@ impl SettingsPage {
         use ashpd::WindowIdentifier;
         use ashpd::desktop::background::Background;
         use ini::Ini;
+        use log::warn;
         use std::{env, fs};
 
         if ashpd::is_sandboxed() {
