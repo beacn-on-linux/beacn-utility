@@ -42,6 +42,8 @@ pub(crate) struct AudioState {
     pub device_state: DeviceLoadState,
     pub device_sender: Option<Sender<AudioMessage>>,
 
+    pub current_settings: Vec<Message>,
+
     pub headphones: Headphones,
     pub lighting: Lighting,
     pub equaliser: Equaliser,
@@ -431,6 +433,9 @@ impl AudioState {
     }
 
     pub(crate) fn set_local_value(&mut self, value: Message) {
+        self.current_settings.retain(|m| !m.is_same_target(&value));
+        self.current_settings.push(value);
+
         match value {
             Message::BassEnhancement(b) => match b {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
