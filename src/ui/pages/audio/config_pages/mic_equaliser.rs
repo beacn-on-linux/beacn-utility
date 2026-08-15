@@ -313,7 +313,6 @@ impl MicEqualiser {
 
         for message in messages {
             let _ = state.handle_message(message);
-            state.set_local_value(message);
         }
     }
 

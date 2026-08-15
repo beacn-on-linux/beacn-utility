@@ -62,7 +62,6 @@ impl State for AudioState {
     fn location(&self) -> &DeviceLocation {
         &self.device_definition.location
     }
-
     fn definition(&self) -> &DeviceDefinition {
         &self.device_definition
     }
@@ -347,16 +346,13 @@ impl AudioState {
             }
 
             let value = state.handle_message(message);
-            match value {
-                Ok(value) => state.set_local_value(value),
-                Err(value) => {
-                    // fetch_value didn't panic, but it did error
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: Some(format!("{value:?}")),
-                        failed_message: Some(message),
-                    })
-                }
+            if let Err(e) = value {
+                // fetch_value didn't panic, but it did error
+                state.device_state.state = LoadState::Error;
+                state.device_state.errors.push(ErrorMessage {
+                    error_text: Some(format!("{e:?}")),
+                    failed_message: Some(message),
+                })
             }
         }
 
