@@ -1,10 +1,11 @@
 use crate::devices::manager::{ControlMessage, DefinitionState, DeviceDefinition, ErrorType};
 use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use crate::get_config_path;
-use anyhow::Result;
+use anyhow::{Result, bail};
+use beacn_lib::controller::messages::Message;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::DeviceLocation;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::time::Duration;
@@ -30,48 +31,69 @@ impl State for ControlState {
 }
 
 impl ControlState {
-    pub fn set_display_brightness(&mut self, brightness: u8, save: bool) -> Result<()> {
+    pub fn handle_message(&mut self, message: Message, save: bool) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
+        let message = ControlMessage::Handle(message, tx);
 
-        self.saved_settings.display_brightness = brightness;
-        let message = ControlMessage::DisplayBrightness(brightness, tx);
-        self.send_control(message)?;
-        rx.recv()??;
-        if save {
-            self.save_to_file();
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                // Quickly intercept the message, and set our local value
+                if let Ok(message) = &message {
+                    if self.set_local_value(message) && save {
+                        self.save_to_file();
+                    };
+                }
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
         }
-        Ok(())
     }
 
-    pub fn set_button_brightness(&mut self, brightness: u8, save: bool) -> Result<()> {
+    pub async fn handle_message_async(&mut self, message: Message, save: bool) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
-        self.saved_settings.button_brightness = brightness;
-        let message = ControlMessage::ButtonBrightness(brightness, tx);
-        self.send_control(message)?;
-        rx.recv()??;
-        if save {
-            self.save_to_file();
+        let message = ControlMessage::Handle(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send_async(message).await?;
+                let message = rx.await?;
+
+                // Quickly intercept the message, and set our local value
+                if let Ok(message) = &message {
+                    if self.set_local_value(message) && save {
+                        self.save_to_file();
+                    }
+                }
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
         }
-        Ok(())
     }
 
-    pub fn set_display_dim(&mut self, timeout: Duration, save: bool) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.saved_settings.display_dim = timeout;
-        let message = ControlMessage::DimTimeout(timeout, tx);
-        self.send_control(message)?;
-        rx.recv()??;
-        if save {
-            self.save_to_file();
+    fn set_local_value(&mut self, message: &Message) -> bool {
+        match message {
+            Message::DisplayBrightness(b) => {
+                self.saved_settings.display_brightness = *b;
+                true
+            }
+            Message::ButtonBrightness(b) => {
+                self.saved_settings.button_brightness = *b;
+                true
+            }
+            Message::DisplayDimTime(t) => {
+                self.saved_settings.display_dim = *t;
+                true
+            }
+            _ => {
+                // Anything else can't be saved, so don't try.
+                false
+            }
         }
-        Ok(())
-    }
-
-    fn send_control(&self, message: ControlMessage) -> Result<()> {
-        if let Some(tx) = &self.device_sender {
-            tx.send(message)?;
-        }
-        Ok(())
     }
 
     pub async fn load_settings_async(
@@ -111,72 +133,56 @@ impl ControlState {
 
         // Grab the settings from a possible saved config file
         state.load_from_file();
-        let _ = state.set_display_brightness_async(state.saved_settings.display_brightness, false);
-        let _ = state.set_button_brightness_async(state.saved_settings.button_brightness, false);
-        let _ = state.set_display_dim_async(state.saved_settings.display_dim, false);
+        let messages = [
+            Message::DisplayBrightness(state.saved_settings.display_brightness),
+            Message::ButtonBrightness(state.saved_settings.button_brightness),
+            Message::DisplayDimTime(state.saved_settings.display_dim),
+        ];
+
+        debug!("Sending Initial Messages");
+        for message in messages {
+            debug!("Sending Message: {:?}", message);
+            // Skip this message if it's not valid for this version
+            if let Err(e) = state.handle_message_async(message.clone(), false).await {
+                state.device_state.state = LoadState::Error;
+                state.device_state.errors.push(ErrorMessage {
+                    error_text: Some(format!("{e:?}")),
+                    failed_message: None,
+                })
+            }
+        }
 
         state
     }
 
-    pub async fn set_display_brightness_async(&mut self, brightness: u8, save: bool) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-
-        self.saved_settings.display_brightness = brightness;
-        let message = ControlMessage::DisplayBrightness(brightness, tx);
-        self.send_control_async(message).await?;
-        rx.await??;
-        if save {
-            self.save_to_file();
-        }
-        Ok(())
-    }
-
-    pub async fn set_button_brightness_async(&mut self, brightness: u8, save: bool) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.saved_settings.button_brightness = brightness;
-        let message = ControlMessage::ButtonBrightness(brightness, tx);
-        self.send_control_async(message).await?;
-        rx.await??;
-        if save {
-            self.save_to_file();
-        }
-        Ok(())
-    }
-
-    pub async fn set_display_dim_async(&mut self, timeout: Duration, save: bool) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        self.saved_settings.display_dim = timeout;
-        let message = ControlMessage::DimTimeout(timeout, tx);
-        self.send_control_async(message).await?;
-        rx.await??;
-        if save {
-            self.save_to_file();
-        }
-        Ok(())
-    }
-
-    async fn send_control_async(&self, message: ControlMessage) -> Result<()> {
-        if let Some(tx) = &self.device_sender {
-            tx.send_async(message).await?;
-        }
-        Ok(())
-    }
-
     pub fn load_from_file(&mut self) {
-        let file_name = format!("{}.json", self.device_definition.device_info.serial);
+        let serial = self.device_definition.device_info.serial.clone();
+        let file_name = format!("{}.json", serial);
 
-        if let Ok(path) = get_config_path() {
-            let config_file = path.join(file_name);
-            if config_file.exists()
-                && let Ok(file) = File::open(config_file)
-                && let Ok(config) = serde_json::from_reader(file)
-            {
-                debug!("Load Successful");
-                self.saved_settings = config;
-                return;
+        match get_config_path() {
+            Ok(path) => {
+                let config_file = path.join(file_name);
+                if config_file.exists() {
+                    match File::open(&config_file) {
+                        Ok(file) => match serde_json::from_reader(file) {
+                            Ok(config) => {
+                                info!("Loaded Device config from: {:?}", config_file);
+                                self.saved_settings = config;
+                                return;
+                            }
+                            Err(e) => warn!("Config Loading Failed: {e}"),
+                        },
+                        Err(e) => warn!("Config Loading Failed: {e}"),
+                    }
+                } else {
+                    info!("Creating Device Config for: {:?}", serial);
+                }
+            }
+            Err(e) => {
+                warn!("Unable to locate config directory, cannot load settings: {e}");
             }
         }
-        debug!("Config Load Failed, Setting Defaults");
+
         // Load the default settings, then save them.
         self.saved_settings = SavedSettings::default();
         self.save_to_file();
@@ -187,12 +193,14 @@ impl ControlState {
 
         if let Ok(path) = get_config_path() {
             let config_file = path.join(file_name);
-
-            if let Ok(file) = File::create(config_file)
-                && let Err(e) = serde_json::to_writer_pretty(file, &self.saved_settings)
-            {
-                warn!("Config Saving Failed: {e}");
+            match File::create(&config_file) {
+                Ok(file) => match serde_json::to_writer_pretty(file, &self.saved_settings) {
+                    Err(e) => warn!("Config Saving Failed: {e}"),
+                    _ => {}
+                },
+                Err(e) => warn!("Config Saving Failed: {e}"),
             }
+            return;
         }
 
         warn!("Unable to locate config directory, cannot save.");

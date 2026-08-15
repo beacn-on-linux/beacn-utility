@@ -2,6 +2,7 @@ use crate::devices::states::control::ControlState;
 use crate::ui::pages::info_row;
 use crate::ui::pages::page::{ControllerPage, PageMessage};
 use crate::ui::widgets::helpers::composite::draw_horizontal_range;
+use beacn_lib::controller::messages::Message;
 use beacn_lib::manager::DeviceType;
 use iced::widget::{Space, container, row, rule, text};
 use iced::{Alignment, Element, Task};
@@ -33,13 +34,16 @@ impl ControllerPage for About {
         };
         match msg {
             ControlAboutMessage::ButtonBrightness(brightness) => {
-                let _ = state.set_button_brightness(brightness, true);
+                let msg = Message::ButtonBrightness(brightness);
+                let _ = state.handle_message(msg, true);
             }
             ControlAboutMessage::DisplayBrightness(brightness) => {
-                let _ = state.set_display_brightness(brightness, true);
+                let msg = Message::DisplayBrightness(brightness);
+                let _ = state.handle_message(msg, true);
             }
             ControlAboutMessage::DisplayDim(duration) => {
-                let _ = state.set_display_dim(duration, true);
+                let msg = Message::DisplayDimTime(duration);
+                let _ = state.handle_message(msg, true);
             }
         }
 

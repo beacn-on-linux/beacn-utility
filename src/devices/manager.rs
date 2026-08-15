@@ -17,14 +17,14 @@ use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::LoginEventTriggers;
 use anyhow::anyhow;
-use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::Message as AMessage;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
-use beacn_lib::controller::{BeacnControlDevice, ButtonLighting, open_control_device};
+use beacn_lib::controller::messages::Message as CMessage;
+use beacn_lib::controller::{BeacnControlDevice, open_control_device};
 use beacn_lib::flume::{Receiver, Sender, bounded, unbounded};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, watch_hotplug_devices,
 };
-use beacn_lib::types::RGBA;
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
 //use futures::FutureExt;
@@ -182,9 +182,7 @@ pub(crate) async fn spawn_device_manager(
                         if let Some(DeviceEntry::Audio(dev)) = devices.get(&location) {
                             match msg {
                                 AudioMessage::Handle(msg, resp) => {
-                                    let response = AssertUnwindSafe(dev.handle_message(msg))
-                                        .catch_unwind()
-                                        .await;
+                                    let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
 
                                     match response {
                                         Ok(result) => {
@@ -192,11 +190,7 @@ pub(crate) async fn spawn_device_manager(
                                         }
 
                                         Err(panic) => {
-                                            let error = panic
-                                                .downcast_ref::<String>()
-                                                .cloned()
-                                                .unwrap_or_else(|| "Unknown Error".to_string());
-
+                                            let error = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
                                             let _ = resp.send(Err(anyhow!(error).into()));
                                         }
                                     }
@@ -218,26 +212,19 @@ pub(crate) async fn spawn_device_manager(
                     DeviceRequest::Control(msg) => {
                         if let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                             match msg {
-                                ControlMessage::SendImage(img, x, y, tx) => {
-                                    let _ = tx.send(dev.set_image(x, y, &img).await);
-                                }
-                                ControlMessage::DisplayBrightness(brightness, tx) => {
-                                    let _ = tx.send(dev.set_display_brightness(brightness).await);
-                                }
-                                ControlMessage::ButtonBrightness(brightness, tx) => {
-                                    let _ = tx.send(dev.set_button_brightness(brightness).await);
-                                }
-                                ControlMessage::DimTimeout(timeout, tx) => {
-                                    let _ = tx.send(dev.set_dim_timeout(timeout).await);
-                                }
-                                ControlMessage::ButtonColour(button, colour, tx) => {
-                                    let _ = tx.send(dev.set_button_colour(button, colour).await);
-                                }
-                                ControlMessage::Enabled(enabled, tx) => {
-                                    let _ = tx.send(dev.set_enabled(enabled).await);
-                                }
-                                ControlMessage::KeepAlive(tx) => {
-                                    let _ = tx.send(dev.send_keepalive().await);
+                                ControlMessage::Handle(msg, resp) => {
+                                    let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
+
+                                    match response {
+                                        Ok(result) => {
+                                            let _ = resp.send(result);
+                                        }
+
+                                        Err(panic) => {
+                                            let error = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
+                                            let _ = resp.send(Err(anyhow!(error).into()));
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -274,15 +261,10 @@ pub(crate) async fn spawn_device_manager(
                 if let DeviceRequest::Control(msg) = req
                     && let Some(DeviceEntry::Control(dev, ..)) = devices.get(&location) {
                         match msg {
-                            ControlMessage::SendImage(img, x, y, tx) => {
-                                let _ = tx.send(dev.set_image(x, y, &img).await);
+                            ControlMessage::Handle(msg, resp) => {
+                                let _ = resp.send(dev.handle_message(msg).await);
                             }
-                            ControlMessage::ButtonColour(button, colour, tx) => {
-                                let _ = tx.send(dev.set_button_colour(button, colour).await);
-                            }
-                            _ => {}
                         }
-
                 }
             }
             _ = tokio::time::sleep(Duration::from_millis(10)) => {}
@@ -465,7 +447,8 @@ enum DeviceRequest {
 async fn enable_devices(devices: &HashMap<DeviceLocation, DeviceEntry>, enabled: bool) {
     for device in devices.values() {
         if let DeviceEntry::Control(dev, ..) = device {
-            let _ = dev.set_enabled(enabled).await;
+            let message = CMessage::Enabled(enabled);
+            let _ = dev.handle_message(message).await;
         }
     }
 }
@@ -504,7 +487,7 @@ pub(crate) enum DeviceArriveMessage {
 
 #[derive(Debug)]
 pub enum AudioMessage {
-    Handle(Message, oneshot::Sender<Result<Message, BeacnError>>),
+    Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
     Linked(LinkedCommands),
 }
 
@@ -516,17 +499,7 @@ pub enum LinkedCommands {
 
 #[allow(unused)]
 pub enum ControlMessage {
-    Enabled(bool, oneshot::Sender<Result<(), BeacnError>>),
-    KeepAlive(oneshot::Sender<Result<(), BeacnError>>),
-    SendImage(Vec<u8>, u32, u32, oneshot::Sender<Result<(), BeacnError>>),
-    DisplayBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
-    ButtonBrightness(u8, oneshot::Sender<Result<(), BeacnError>>),
-    DimTimeout(Duration, oneshot::Sender<Result<(), BeacnError>>),
-    ButtonColour(
-        ButtonLighting,
-        RGBA,
-        oneshot::Sender<Result<(), BeacnError>>,
-    ),
+    Handle(CMessage, oneshot::Sender<Result<CMessage, BeacnError>>),
 }
 
 #[derive(Debug, Default, Clone, Hash, PartialEq, Eq)]

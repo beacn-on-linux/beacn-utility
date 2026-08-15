@@ -1,5 +1,4 @@
 use crate::devices::manager::ControlMessage;
-use crate::devices::manager::ControlMessage::{ButtonColour, SendImage};
 use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer};
 use crate::integrations::pipeweaver::helpers::{
     Mix, MuteTarget, OrderGroup, get_pipeweaver_socket_path, read_json, send_json,
@@ -10,6 +9,7 @@ use crate::integrations::pipeweaver::layout::{
 };
 use crate::runtime;
 use anyhow::{Result, anyhow, bail};
+use beacn_lib::controller::messages::Message as BeacnMessage;
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
 use beacn_lib::flume::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
@@ -28,6 +28,7 @@ use serde_json::{Value, from_value, json};
 use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::io::ErrorKind;
+use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 use tokio::net::TcpStream;
@@ -41,7 +42,12 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungsten
 
 const HELD_TIME: Duration = Duration::from_millis(500);
 
-const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
+//const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
+static PW_SPLASH: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| {
+    let bytes = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
+    Arc::new(bytes.to_vec())
+});
+
 const PIPEWEAVER_APP_NAME: &str = "PipeWeaver";
 const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
 
@@ -281,10 +287,8 @@ impl PipeweaverHandler {
     }
 
     async fn draw_splash(&self) {
-        let (tx, rx) = oneshot::channel();
-
-        let _ = self.sender.send(SendImage(Vec::from(PW_SPLASH), 0, 0, tx));
-        let _ = rx.await;
+        let message = BeacnMessage::Image(0, 0, PW_SPLASH.clone());
+        let _ = self.send_message(message).await;
     }
 
     async fn draw_status(&self, text: &str) {
@@ -299,21 +303,15 @@ impl PipeweaverHandler {
         );
 
         if let Ok(img) = img_as_jpeg(text, Rgba([0, 0, 0, 255])) {
-            let (tx, rx) = oneshot::channel();
-            match self.sender.send(SendImage(img, 0, 330, tx)) {
-                Ok(_) => debug!("Pipeweaver SendImage queued"),
-                Err(e) => debug!("Pipeweaver SendImage failed: {:?}", e),
-            }
-            let _ = rx.await;
+            let message = BeacnMessage::Image(0, 330, Arc::new(img));
+            let _ = self.send_message(message).await;
         }
     }
 
     async fn disable_buttons(&self) {
         for button in ButtonLighting::iter() {
-            let (tx, rx) = oneshot::channel();
-            let _ = self.sender.send(ButtonColour(button, COLOUR_BLACK, tx));
-
-            let _ = rx.await;
+            let msg = BeacnMessage::ButtonColour(button, COLOUR_BLACK);
+            let _ = self.send_message(msg).await;
         }
     }
 
@@ -432,10 +430,7 @@ impl PipeweaverHandler {
         const TICK_RATE: f32 = METER_HALF_TICK_MS as f32 / 1000.0;
 
         let mut keep_alive = time::interval(Duration::from_secs(10));
-
-        let (tx, rx) = oneshot::channel();
-        self.sender.send(ControlMessage::Enabled(true, tx))?;
-        rx.await??;
+        self.send_message(BeacnMessage::Enabled(true)).await?;
 
         let mut last_channel_count = 0;
 
@@ -589,8 +584,10 @@ impl PipeweaverHandler {
                                             let y = y + root_y;
 
                                             // Send it
-                                            let (tx,rx) = oneshot::channel();
-                                            self.sender.send(SendImage(img, x, y, tx))?;
+                                            let message = BeacnMessage::Image(x, y, Arc::new(img));
+                                            let (tx, rx) = oneshot::channel();
+                                            let msg = ControlMessage::Handle(message, tx);
+                                            self.sender.send_async(msg).await?;
                                             rx.await??;
                                         };
 
@@ -649,9 +646,8 @@ impl PipeweaverHandler {
                                 let x = base_x + x + root_x;
                                 let y = y + root_y;
 
-                                let (tx, rx) = oneshot::channel();
-                                self.sender.send(SendImage(drawing.image, x, y, tx))?;
-                                rx.await??;
+                                let msg = BeacnMessage::Image(x, y, Arc::new(drawing.image));
+                                self.send_message(msg).await?;
 
                                 sub_tick = Some((result.id, index));
                                 sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
@@ -693,8 +689,10 @@ impl PipeweaverHandler {
                         let x = ch_w * index as u32 + x + root_x;
                         let y = y + root_y;
 
+                        let message = BeacnMessage::Image(x, y, Arc::new(drawing.image));
                         let (tx, rx) = oneshot::channel();
-                        self.sender.send(SendImage(drawing.image, x, y, tx))?;
+                        let msg = ControlMessage::Handle(message, tx);
+                        self.sender.send_async(msg).await?;
                         rx.await??;
 
                         // Keep ticking until meter hits zero
@@ -707,10 +705,7 @@ impl PipeweaverHandler {
 
                 _ = &mut suspend_sleep, if self.is_suspended() => {
                     // We should be sleeping, and something woke us up, so put us back to sleep
-                    let (tx, rx) = oneshot::channel();
-                    self.sender.send(ControlMessage::Enabled(false, tx))?;
-                    rx.await??;
-
+                    self.send_message(BeacnMessage::Enabled(false)).await?;
                     self.temporary_active = false;
                 }
 
@@ -723,10 +718,7 @@ impl PipeweaverHandler {
 
                                 if !self.temporary_active {
                                     // Wake the device up, and flag as temporarily active
-                                    let (tx, rx) = oneshot::channel();
-                                    self.sender.send(ControlMessage::Enabled(true, tx))?;
-                                    rx.await??;
-
+                                    self.send_message(BeacnMessage::Enabled(true)).await?;
                                     self.temporary_active = true;
                                 }
                             }
@@ -752,9 +744,7 @@ impl PipeweaverHandler {
                     }
                 }
                 _instant = keep_alive.tick() => {
-                    let (tx,rx) = oneshot::channel();
-                    self.sender.send(ControlMessage::KeepAlive(tx))?;
-                    rx.await??;
+                    self.send_message(BeacnMessage::KeepAlive).await?;
                 }
 
                 _ = ticker.tick() => {
@@ -802,12 +792,9 @@ impl PipeweaverHandler {
             DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
         }
 
-        let (tx, rx) = oneshot::channel();
         let img = img_as_jpeg(base, BG_COLOUR)?;
-        self.sender.send(SendImage(img, 0, 0, tx))?;
-
-        debug!("Full Redraw Send");
-        rx.await??;
+        let msg = BeacnMessage::Image(0, 0, Arc::new(img));
+        self.send_message(msg).await?;
 
         Ok(())
     }
@@ -829,9 +816,8 @@ impl PipeweaverHandler {
             let y = y + root_y;
 
             // Send it
-            let (tx, rx) = oneshot::channel();
-            self.sender.send(SendImage(drawing.image, x, y, tx))?;
-            rx.await??;
+            let msg = BeacnMessage::Image(x, y, Arc::new(drawing.image));
+            self.send_message(msg).await?;
         }
 
         Ok(())
@@ -951,6 +937,15 @@ impl PipeweaverHandler {
         Ok(())
     }
 
+    async fn send_message(&self, message: BeacnMessage) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let msg = ControlMessage::Handle(message, tx);
+        self.sender.send_async(msg).await?;
+
+        rx.await??;
+        Ok(())
+    }
+
     fn get_page_count(&self) -> u8 {
         let order = self.get_channel_order();
 
@@ -1039,12 +1034,8 @@ impl PipeweaverHandler {
     }
 
     async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        let message = ButtonColour(button, colour, tx);
-        self.sender.send(message)?;
-
-        debug!("Set Button Colour: {:?}", button);
-        rx.await??;
+        let message = BeacnMessage::ButtonColour(button, colour);
+        self.send_message(message).await?;
         Ok(())
     }
 
