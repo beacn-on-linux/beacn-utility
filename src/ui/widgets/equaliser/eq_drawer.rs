@@ -79,12 +79,16 @@ pub struct EQDrawView {
     // Caches of the individual band curves / fill geometry
     band_caches: EnumMap<EqualiserBand, Cache>,
 
-    // Cache of the grid, and the main curve
+    // Cache of the grid, the main curve, and the spectrum
     grid_cache: Cache,
     curve_cache: Cache,
+    spectrum_cache: Cache,
 
     // Frequency response cache, so we can avoid regenerating when one changes
     band_freq_response: RefCell<EnumMap<EqualiserBand, Option<Vec<f32>>>>,
+
+    // Spectrum Data points
+    spectrum_bins: Vec<f32>,
 }
 
 impl EQDrawView {
@@ -98,7 +102,10 @@ impl EQDrawView {
             grid_cache: Cache::new(),
             band_caches: Default::default(),
             curve_cache: Cache::new(),
+            spectrum_cache: Cache::new(),
             band_freq_response: RefCell::new(Default::default()),
+
+            spectrum_bins: vec![],
         }
     }
 
@@ -152,6 +159,16 @@ impl EQDrawView {
         }
     }
 
+    pub fn set_spectrum(&mut self, data: Vec<f32>) {
+        self.spectrum_bins = data;
+        self.spectrum_cache.clear();
+    }
+
+    pub fn clear_spectrum(&mut self) {
+        self.spectrum_bins = vec![];
+        self.spectrum_cache.clear();
+    }
+
     /// Set's whether we should emit movement events
     pub fn set_track_motion(&mut self, track: bool) {
         self.track_motion = track;
@@ -160,6 +177,7 @@ impl EQDrawView {
     /// Full clear and reset
     pub fn clear(&mut self) {
         self.grid_cache.clear();
+        self.clear_spectrum();
         self.invalidate_all();
     }
 
@@ -323,6 +341,55 @@ impl EQDrawView {
             plot_rect.y + plot_rect.height,
         );
         frame.fill(&path, colour);
+    }
+
+    fn draw_spectrum(&self, frame: &mut Frame, plot_rect: Rectangle) {
+        let bins = &self.spectrum_bins;
+        let colour = Color::from_rgba8(180, 180, 180, 0.5);
+
+        let points: Vec<Point> = bins
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &db)| {
+                if !db.is_finite() {
+                    return None;
+                }
+
+                let spectrum_floor = -120.0_f32;
+                let spectrum_ceil = 0.0_f32;
+
+                let db = db.clamp(spectrum_floor, spectrum_ceil);
+
+                // normalize 0..1
+                let t = (db - spectrum_floor) / (spectrum_ceil - spectrum_floor);
+
+                // map into EQ display range (-12..+12)
+                let mapped_db = MIN_GAIN + t * (MAX_GAIN - MIN_GAIN);
+
+                let x = plot_rect.x + (i as f32 / (bins.len() - 1) as f32) * plot_rect.width;
+
+                let mut plot_rect = plot_rect.clone();
+                plot_rect.height = plot_rect.height - (EQ_PLOT_BORDER_WIDTH / 2.0);
+
+                let y = EqGeometry::db_to_y(mapped_db, plot_rect);
+
+                Some(Point { x, y })
+            })
+            .collect();
+
+        if points.len() < 2 {
+            return;
+        }
+
+        let path = Path::new(|builder| {
+            if let Some(&first) = points.first() {
+                builder.move_to(first);
+                for &p in &points[1..] {
+                    builder.line_to(p);
+                }
+            }
+        });
+        frame.stroke(&path, Stroke::default().with_color(colour).with_width(1.50));
     }
 
     fn adaptive_smooth_points(
@@ -561,6 +628,12 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         let mut points_frame = Frame::new(renderer, bounds.size());
         self.draw_band_points(&mut points_frame, plot_rect);
         geometries.push(points_frame.into_geometry());
+
+        if self.spectrum_bins.len() > 0 {
+            geometries.push(self.spectrum_cache.draw(renderer, bounds.size(), |frame| {
+                self.draw_spectrum(frame, plot_rect);
+            }));
+        }
 
         geometries
     }

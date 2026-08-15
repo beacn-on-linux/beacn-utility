@@ -610,6 +610,13 @@ impl MicEqualiser {
         self.view.set_bands(bands);
         self.eq_mode = mode;
     }
+
+    pub(crate) fn set_spectrum_data(&mut self, data: Vec<f32>) {
+        self.view.set_spectrum(data);
+    }
+    pub(crate) fn clear_spectrum_data(&mut self) {
+        self.view.clear_spectrum();
+    }
 }
 
 fn padded_button(text: &str) -> Button<'_, MicEqualiserEvent> {

@@ -1,3 +1,4 @@
+use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::compressor::CompressorPage;
 use crate::ui::pages::audio::config_pages::expander::ExpanderPage;
@@ -7,6 +8,8 @@ use crate::ui::pages::audio::config_pages::mic_setup::MicrophoneSetup;
 use crate::ui::pages::audio::config_pages::suppressor::SuppressorPage;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::utility::pipewire::device::{PipeWireNodeType, find_pipewire_nodes_for_usb};
+use crate::ui::utility::pipewire::spectrum::{SpectrumHandle, start_spectrum_analyser};
 use crate::ui::widgets::helpers::composite::draw_range;
 use crate::ui::widgets::helpers::tabs::render_tab;
 use beacn_lib::audio::messages::Message;
@@ -14,6 +17,7 @@ use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::types::HasRange;
 use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub(crate) enum ConfigMessage {
@@ -26,6 +30,8 @@ pub(crate) enum ConfigMessage {
 
 pub struct Configuration {
     equaliser: MicEqualiser,
+    spectrum_handler: Option<SpectrumHandle>,
+    spectrum_data: Option<Arc<Mutex<Vec<f32>>>>,
 
     //
     selected_tab: usize,
@@ -36,6 +42,8 @@ impl Configuration {
     pub fn new() -> Self {
         Self {
             equaliser: MicEqualiser::new(),
+            spectrum_handler: None,
+            spectrum_data: None,
 
             selected_tab: 0,
             tab_pages: vec![
@@ -106,11 +114,73 @@ impl AudioPage for Configuration {
 
     fn on_open(&mut self, state: &AudioState) {
         self.equaliser.load_device(state);
+
+        if self.spectrum_handler.is_some() {
+            return;
+        }
+
+        let location = state.location();
+        let bus_addr = location.bus_id.parse::<u8>().unwrap_or(0);
+        let dev_addr = location.device_address;
+        let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
+
+        let mut use_node = None;
+        if let Ok(nodes) = nodes {
+            // We found something, we need to find the mic node
+            for node in nodes {
+                if node.node_type == PipeWireNodeType::Source {
+                    if node.channels == 4 {
+                        use_node.replace(node);
+                    }
+                }
+            }
+        }
+
+        if let Some(node) = use_node {
+            // Ok, we have a usable node, let's fire up a listener..
+            let handler = start_spectrum_analyser(&*node.name, 48000);
+
+            // Get the internal Spectrum Data
+            self.spectrum_data = Some(handler.data.clone());
+            self.spectrum_handler = Some(handler);
+        }
     }
 
     fn on_close(&mut self) {
+        if let Some(handler) = self.spectrum_handler.take() {
+            handler.stop();
+        }
+
         // Remove anything that may be cached, we should redraw later.
         self.equaliser.clear();
+    }
+
+    fn on_tick(&mut self, _state: &mut AudioState) -> Task<PageMessage> {
+        let Some(handler) = self.spectrum_handler.as_mut() else {
+            return Task::none();
+        };
+
+        if handler.has_stopped() {
+            self.spectrum_handler = None;
+            self.spectrum_data = None;
+
+            self.equaliser.clear_spectrum_data();
+            return Task::none();
+        }
+
+        // This shouldn't happen if the handler is active, but just in case..
+        let Some(data) = self.spectrum_data.as_mut() else {
+            self.spectrum_handler = None;
+            self.spectrum_data = None;
+
+            self.equaliser.clear_spectrum_data();
+            return Task::none();
+        };
+
+        if let Ok(guard) = data.lock() {
+            self.equaliser.set_spectrum_data(guard.clone());
+        }
+        Task::none()
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
@@ -192,5 +262,14 @@ impl AudioPage for Configuration {
                 .height(Length::Fixed(240.0)),
         ]
         .into()
+    }
+}
+
+// This will be called when the device goes away.
+impl Drop for Configuration {
+    fn drop(&mut self) {
+        if let Some(handler) = self.spectrum_handler.take() {
+            handler.stop();
+        }
     }
 }

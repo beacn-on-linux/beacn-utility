@@ -16,9 +16,10 @@ use beacn_lib::flume::Receiver;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
 use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{Space, column, container, row, rule, text};
-use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, window};
+use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, time, window};
 use iced_futures::subscription::from_recipe;
 use std::collections::HashMap;
+use std::time::Duration;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction
@@ -79,6 +80,9 @@ pub(crate) enum Message {
 
     // Messages that are passed to the current page
     Page(PageMessage),
+
+    // A ticker than runs at 30FPS
+    Tick,
 
     // Window Related Tasks
     Quit,
@@ -278,6 +282,24 @@ impl BeacnUtility {
                     .map(Message::Page);
             }
 
+            Message::Tick => {
+                let Some(device_id) = &self.active_device else {
+                    return Task::none();
+                };
+
+                let Some(page_index) = self.active_page else {
+                    return Task::none();
+                };
+
+                let Some(device) = self.devices.get_mut(device_id) else {
+                    return Task::none();
+                };
+
+                return device.pages[page_index]
+                    .on_tick_fn(&mut device.state)
+                    .map(Message::Page);
+            }
+
             Message::Quit => {
                 return iced::exit();
             }
@@ -444,7 +466,10 @@ impl BeacnUtility {
         let resize_sub = window::resize_events().map(Message::WindowResized);
         let close_sub = window::close_requests().map(Message::WindowCloseRequested);
 
-        Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub])
+        let tick_rate = 1000 / 30;
+        let ticker = time::every(Duration::from_millis(tick_rate)).map(|_| Message::Tick);
+
+        Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub, ticker])
     }
 }
 

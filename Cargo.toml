@@ -38,7 +38,7 @@ oneshot = "0.2.1"
 wide = "1.5.0"
 
 # UI Framework (iced)
-iced = { version = "0.14.0", features = ["advanced", "svg", "canvas"] }
+iced = { version = "0.14.0", features = ["tokio", "advanced", "svg", "canvas"] }
 iced_futures = "0.14.0"
 iced_color_picker = "0.14.0"
 
@@ -72,6 +72,10 @@ directories = "6.0.0"
 rayon = "1.12.0"
 
 
+
+# Used for Spectrum Analysis
+rustfft = "6.4.1"
+num-complex = "0.4.6"
 
 [target.'cfg(unix)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
