@@ -1,8 +1,9 @@
 //! A Recipe for reading events from a flume channel.
 
 use beacn_lib::flume::Receiver;
-use futures::Stream;
+//use futures::Stream;
 use iced::advanced::subscription::{EventStream, Hasher, Recipe};
+use iced::futures::Stream;
 use std::pin::Pin;
 use std::sync::Arc;
 
