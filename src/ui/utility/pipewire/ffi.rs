@@ -7,6 +7,7 @@
 
 use anyhow::{Result, anyhow};
 use dlopen2::wrapper::{Container, WrapperApi};
+use log::error;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::fd::{AsRawFd, RawFd};
@@ -930,7 +931,7 @@ impl Drop for PwCore {
     fn drop(&mut self) {
         let res = unsafe { (self.pw.api.pw_core_disconnect)(self.ptr) };
         if res < 0 {
-            eprintln!("pw_core_disconnect failed: {res}");
+            error!("pw_core_disconnect failed: {res}");
         }
     }
 }
@@ -1241,8 +1242,6 @@ impl PwProperties {
     pub fn set(&mut self, key: &str, value: &str) -> Result<()> {
         let key_c = CString::new(key)?;
         let value_c = CString::new(value)?;
-        println!("Setting {} to {}", key, value);
-
         let res =
             unsafe { (self.pw.api.pw_properties_set)(self.ptr, key_c.as_ptr(), value_c.as_ptr()) };
         if res < 0 {
@@ -1293,7 +1292,7 @@ impl Drop for CaptureBuffer {
     fn drop(&mut self) {
         let res = unsafe { (self.pw.api.pw_stream_queue_buffer)(self.stream_ptr, self.raw) };
         if res < 0 {
-            eprintln!("pw_stream_queue_buffer failed: {res}");
+            error!("pw_stream_queue_buffer failed: {res}");
         }
     }
 }
