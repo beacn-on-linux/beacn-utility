@@ -12,18 +12,12 @@ use std::ffi::{CStr, CString};
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
-
-// This is just a useful helper if you're driving pipewire asynchronously
-pub struct LoopFd(pub RawFd);
-impl AsRawFd for LoopFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.0
-    }
-}
+use std::sync::atomic::AtomicBool;
 
 pub const PW_TYPE_INTERFACE_DEVICE: &str = "PipeWire:Interface:Device";
 pub const PW_TYPE_INTERFACE_NODE: &str = "PipeWire:Interface:Node";
 pub const PW_TYPE_INTERFACE_PORT: &str = "PipeWire:Interface:Port";
+pub const PW_TYPE_INTERFACE_LINK: &str = "PipeWire:Interface:Link";
 
 // These are vendored directly from pipewire, links point to the documentation.
 
@@ -106,6 +100,14 @@ impl spa_hook {
     fn new() -> Self {
         unsafe { std::mem::zeroed() }
     }
+}
+
+// https://man7.org/linux/man-pages/man3/timespec.3type.html
+// A libc timespec, used by pw_loop_update_timer for the initial delay and repeat interval.
+#[repr(C)]
+struct timespec {
+    tv_sec: i64,
+    tv_nsec: i64,
 }
 
 /// Decodes a spa_dict's contents into a HashMap, keeps things user-safe.
@@ -391,6 +393,19 @@ struct PwApi {
     pw_loop_iterate: unsafe extern "C" fn(loop_: *mut c_void, timeout_ms: c_int) -> c_int,
     pw_loop_leave: unsafe extern "C" fn(loop_: *mut c_void),
 
+    pw_loop_add_timer: unsafe extern "C" fn(
+        loop_: *mut c_void,
+        func: unsafe extern "C" fn(data: *mut c_void, expirations: u64),
+        data: *mut c_void,
+    ) -> *mut c_void,
+    pw_loop_update_timer: unsafe extern "C" fn(
+        loop_: *mut c_void,
+        source: *mut c_void,
+        value: *const timespec,
+        interval: *const timespec,
+        absolute: c_int,
+    ) -> c_int,
+
     pw_context_new: unsafe extern "C" fn(
         main_loop: *mut c_void,
         props: *mut c_void,
@@ -509,6 +524,21 @@ struct RegisteredListener {
     _keepalive: Box<dyn std::any::Any>,
 }
 
+// This is mostly internal, although it could be exposed at some point. It's primarily a
+// holding struct for an Arc<AtomicBool>> which, if true, will stop the main loop.
+struct StopPollCtx {
+    pw: PipeWire,
+    main_loop_ptr: *mut c_void,
+    stop: Arc<AtomicBool>,
+}
+
+extern "C" fn stop_poll_trampoline(data: *mut c_void, _expirations: u64) {
+    let ctx = unsafe { &*(data as *const StopPollCtx) };
+    if ctx.stop.load(std::sync::atomic::Ordering::Relaxed) {
+        unsafe { (ctx.pw.api.pw_main_loop_quit)(ctx.main_loop_ptr) };
+    }
+}
+
 // Ok, this is the main PipeWire FFI wrapper, there are two loop variants in here, the async and
 // the blocking one.. Ideally I can fix them in a way I don't need to duplicate.
 #[derive(Clone)]
@@ -551,6 +581,7 @@ impl PipeWire {
         Ok(PwMainLoop {
             pw: self.clone(),
             ptr,
+            keepalive: Vec::new(),
         })
     }
 
@@ -585,6 +616,9 @@ pub trait PwLoop {
 pub struct PwMainLoop {
     pw: PipeWire,
     ptr: *mut c_void,
+
+    // Keeps stuff alive as long as the mainloop exists
+    keepalive: Vec<Box<dyn std::any::Any>>,
 }
 unsafe impl Send for PwMainLoop {}
 impl PwMainLoop {
@@ -593,6 +627,42 @@ impl PwMainLoop {
     }
     pub fn quit(&self) {
         unsafe { (self.pw.api.pw_main_loop_quit)(self.ptr) };
+    }
+
+    // This is a helper hack, I tend to use AtomicBools to signal when I want shit to stop, so
+    // this creates a repeating timer in the pipewire loop to see if stop has become true, and
+    // if so, quits the loop.
+    pub fn quit_when(&mut self, stop: Arc<AtomicBool>, poll_every_ms: u32) -> Result<()> {
+        let loop_ptr = self.get_ptr(); // pw_main_loop_get_loop
+
+        let ctx = Box::new(StopPollCtx {
+            pw: self.pw.clone(),
+            main_loop_ptr: self.ptr,
+            stop,
+        });
+        let ctx_ptr = ctx.as_ref() as *const StopPollCtx as *mut c_void;
+
+        let source =
+            unsafe { (self.pw.api.pw_loop_add_timer)(loop_ptr, stop_poll_trampoline, ctx_ptr) };
+        if source.is_null() {
+            return Err(anyhow!("pw_loop_add_timer failed"));
+        }
+
+        let interval = timespec {
+            tv_sec: (poll_every_ms / 1000) as i64,
+            tv_nsec: ((poll_every_ms % 1000) as i64) * 1_000_000,
+        };
+        // value == interval here: first fire after one interval, then repeat at
+        // that same interval. absolute = 0 (false), i.e. relative timing.
+        let res = unsafe {
+            (self.pw.api.pw_loop_update_timer)(loop_ptr, source, &interval, &interval, 0)
+        };
+        if res < 0 {
+            return Err(anyhow!("pw_loop_update_timer failed: {res}"));
+        }
+
+        self.keepalive.push(ctx);
+        Ok(())
     }
 }
 impl Drop for PwMainLoop {
