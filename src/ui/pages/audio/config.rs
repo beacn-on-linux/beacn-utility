@@ -17,6 +17,7 @@ use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::types::HasRange;
 use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
+use log::debug;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -128,10 +129,13 @@ impl AudioPage for Configuration {
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
-                if node.node_type == PipeWireNodeType::Source && node.channels.len() == 4 {
-                    if let Some(port) = node.channels.get("AUX3") {
-                        use_port.replace(vec![*port]);
-                    }
+                debug!("Found node: {:?}", node);
+
+                if node.node_type == PipeWireNodeType::Source
+                    && node.channels.len() == 4
+                    && let Some(port) = node.channels.get("AUX3")
+                {
+                    use_port.replace(vec![*port]);
                 }
 
                 // if node.node_type == PipeWireNodeType::Sink && node.channels == 2 {

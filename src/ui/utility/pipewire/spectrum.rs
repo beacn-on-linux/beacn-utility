@@ -39,7 +39,13 @@ impl SpectrumHandle {
 pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
     debug!("Starting Spectrum Analyser for {} ports", ports.len());
     let stop_signal = Arc::new(AtomicBool::new(false));
-    let data = vec![Arc::new(Mutex::new(vec![MIN_DB; EQ_CURVE_RESOLUTION])); ports.len()];
+    let data = {
+        let len = ports.len();
+        let mut v = Vec::with_capacity(len);
+        (0..len).for_each(|_| v.push(Arc::new(Mutex::new(vec![MIN_DB; EQ_CURVE_RESOLUTION]))));
+
+        v
+    };
 
     let stop_clone = stop_signal.clone();
     let data_clone = data.clone();

@@ -48,7 +48,6 @@ pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> 
     let pw_inner = pw.clone();
 
     let main_loop = Rc::new(RefCell::new(pw.borrow().main_loop_new()?));
-    let mainloop_inner = main_loop.clone();
 
     let context = Rc::new(RefCell::new(pw.borrow().context_new(&*main_loop.borrow())?));
 
@@ -133,7 +132,6 @@ pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> 
                         return;
                     };
                     let mut node_proxy = PwNodeProxy::from_proxy(proxy);
-                    let node_proxies_inner = node_proxies.clone();
                     let _ = node_proxy.add_info_listener(move |info| {
                         let Some(name) = info.props.get("node.name") else {
                             return;
@@ -249,7 +247,7 @@ pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> 
     props.set("media.category", "Capture")?;
     props.set("media.role", "Monitor")?;
     props.set("audio.channels", &channel_count.to_string())?;
-    props.set("audio.position", &format!("{}", channels.join(", ")))?;
+    props.set("audio.position", &channels.join(", "))?;
 
     let stream = {
         let core_ref = core.borrow();
@@ -269,7 +267,7 @@ pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> 
                 if !samples.is_empty() {
                     // Ok, send this across to the processor..
                     let process = &mut stream_wanted_ports_inner.borrow_mut()[ch].process;
-                    process(&samples);
+                    process(samples);
                 }
             }
         })),

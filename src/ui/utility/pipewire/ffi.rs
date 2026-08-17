@@ -1297,11 +1297,12 @@ impl Drop for CaptureBuffer {
     }
 }
 
+type StreamStateChangeCallback = Option<Box<dyn FnMut(i32, i32, Option<String>)>>;
 #[derive(Default)]
 // We should probably do this for other types, this code came later :D
 pub struct StreamCallbacks {
     pub process: Option<Box<dyn FnMut(CaptureBuffer)>>,
-    pub state_changed: Option<Box<dyn FnMut(i32, i32, Option<String>)>>,
+    pub state_changed: StreamStateChangeCallback,
     pub param_changed: Option<Box<dyn FnMut(u32)>>,
 }
 

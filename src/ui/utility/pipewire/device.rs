@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]
+#[allow(unused)]
 pub struct PipeWireNode {
     pub name: String,
     pub id: u32,
@@ -171,10 +172,10 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                     let props = &info.props;
                     let alsa_card = props.get("api.alsa.card").and_then(TO_U32);
 
-                    if let Some(alsa_card) = alsa_card {
-                        if alsa_card == card {
-                            device_cache_inner.borrow_mut().push(id);
-                        }
+                    if let Some(alsa_card) = alsa_card
+                        && alsa_card == card
+                    {
+                        device_cache_inner.borrow_mut().push(id);
                     }
                 });
                 dev_listeners.insert(id, device_proxy);
@@ -298,8 +299,12 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                     PipeWireNodeType::Source => port.direction_is_output,
                     PipeWireNodeType::Sink => !port.direction_is_output,
                 };
-                if is_node && is_direction && name.is_some() && id.is_some() {
-                    channels.insert(name.unwrap().to_string(), id.unwrap());
+                if let Some(name) = name
+                    && is_node
+                    && is_direction
+                    && id.is_some()
+                {
+                    channels.insert(name.to_string(), id.unwrap());
                 }
             });
 
