@@ -124,22 +124,28 @@ impl AudioPage for Configuration {
         let dev_addr = location.device_address;
         let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
 
-        let mut use_node = None;
+        let mut use_port = None;
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
-                if node.node_type == PipeWireNodeType::Source && node.channels == 4 {
-                    use_node.replace(node);
+                if node.node_type == PipeWireNodeType::Source && node.channels.len() == 4 {
+                    if let Some(port) = node.channels.get("AUX3") {
+                        use_port.replace(vec![*port]);
+                    }
                 }
+
+                // if node.node_type == PipeWireNodeType::Sink && node.channels == 2 {
+                //     use_node.replace(node);
+                // }
             }
         }
 
-        if let Some(node) = use_node {
-            // Ok, we have a usable node, let's fire up a listener..
-            let handler = start_spectrum_analyser(&node.name, 48000);
+        if let Some(ports) = use_port {
+            // Ok, we have a usable port list, let's fire up a listener..
+            let handler = start_spectrum_analyser(ports, 48000);
 
-            // Get the internal Spectrum Data
-            self.spectrum_data = Some(handler.data.clone());
+            // Get the internal Spectrum Data. We only use a single port here, so grab the only entry.
+            self.spectrum_data = Some(handler.data[0].clone());
             self.spectrum_handler = Some(handler);
         }
     }
