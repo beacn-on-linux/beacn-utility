@@ -3,8 +3,9 @@ use crate::ui::utility::pipewire::ffi::{
     PW_VERSION_DEVICE_EVENTS, PW_VERSION_NODE_EVENTS, PipeWire, PortInfo, PwDeviceProxy,
     PwNodeProxy, PwPortProxy,
 };
+use crate::ui::utility::pipewire::{TO_BOOL, TO_U32};
 use anyhow::Result;
-use log::debug;
+use log::{debug, error};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
@@ -123,9 +124,6 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
     let client = PipeWire::load()?;
     client.init();
 
-    let to_u32 = |s: &String| s.parse::<u32>().ok();
-    let to_bool = |s: &String| s.parse::<bool>().ok();
-
     let main_loop = Rc::new(RefCell::new(client.main_loop_new()?));
     let context = Rc::new(RefCell::new(client.context_new(&*main_loop.borrow())?));
     debug!("Context Created");
@@ -163,7 +161,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                 let Ok(proxy) =
                     registry.bind(id, PW_TYPE_INTERFACE_DEVICE, PW_VERSION_DEVICE_EVENTS)
                 else {
-                    eprintln!("Failed to bind device {}", id);
+                    error!("Failed to bind device {}", id);
                     return;
                 };
 
@@ -171,7 +169,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                 let mut device_proxy = PwDeviceProxy::from_proxy(proxy);
                 let _ = device_proxy.add_info_listener(move |info| {
                     let props = &info.props;
-                    let alsa_card = props.get("api.alsa.card").and_then(to_u32);
+                    let alsa_card = props.get("api.alsa.card").and_then(TO_U32);
 
                     if let Some(alsa_card) = alsa_card {
                         if alsa_card == card {
@@ -184,7 +182,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
             if type_str == PW_TYPE_INTERFACE_NODE {
                 let Ok(proxy) = registry.bind(id, PW_TYPE_INTERFACE_NODE, PW_VERSION_NODE_EVENTS)
                 else {
-                    eprintln!("Failed to bind node {}", id);
+                    error!("Failed to bind node {}", id);
                     return;
                 };
 
@@ -196,12 +194,12 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                     let split_parent = "api.alsa.split.parent";
                     let split_position = "api.alsa.split.position";
 
-                    let device_id = props.get("device.id").and_then(to_u32);
-                    let split_parent = props.get(split_parent).and_then(to_bool);
+                    let device_id = props.get("device.id").and_then(TO_U32);
+                    let split_parent = props.get(split_parent).and_then(TO_BOOL);
                     let split_position = props.get(split_position).map(String::as_str);
                     let name = props.get("node.name").map(String::as_str);
                     let media_class = props.get("media.class").map(String::as_str);
-                    let audio_channels = props.get("audio.channels").and_then(to_u32);
+                    let audio_channels = props.get("audio.channels").and_then(TO_U32);
 
                     // We don't want UCM children (at least, not yet)
                     if split_parent != Some(true) && split_position.is_some() {
@@ -294,8 +292,8 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
             let mut channels = HashMap::new();
             port_cache.borrow().iter().for_each(|port| {
                 let name = port.props.get("audio.channel").map(String::as_str);
-                let id = port.props.get("object.id").and_then(to_u32);
-                let is_node = port.props.get("node.id").and_then(to_u32) == Some(node.id);
+                let id = port.props.get("object.id").and_then(TO_U32);
+                let is_node = port.props.get("node.id").and_then(TO_U32) == Some(node.id);
                 let is_direction = match node.media_class {
                     PipeWireNodeType::Source => port.direction_is_output,
                     PipeWireNodeType::Sink => !port.direction_is_output,
@@ -306,7 +304,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
             });
 
             if node.channels != channels.len() as u32 {
-                eprintln!(
+                error!(
                     "Node {} has {} channels, expected {}",
                     node.name,
                     channels.len(),
