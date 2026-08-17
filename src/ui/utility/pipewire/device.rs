@@ -17,6 +17,7 @@ use std::rc::Rc;
 pub struct PipeWireNode {
     pub name: String,
     pub id: u32,
+    pub is_split_child: bool,
     pub node_type: PipeWireNodeType,
     pub channels: HashMap<String, u32>,
 }
@@ -114,6 +115,7 @@ struct Node {
     name: String,
     id: u32,
     device_id: u32,
+    is_split_child: bool,
     media_class: PipeWireNodeType,
     channels: u32,
 }
@@ -202,10 +204,8 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                     let media_class = props.get("media.class").map(String::as_str);
                     let audio_channels = props.get("audio.channels").and_then(TO_U32);
 
-                    // We don't want UCM children (at least, not yet)
-                    if split_parent != Some(true) && split_position.is_some() {
-                        return;
-                    }
+                    // If this is a UCM Child, we should label it as such.
+                    let is_split_child = split_parent != Some(true) && split_position.is_some();
 
                     let Some(device_id) = device_id else {
                         return;
@@ -235,6 +235,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                         device_id,
                         name: String::from(name),
                         id,
+                        is_split_child,
                         media_class,
                         channels,
                     };
@@ -322,6 +323,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
             Some(PipeWireNode {
                 name: node.name.clone(),
                 id: node.id,
+                is_split_child: node.is_split_child,
                 node_type: node.media_class,
                 channels,
             })
