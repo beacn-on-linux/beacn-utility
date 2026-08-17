@@ -295,10 +295,11 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                 let name = port.props.get("audio.channel").map(String::as_str);
                 let id = port.props.get("object.id").and_then(TO_U32);
                 let is_node = port.props.get("node.id").and_then(TO_U32) == Some(node.id);
-                let is_direction = match node.media_class {
-                    PipeWireNodeType::Source => port.direction_is_output,
-                    PipeWireNodeType::Sink => !port.direction_is_output,
-                };
+
+                // We only ever want outputs, this will pull in the monitor ports for Sinks which
+                // we can connect to.
+                let is_direction = port.direction_is_output;
+
                 if let Some(name) = name
                     && is_node
                     && is_direction
