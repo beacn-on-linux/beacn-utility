@@ -1,6 +1,6 @@
 use iced::widget::button::Status;
-use iced::widget::{Button, button, text};
-use iced::{Alignment, Border, Color, Length, Theme};
+use iced::widget::{Button, button, container, text};
+use iced::{Alignment, Border, Color, Length, Padding, Theme};
 
 pub fn toggle_button<T>(value: &str, active: bool) -> Button<'_, T> {
     let text_colour = if active {
@@ -48,4 +48,16 @@ pub fn toggle_button<T>(value: &str, active: bool) -> Button<'_, T> {
             snap: false,
         }
     })
+}
+
+pub fn padded_button<T: 'static>(label: &'static str, align_x: Alignment) -> Button<'static, T> {
+    let label = container(text(label)).width(Length::Fill).align_x(align_x);
+    button(label)
+        .padding(Padding {
+            top: 2.0,
+            right: 4.0,
+            bottom: 2.0,
+            left: 4.0,
+        })
+        .width(Length::Shrink)
 }

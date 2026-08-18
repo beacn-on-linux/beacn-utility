@@ -7,6 +7,7 @@ use crate::ui::widgets::equaliser::eq_common::{
     EQ_MARGIN, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
+use crate::ui::widgets::helpers::buttons::padded_button;
 use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style};
 use beacn_lib::audio::messages::Message;
@@ -531,9 +532,9 @@ impl MicEqualiser {
             .any(|b| b.enabled)
             .then_some(RemoveBand);
 
-        let add_band = padded_button("Add Band").on_press_maybe(add_band);
-        let remove_band = padded_button("-").on_press_maybe(remove_band);
-        let load_default = padded_button("Load Default").on_press(LoadDefault);
+        let add_band = padded_button("Add Band", Alignment::Start).on_press_maybe(add_band);
+        let remove_band = padded_button("-", Alignment::Start).on_press_maybe(remove_band);
+        let load_default = padded_button("Load Default", Alignment::Start).on_press(LoadDefault);
 
         let mut row = row![advanced, rule::vertical(1.0),]
             .align_y(Alignment::Center)
@@ -603,13 +604,4 @@ impl MicEqualiser {
     pub(crate) fn clear_spectrum_data(&mut self) {
         self.view.clear_spectrum();
     }
-}
-
-fn padded_button(text: &str) -> Button<'_, MicEqualiserEvent> {
-    button(text).padding(Padding {
-        top: 2.0,
-        right: 4.0,
-        bottom: 2.0,
-        left: 4.0,
-    })
 }
