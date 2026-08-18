@@ -113,7 +113,7 @@ impl MicEqualiser {
                 }
                 EQMouseEvent::Scrolled { delta, position } => {
                     let rect = self.view.plot_rect();
-                    let bands = self.view.bands_mut();
+                    let bands = self.view.bands();
 
                     if let Some(band) = EqGeometry::hit_test(rect, position, bands) {
                         // Might as well set this band active
@@ -132,14 +132,13 @@ impl MicEqualiser {
                         let q = bands[band].q;
                         let adjusted = (q + delta).clamp(0.1, 10.0);
                         let adjusted = (adjusted * 10.0).round() / 10.0;
-                        bands[band].q = adjusted;
 
                         let msg = Equaliser::Q(self.eq_mode, band.into(), EQQ(adjusted));
                         let _ = state.handle_message(Message::Equaliser(msg));
 
-                        // Invalidate existing renders for this band
+                        let active = state.equaliser.bands[self.eq_mode][band];
+                        self.view.set_band(band, active);
                         self.view.set_active(self.active_band);
-                        self.view.invalidate_band(band);
                     }
                 }
             },
@@ -176,8 +175,8 @@ impl MicEqualiser {
                     let msg = Equaliser::Frequency(state.equaliser.mode, active.into(), value);
                     let _ = state.handle_message(Message::Equaliser(msg));
 
-                    self.view.bands_mut()[active].frequency = frequency;
-                    self.view.invalidate_band(active);
+                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    self.view.set_band(active, band);
                 }
             }
             SetType(band_type) => {
@@ -186,8 +185,8 @@ impl MicEqualiser {
                     let msg = Equaliser::Type(mode, active.into(), band_type.into());
                     let _ = state.handle_message(Message::Equaliser(msg));
 
-                    self.view.bands_mut()[active].band_type = band_type;
-                    self.view.invalidate_band(active);
+                    let band = state.equaliser.bands[mode][active];
+                    self.view.set_band(active, band);
                 }
             }
             SetGain(gain) => {
@@ -196,8 +195,8 @@ impl MicEqualiser {
                     let msg = Equaliser::Gain(state.equaliser.mode, active.into(), value);
                     let _ = state.handle_message(Message::Equaliser(msg));
 
-                    self.view.bands_mut()[active].gain = gain;
-                    self.view.invalidate_band(active);
+                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    self.view.set_band(active, band);
                 }
             }
             SetQ(q) => {
@@ -205,8 +204,8 @@ impl MicEqualiser {
                     let msg = Equaliser::Q(state.equaliser.mode, active.into(), EQQ(q));
                     let _ = state.handle_message(Message::Equaliser(msg));
 
-                    self.view.bands_mut()[active].q = q;
-                    self.view.invalidate_band(active);
+                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    self.view.set_band(active, band);
                 }
             }
             LoadDefault => {
@@ -222,22 +221,20 @@ impl MicEqualiser {
             AddBand => {
                 // Simple process, find a band that's not enabled, and enable it
                 let mode = state.equaliser.mode;
-                let bands = self.view.bands_mut();
+                let bands = state.equaliser.bands[mode];
 
-                if let Some((band, eq)) = bands.iter_mut().find(|(_, b)| !b.enabled) {
+                if let Some((band, eq)) = bands.iter().find(|(_, b)| !b.enabled) {
                     if eq.band_type == NotSet {
                         warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
                         let msg = Equaliser::Type(mode, band.into(), BellBand.into());
                         let _ = state.handle_message(Message::Equaliser(msg));
-                        eq.band_type = BellBand;
                     }
 
                     let msg = Equaliser::Enabled(mode, band.into(), true);
                     let _ = state.handle_message(Message::Equaliser(msg));
-                    eq.enabled = true;
 
-                    self.view.invalidate_band(band);
+                    self.view.set_band(band, state.equaliser.bands[mode][band]);
 
                     self.active_band = Some(band);
                     self.view.set_active(self.active_band);
@@ -245,13 +242,13 @@ impl MicEqualiser {
             }
             RemoveBand => {
                 if let Some(active) = self.active_band {
-                    let bands = self.view.bands_mut();
                     let mode = state.equaliser.mode;
 
                     let msg = Equaliser::Enabled(mode, active.into(), false);
                     let _ = state.handle_message(Message::Equaliser(msg));
 
-                    bands[active].enabled = false;
+                    // Borrow this after we send the handle message, so we can get the new state.
+                    let bands = &state.equaliser.bands[mode];
 
                     // Try and find a new band to set active
                     self.active_band = None;
@@ -265,8 +262,8 @@ impl MicEqualiser {
                         }
                     }
 
-                    // Invalidate the band we just disabled
-                    self.view.invalidate_band(active);
+                    let band = state.equaliser.bands[mode][active];
+                    self.view.set_band(active, band);
                 }
             }
         }
@@ -321,18 +318,11 @@ impl MicEqualiser {
             return;
         };
 
-        let band = &mut self.view.bands_mut()[active];
         if self.eq_mode != EQMode::Simple {
             let frequency = EqGeometry::x_to_freq(pointer.x, plot)
                 .clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
 
-            let frequency = {
-                band.frequency = frequency as u32;
-                band.frequency
-            };
-
-            let value = EQFrequency(frequency as f32);
-            let msg = Equaliser::Frequency(self.eq_mode, active.into(), value);
+            let msg = Equaliser::Frequency(self.eq_mode, active.into(), frequency.into());
             let _ = state.handle_message(Message::Equaliser(msg));
         }
 
@@ -343,17 +333,14 @@ impl MicEqualiser {
 
         if has_gain {
             let gain = EqGeometry::y_to_db(pointer.y, plot).clamp(MIN_GAIN, MAX_GAIN);
-            let gain = {
-                band.gain = (gain * 10.0).round() / 10.0;
-                band.gain
-            };
+            let gain = (gain * 10.0).round() / 10.0;
 
-            let value = EQGain(gain);
-            let msg = Equaliser::Gain(self.eq_mode, active.into(), value);
+            let msg = Equaliser::Gain(self.eq_mode, active.into(), gain.into());
             let _ = state.handle_message(Message::Equaliser(msg));
         }
 
-        self.view.invalidate_band(active);
+        let band = state.equaliser.bands[state.equaliser.mode][active];
+        self.view.set_band(active, band);
     }
 
     pub(crate) fn view(&self, _: &AudioState) -> Element<'_, MicEqualiserEvent> {

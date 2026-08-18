@@ -11,6 +11,7 @@ use iced::mouse;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, Path, Stroke};
 use iced::widget::text::Alignment;
 use iced::{Color, Event, Pixels, Point, Rectangle, Renderer, Theme};
+use log::debug;
 use std::cell::{Cell, RefCell};
 use strum::IntoEnumIterator;
 use wide::f32x8;
@@ -91,6 +92,12 @@ pub struct EQDrawView {
     spectrum_bins: Vec<f32>,
 }
 
+impl Default for EQDrawView {
+    fn default() -> Self {
+        Self::new(Bands::default())
+    }
+}
+
 impl EQDrawView {
     pub fn new(bands: Bands) -> Self {
         Self {
@@ -127,11 +134,6 @@ impl EQDrawView {
         &self.bands
     }
 
-    /// Directly mutable band data
-    pub fn bands_mut(&mut self) -> &mut Bands {
-        &mut self.bands
-    }
-
     /// Replace entire bandset at once
     pub fn set_bands(&mut self, bands: Bands) {
         self.bands = bands;
@@ -147,6 +149,7 @@ impl EQDrawView {
 
     /// Draws the ring around a band dot
     pub fn set_active(&mut self, active: Option<EqualiserBand>) {
+        debug!("Setting Active to {:?}", active);
         self.active = active;
     }
 
