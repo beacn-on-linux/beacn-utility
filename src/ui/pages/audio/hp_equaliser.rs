@@ -1,8 +1,10 @@
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::{
-    Balance, Stereo, SubWoofer, ToggleLinked,
+    Balance, HPEQMouseEvent, Stereo, SubWoofer, ToggleLinked,
 };
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::widgets::equaliser::eq_common::Bands;
+use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
 use crate::ui::widgets::helpers::svg::{svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
@@ -10,22 +12,33 @@ use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headpho
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
-use enum_map::Enum;
+use enum_map::{Enum, EnumMap};
 use iced::border::Radius;
 use iced::font::Weight;
-use iced::widget::{Space, checkbox, column, container, row, stack, text};
+use iced::widget::{Canvas, Space, checkbox, column, container, row, stack, text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
 use std::ops::RangeInclusive;
+use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Enum, EnumIter)]
-enum ActiveEQ {
+enum Channel {
     Left,
     Right,
+}
+impl Channel {
+    fn other(self) -> Self {
+        match self {
+            Channel::Left => Channel::Right,
+            Channel::Right => Channel::Left,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum HPEQMessage {
+    HPEQMouseEvent(EQMouseEvent),
+
     Balance(i32),
     SubWoofer(u8),
     Stereo(bool),
@@ -36,6 +49,12 @@ pub enum HPEQMessage {
 }
 
 pub struct HPEqualiser {
+    // Just one equaliser, although we need two..
+    view: EnumMap<Channel, EQDrawView>,
+
+    // Temporary data so we can test interactions. The state will eventually feed this
+    temp: EnumMap<Channel, Bands>,
+
     // Needs to be fed from the state, currently unavailable.
     balance: i32,
     is_stereo: bool,
@@ -45,14 +64,26 @@ pub struct HPEqualiser {
 impl HPEqualiser {
     pub fn new() -> Self {
         Self {
+            view: Default::default(),
+            temp: Default::default(),
+
             balance: 0,
             is_stereo: true,
             is_linked: false,
         }
     }
 
+    fn load_temp_data(&mut self, state: &AudioState) {
+        for channel in Channel::iter() {
+            self.temp[channel] = state.equaliser.bands[state.equaliser.mode];
+            self.view[channel].set_bands(self.temp[channel].clone());
+        }
+    }
+
     fn update(&mut self, state: &mut AudioState, msg: HPEQMessage) -> Task<HPEQMessage> {
         match msg {
+            HPEQMouseEvent(event) => {}
+
             Balance(amount) => {
                 self.balance = amount;
             }
@@ -83,9 +114,9 @@ impl HPEqualiser {
 
     fn view(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
         column![
-            self.add_eq_canvas(ActiveEQ::Left),
+            self.add_eq_canvas(Channel::Left),
             container(self.add_controls(state)).height(Length::Fixed(80.0)),
-            self.add_eq_canvas(ActiveEQ::Right),
+            self.add_eq_canvas(Channel::Right),
         ]
         .width(Length::Fill)
         .height(Length::Fill)
@@ -95,16 +126,24 @@ impl HPEqualiser {
     }
 
     // Canvas
-    fn add_eq_canvas(&self, active: ActiveEQ) -> Element<'_, HPEQMessage> {
+    fn add_eq_canvas(&self, active: Channel) -> Element<'_, HPEQMessage> {
+        // Lets grab the base canvas from the view..
+        let canvas = Element::from(
+            Canvas::new(&self.view[active])
+                .width(Length::Fill)
+                .height(Length::Fill),
+        )
+        .map(HPEQMouseEvent);
+
         let label = match active {
-            ActiveEQ::Left => "LEFT",
-            ActiveEQ::Right => "RIGHT",
+            Channel::Left => "LEFT",
+            Channel::Right => "RIGHT",
         };
 
         // Should depend on whether self.active = active
         let label_colour = match active {
-            ActiveEQ::Left => Color::from_rgba8(255, 255, 255, 0.5),
-            ActiveEQ::Right => Color::from_rgba8(0, 255, 0, 1.0),
+            Channel::Left => Color::from_rgba8(255, 255, 255, 0.5),
+            Channel::Right => Color::from_rgba8(0, 255, 0, 1.0),
         };
 
         let label_font = Font {
@@ -126,7 +165,7 @@ impl HPEqualiser {
             .align_y(Alignment::End);
 
         // We should just need to create the EQ canvas, then stack![] them.
-        stack![overlay].into()
+        stack![canvas, overlay].into()
     }
 
     // Controls
@@ -260,6 +299,10 @@ impl HPEqualiser {
 impl AudioPage for HPEqualiser {
     fn icon(&self) -> &'static str {
         "headphones"
+    }
+
+    fn on_open(&mut self, state: &AudioState) {
+        self.load_temp_data(state);
     }
 
     fn update(&mut self, state: &mut AudioState, msg: PageMessage) -> Task<PageMessage> {
