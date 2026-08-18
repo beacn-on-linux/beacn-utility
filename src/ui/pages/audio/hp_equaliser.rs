@@ -1,6 +1,6 @@
-use crate::devices::states::audio::AudioState;
+use crate::devices::states::audio::{AudioState, EqualiserBand};
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::{
-    Balance, HPEQMouseEvent, Stereo, SubWoofer, ToggleLinked,
+    Balance, Equaliser, Stereo, SubWoofer, ToggleLinked,
 };
 use crate::ui::pages::page::{AudioPage, PageMessage};
 use crate::ui::widgets::equaliser::eq_common::Bands;
@@ -8,6 +8,7 @@ use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
 use crate::ui::widgets::helpers::svg::{svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::equaliser::EQBand;
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
@@ -15,9 +16,11 @@ use beacn_lib::types::HasRange;
 use enum_map::{Enum, EnumMap};
 use iced::border::Radius;
 use iced::font::Weight;
+use iced::mouse::ScrollDelta;
 use iced::widget::{Canvas, Space, checkbox, column, container, row, stack, text};
-use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
+use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Point, Task};
 use std::ops::RangeInclusive;
+use std::time::Instant;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -37,7 +40,7 @@ impl Channel {
 
 #[derive(Debug, Clone)]
 pub enum HPEQMessage {
-    HPEQMouseEvent(EQMouseEvent),
+    Equaliser(Channel, EQMouseEvent),
 
     Balance(i32),
     SubWoofer(u8),
@@ -55,6 +58,13 @@ pub struct HPEqualiser {
     // Temporary data so we can test interactions. The state will eventually feed this
     temp: EnumMap<Channel, Bands>,
 
+    // These are internal to this page
+    active_channel: Channel,
+    active_band: Option<EqualiserBand>,
+
+    drag_active: bool,
+    drag_start: Option<Instant>,
+
     // Needs to be fed from the state, currently unavailable.
     balance: i32,
     is_stereo: bool,
@@ -66,6 +76,12 @@ impl HPEqualiser {
         Self {
             view: Default::default(),
             temp: Default::default(),
+
+            active_channel: Channel::Left,
+            active_band: None,
+
+            drag_active: false,
+            drag_start: None,
 
             balance: 0,
             is_stereo: true,
@@ -82,7 +98,9 @@ impl HPEqualiser {
 
     fn update(&mut self, state: &mut AudioState, msg: HPEQMessage) -> Task<HPEQMessage> {
         match msg {
-            HPEQMouseEvent(event) => {}
+            Equaliser(channel, event) => {
+                self.handle_eq_event(state, channel, event);
+            }
 
             Balance(amount) => {
                 self.balance = amount;
@@ -112,6 +130,22 @@ impl HPEqualiser {
         Task::none()
     }
 
+    fn handle_eq_event(&mut self, state: &mut AudioState, channel: Channel, event: EQMouseEvent) {
+        match event {
+            EQMouseEvent::Pressed(e) => self.handle_eq_press(state, channel, e),
+            EQMouseEvent::Moved(e) => self.handle_eq_moved(state, channel, e),
+            EQMouseEvent::Released => self.handle_eq_released(state, channel),
+            EQMouseEvent::Scrolled { position, delta } => self.handle_eq_scrolled(state, channel, position, delta),
+        }
+    }
+
+    fn handle_eq_press(&mut self, state: &mut AudioState, channel: Channel, point: Point) {}
+    fn handle_eq_moved(&mut self, state: &mut AudioState, channel: Channel, point: Point) {}
+    fn handle_eq_released(&mut self, state: &AudioState, channel: Channel) {}
+    fn handle_eq_scrolled(&mut self, state: &AudioState, c: Channel, p: Point, d: ScrollDelta) {
+        let (channel, point, delta) = (&c, &p, &d);
+    }
+
     fn view(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
         column![
             self.add_eq_canvas(Channel::Left),
@@ -128,12 +162,17 @@ impl HPEqualiser {
     // Canvas
     fn add_eq_canvas(&self, active: Channel) -> Element<'_, HPEQMessage> {
         // Lets grab the base canvas from the view..
-        let canvas = Element::from(
+        let canvas: Element<'_, EQMouseEvent> = Element::from(
             Canvas::new(&self.view[active])
                 .width(Length::Fill)
                 .height(Length::Fill),
         )
-        .map(HPEQMouseEvent);
+        .into();
+
+        let canvas = match active {
+            Channel::Left => canvas.map(|m| Equaliser(Channel::Left, m)),
+            Channel::Right => canvas.map(|m| Equaliser(Channel::Right, m)),
+        };
 
         let label = match active {
             Channel::Left => "LEFT",
