@@ -1,10 +1,21 @@
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::page::{AudioPage, PageMessage};
-use iced::widget::{container, text};
-use iced::{Element, Task};
+use enum_map::Enum;
+use iced::border::Radius;
+use iced::widget::{column, container, row, text};
+use iced::{Background, Border, Color, Element, Length, Task};
+use strum_macros::EnumIter;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Enum, EnumIter)]
+enum ActiveEQ {
+    Left,
+    Right,
+}
 
 #[derive(Debug, Clone)]
-pub enum HPEQMessage {}
+pub enum HPEQMessage {
+    DUMMY,
+}
 
 pub struct HPEqualiser {}
 
@@ -18,7 +29,51 @@ impl HPEqualiser {
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("HP Equaliser")).into()
+        column![
+            self.add_eq_canvas(ActiveEQ::Left),
+            container(self.add_controls(state)).height(Length::Fixed(80.0)),
+            self.add_eq_canvas(ActiveEQ::Right),
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .spacing(6.0)
+        .padding(10.0)
+        .into()
+    }
+
+    // Canvas
+    fn add_eq_canvas(&self, active: ActiveEQ) -> Element<'_, HPEQMessage> {
+        let title = match active {
+            ActiveEQ::Left => "Left EQ",
+            ActiveEQ::Right => "Right EQ",
+        };
+
+        container(text(title))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    // Controls
+    fn add_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Controls!")).into()
+    }
+
+    // Small Helper stuff
+    fn panel<'a>(content: impl Into<Element<'a, HPEQMessage>>) -> Element<'a, HPEQMessage> {
+        container(content)
+            .width(Length::Shrink)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(Color::from_rgb8(35, 35, 35))),
+                border: Border {
+                    radius: Radius::from(5),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .padding(6)
+            .into()
     }
 }
 
