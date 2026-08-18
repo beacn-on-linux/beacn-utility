@@ -308,6 +308,14 @@ impl BeacnUtility {
                     return Task::none();
                 }
 
+                // Pre-emptively trigger on-open on the current page if we're configured..
+                if let Some(hash) = &self.active_device
+                    && let Some(page) = self.active_page
+                    && let Some(device) = self.devices.get_mut(hash)
+                {
+                    device.pages[page].on_open_fn(&device.state);
+                }
+
                 // Spawn up the window
                 let (id, task) = window::open(self.window_settings.clone());
                 self.active_id = Some(id);
@@ -318,6 +326,15 @@ impl BeacnUtility {
             Message::WindowOpened(_id) => {}
             Message::WindowCloseRequested(id) => {
                 self.active_id = None;
+
+                // Trigger on-close for the current page..
+                if let Some(hash) = &self.active_device
+                    && let Some(page) = self.active_page
+                    && let Some(device) = self.devices.get_mut(hash)
+                {
+                    device.pages[page].on_close_fn();
+                }
+
                 return window::close(id);
             }
             Message::WindowResized((_, size)) => {
