@@ -1,7 +1,10 @@
 use crate::devices::states::audio::AudioState;
-use crate::ui::pages::audio::hp_equaliser::HPEQMessage::{Balance, SubWoofer};
+use crate::ui::pages::audio::hp_equaliser::HPEQMessage::{
+    Balance, Stereo, SubWoofer, ToggleLinked,
+};
 use crate::ui::pages::page::{AudioPage, PageMessage};
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
+use crate::ui::widgets::helpers::svg::{svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
@@ -10,7 +13,7 @@ use beacn_lib::types::HasRange;
 use enum_map::Enum;
 use iced::border::Radius;
 use iced::font::Weight;
-use iced::widget::{Space, column, container, row, stack, text};
+use iced::widget::{Space, checkbox, column, container, row, stack, text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
 use std::ops::RangeInclusive;
 use strum_macros::EnumIter;
@@ -25,6 +28,8 @@ enum ActiveEQ {
 pub enum HPEQMessage {
     Balance(i32),
     SubWoofer(u8),
+    Stereo(bool),
+    ToggleLinked,
 
     // Direct State Change
     State(Message),
@@ -33,11 +38,17 @@ pub enum HPEQMessage {
 pub struct HPEqualiser {
     // Needs to be fed from the state, currently unavailable.
     balance: i32,
+    is_stereo: bool,
+    is_linked: bool,
 }
 
 impl HPEqualiser {
     pub fn new() -> Self {
-        Self { balance: 0 }
+        Self {
+            balance: 0,
+            is_stereo: true,
+            is_linked: false,
+        }
     }
 
     fn update(&mut self, state: &mut AudioState, msg: HPEQMessage) -> Task<HPEQMessage> {
@@ -52,6 +63,14 @@ impl HPEqualiser {
                 for message in messages {
                     let _ = state.handle_message(message);
                 }
+            }
+
+            Stereo(enabled) => {
+                self.is_stereo = enabled;
+            }
+
+            ToggleLinked => {
+                self.is_linked = !self.is_linked;
             }
 
             HPEQMessage::State(msg) => {
@@ -119,7 +138,7 @@ impl HPEqualiser {
             Self::panel(self.mono_stereo_controls(state)),
             Self::panel(self.equaliser_controls(state)),
             Space::new().width(Length::Fill),
-            Self::panel(self.link_control(state)),
+            self.link_control(state),
         ]
         .align_y(Alignment::Center)
         .spacing(6)
@@ -189,7 +208,16 @@ impl HPEqualiser {
     }
 
     fn mono_stereo_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Stereo")).into()
+        // TODO: Need a Stereo / Mono Icon!
+
+        column![
+            text("Stereo"),
+            Space::new().height(14),
+            checkbox(self.is_stereo).on_toggle(Stereo),
+        ]
+        .align_x(Alignment::Center)
+        .width(Length::Fixed(80.0))
+        .into()
     }
 
     fn equaliser_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
@@ -197,7 +225,18 @@ impl HPEqualiser {
     }
 
     fn link_control(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Link")).into()
+        let name = if self.is_linked { "unlink" } else { "link" };
+        svg_button_unstyled(name)
+            .on_press(ToggleLinked)
+            .width(Length::Fixed(30.0))
+            .style(move |theme, status| {
+                let style = svg_button_style(theme, status, self.is_linked);
+
+                style
+            })
+            .width(Length::Fixed(32.0))
+            .height(Length::Fixed(60.0))
+            .into()
     }
 
     // Small Helper stuff
