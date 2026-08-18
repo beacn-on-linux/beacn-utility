@@ -3,7 +3,7 @@ use crate::ui::pages::page::{AudioPage, PageMessage};
 use enum_map::Enum;
 use iced::border::Radius;
 use iced::font::Weight;
-use iced::widget::{column, container, row, text};
+use iced::widget::{Space, column, container, row, stack, text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
 use strum_macros::EnumIter;
 
@@ -71,17 +71,46 @@ impl HPEqualiser {
             .height(Length::Fill)
             .padding(container_padding)
             .align_x(Alignment::End)
-            .align_y(Alignment::End)
-            .into();
+            .align_y(Alignment::End);
 
         // We should just need to create the EQ canvas, then stack![] them.
-
-        overlay
+        stack![overlay].into()
     }
 
     // Controls
     fn add_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Controls!")).into()
+        row![
+            Space::new().width(16),
+            Self::panel(self.volume_controls(state)),
+            Self::panel(self.balance_sub_controls(state)),
+            Self::panel(self.mono_stereo_controls(state)),
+            Self::panel(self.equaliser_controls(state)),
+            Space::new().width(Length::Fill),
+            Self::panel(self.link_control(state)),
+        ]
+        .align_y(Alignment::Center)
+        .spacing(6)
+        .into()
+    }
+
+    fn volume_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Volume!")).into()
+    }
+
+    fn balance_sub_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Balance!")).into()
+    }
+
+    fn mono_stereo_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Stereo")).into()
+    }
+
+    fn equaliser_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Equaliser")).into()
+    }
+
+    fn link_control(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+        container(text("Link")).into()
     }
 
     // Small Helper stuff
