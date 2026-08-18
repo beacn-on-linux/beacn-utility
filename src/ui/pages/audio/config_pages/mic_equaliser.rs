@@ -112,7 +112,7 @@ impl MicEqualiser {
                     // Tell the view to stop sending movement events
                     self.view.set_track_motion(false);
                 }
-                EQMouseEvent::Scrolled { delta, position } => {
+                EQMouseEvent::Scrolled(position, delta) => {
                     let rect = self.view.plot_rect();
                     let bands = self.view.bands();
 

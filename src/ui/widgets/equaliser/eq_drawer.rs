@@ -8,6 +8,8 @@ use crate::ui::widgets::equaliser::eq_util::{BiquadCoefficient, EQUtil};
 use enum_map::EnumMap;
 use iced::alignment::Vertical;
 use iced::mouse;
+use iced::mouse::ScrollDelta;
+use iced::widget::Action;
 use iced::widget::canvas::{self, Cache, Frame, Geometry, Path, Stroke};
 use iced::widget::text::Alignment;
 use iced::{Color, Event, Pixels, Point, Rectangle, Renderer, Theme};
@@ -59,10 +61,7 @@ pub enum EQMouseEvent {
     Released,
 
     /// Mouse wheel Scrolled
-    Scrolled {
-        position: Point,
-        delta: mouse::ScrollDelta,
-    },
+    Scrolled(Point, ScrollDelta),
 }
 
 // The main widget
@@ -536,7 +535,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         event: &Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
-    ) -> Option<canvas::Action<EQMouseEvent>> {
+    ) -> Option<Action<EQMouseEvent>> {
         let local_position = |cursor: mouse::Cursor| -> Option<Point> {
             cursor
                 .position()
@@ -549,30 +548,24 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
                     return None;
                 }
                 let position = local_position(cursor)?;
-                Some(canvas::Action::publish(EQMouseEvent::Pressed(position)).and_capture())
+                Some(Action::publish(EQMouseEvent::Pressed(position)).and_capture())
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if !self.track_motion {
                     return None;
                 }
                 let position = local_position(cursor)?;
-                Some(canvas::Action::publish(EQMouseEvent::Moved(position)))
+                Some(Action::publish(EQMouseEvent::Moved(position)))
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                Some(canvas::Action::publish(EQMouseEvent::Released))
+                Some(Action::publish(EQMouseEvent::Released))
             }
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 if !cursor.is_over(bounds) {
                     return None;
                 }
                 let position = local_position(cursor)?;
-                Some(
-                    canvas::Action::publish(EQMouseEvent::Scrolled {
-                        position,
-                        delta: *delta,
-                    })
-                    .and_capture(),
-                )
+                Some(Action::publish(EQMouseEvent::Scrolled(position, *delta)).and_capture())
             }
             _ => None,
         }
