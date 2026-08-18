@@ -2,8 +2,9 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::page::{AudioPage, PageMessage};
 use enum_map::Enum;
 use iced::border::Radius;
+use iced::font::Weight;
 use iced::widget::{column, container, row, text};
-use iced::{Background, Border, Color, Element, Length, Task};
+use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
 use strum_macros::EnumIter;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Enum, EnumIter)]
@@ -43,15 +44,39 @@ impl HPEqualiser {
 
     // Canvas
     fn add_eq_canvas(&self, active: ActiveEQ) -> Element<'_, HPEQMessage> {
-        let title = match active {
-            ActiveEQ::Left => "Left EQ",
-            ActiveEQ::Right => "Right EQ",
+        let label = match active {
+            ActiveEQ::Left => "LEFT",
+            ActiveEQ::Right => "RIGHT",
         };
 
-        container(text(title))
+        // Should depend on whether self.active = active
+        let label_colour = match active {
+            ActiveEQ::Left => Color::from_rgba8(255, 255, 255, 0.5),
+            ActiveEQ::Right => Color::from_rgba8(0, 255, 0, 1.0),
+        };
+
+        let label_font = Font {
+            weight: Weight::Bold,
+            ..Default::default()
+        };
+        let container_padding = Padding {
+            top: 0.0,
+            bottom: 10.0,
+            left: 0.0,
+            right: 5.0,
+        };
+
+        let overlay = container(text(label).size(20).color(label_colour).font(label_font))
             .width(Length::Fill)
             .height(Length::Fill)
-            .into()
+            .padding(container_padding)
+            .align_x(Alignment::End)
+            .align_y(Alignment::End)
+            .into();
+
+        // We should just need to create the EQ canvas, then stack![] them.
+
+        overlay
     }
 
     // Controls
