@@ -66,20 +66,20 @@ pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {
         Handle::from_memory(include_bytes!("../../resources/ui/eq/notch.svg")),
     );
 
+    // Utility Images
+    map.insert(
+        "link",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/linked.svg")),
+    );
+    map.insert(
+        "unlink",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/unlinked.svg")),
+    );
+
     // Pipeweaver Logo
     map.insert(
         "pipeweaver",
         Handle::from_memory(include_bytes!("../../resources/ui/pipeweaver.svg")),
-    );
-
-    // Technically not SVGs, but I don't want a new struct..
-    map.insert(
-        "link",
-        Handle::from_memory(include_bytes!("../../resources/ui/icons/linked.png")),
-    );
-    map.insert(
-        "unlink",
-        Handle::from_memory(include_bytes!("../../resources/ui/icons/unlinked.png")),
     );
 
     map
