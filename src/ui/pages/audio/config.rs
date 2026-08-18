@@ -17,6 +17,7 @@ use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::types::HasRange;
 use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
+use log::debug;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
@@ -124,22 +125,33 @@ impl AudioPage for Configuration {
         let dev_addr = location.device_address;
         let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
 
-        let mut use_node = None;
+        let mut use_port = None;
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
-                if node.node_type == PipeWireNodeType::Source && node.channels == 4 {
-                    use_node.replace(node);
+                // Immediately ignore UCM child nodes, they'll never contain what we need.
+                if node.is_split_child {
+                    continue;
+                }
+
+                debug!("Found node: {:?}", node);
+                // AUX3 is the Dry Mix for the Mic on the Mic / Studio. We can only get this
+                // in UCM mode if we find the internal 4-port source.
+                if node.node_type == PipeWireNodeType::Source
+                    && node.channels.len() == 4
+                    && let Some(port) = node.channels.get("AUX3")
+                {
+                    use_port.replace(vec![*port]);
                 }
             }
         }
 
-        if let Some(node) = use_node {
-            // Ok, we have a usable node, let's fire up a listener..
-            let handler = start_spectrum_analyser(&node.name, 48000);
+        if let Some(ports) = use_port {
+            // Ok, we have a usable port list, let's fire up a listener..
+            let handler = start_spectrum_analyser(ports, 48000);
 
-            // Get the internal Spectrum Data
-            self.spectrum_data = Some(handler.data.clone());
+            // Get the internal Spectrum Data. We only use a single port here, so grab the only entry.
+            self.spectrum_data = Some(handler.data[0].clone());
             self.spectrum_handler = Some(handler);
         }
     }

@@ -1,14 +1,12 @@
-use log::error;
+use crate::ui::utility::pipewire::audio::{ChannelStream, get_audio};
+use log::debug;
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
-use std::process::Stdio;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
-use tokio::task::JoinHandle;
+use std::thread;
 
 const EQ_CURVE_RESOLUTION: usize = 128;
 
@@ -18,16 +16,18 @@ pub(crate) const MAX_FREQUENCY: f32 = 20000.0;
 
 pub(crate) const MIN_DB: f32 = -120.0;
 
+type SpectrumData = Vec<Arc<Mutex<Vec<f32>>>>;
+
 pub struct SpectrumHandle {
-    task: JoinHandle<()>,
+    task: thread::JoinHandle<()>,
     stop_signal: Arc<AtomicBool>,
-    pub data: Arc<Mutex<Vec<f32>>>,
+    pub data: SpectrumData,
 }
 
 impl SpectrumHandle {
-    pub fn stop(self) {
+    pub(crate) fn stop(self) {
         self.stop_signal.store(true, Ordering::Relaxed);
-        self.task.abort();
+        let _ = self.task.join();
     }
 
     pub fn has_stopped(&self) -> bool {
@@ -35,17 +35,22 @@ impl SpectrumHandle {
     }
 }
 
-pub fn start_spectrum_analyser(node_name: &str, sample_rate: u32) -> SpectrumHandle {
+// Take a vec of pipewire ports, spawn up the analyser in its own thread.
+pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+    debug!("Starting Spectrum Analyser for {} ports", ports.len());
     let stop_signal = Arc::new(AtomicBool::new(false));
-    let data = Arc::new(Mutex::new(vec![MIN_DB; EQ_CURVE_RESOLUTION]));
+    let data = {
+        let len = ports.len();
+        let mut v = Vec::with_capacity(len);
+        (0..len).for_each(|_| v.push(Arc::new(Mutex::new(vec![MIN_DB; EQ_CURVE_RESOLUTION]))));
+
+        v
+    };
 
     let stop_clone = stop_signal.clone();
     let data_clone = data.clone();
-    let node_name = node_name.to_string();
 
-    let task = tokio::spawn(async move {
-        analyser_inner(&node_name, sample_rate, data_clone, stop_clone).await;
-    });
+    let task = thread::spawn(move || analyser_inner2(ports, sample_rate, data_clone, stop_clone));
 
     SpectrumHandle {
         task,
@@ -54,75 +59,37 @@ pub fn start_spectrum_analyser(node_name: &str, sample_rate: u32) -> SpectrumHan
     }
 }
 
-async fn analyser_inner(name: &str, rate: u32, data: Arc<Mutex<Vec<f32>>>, stop: Arc<AtomicBool>) {
-    let mut child = match Command::new("pw-record")
-        .args([
-            "--target",
-            name,
-            "--rate",
-            &rate.to_string(),
-            "--channel-map",
-            // TODO: Caller should pass this in
-            "[AUX3]",
-            "--format",
-            "f32",
-            "--raw",
-            "-",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            error!("Failed to spawn pw-record: {e}");
-            return;
-        }
-    };
+// Take the ports, create spectrum handlers for them, then run the audio loop.
+fn analyser_inner2(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<AtomicBool>) {
+    let mut streams = vec![];
+    for (index, port) in ports.iter().enumerate() {
+        // Create the handler, and the points cache..
+        let mut handler = DynamicSpectrumAnalyzer::new(rate as f32);
+        let mut points = vec![MIN_DB; EQ_CURVE_RESOLUTION];
 
-    let mut stdout = child.stdout.take().unwrap();
+        // Clone our specific data vec
+        let data = data[index].clone();
 
-    let mut raw = [0u8; 4096];
-
-    // Just some usefully recyclable buffers
-    let mut frames = vec![MIN_DB; EQ_CURVE_RESOLUTION];
-    let mut points = vec![MIN_DB; EQ_CURVE_RESOLUTION];
-
-    let mut handler = DynamicSpectrumAnalyzer::new(rate as f32);
-    loop {
-        if stop.load(Ordering::Relaxed) {
-            break;
-        }
-
-        match stdout.read(&mut raw).await {
-            Ok(0) => break,
-            Ok(n) => {
-                frames.clear();
-                frames.extend(
-                    raw[..n]
-                        .chunks_exact(4)
-                        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap())),
-                );
-
-                handler.push_incoming_samples(&frames);
+        // Move everything into the handling closure.
+        debug!("Creating stream for port: {:?} (inner)", port);
+        let stream = ChannelStream {
+            channel_id: *port,
+            process: Box::new(move |samples| {
+                handler.push_incoming_samples(samples);
                 handler.render_spectrum_frame(&mut points);
 
                 if let Ok(mut guard) = data.lock() {
                     guard.copy_from_slice(&points);
                 }
-            }
-
-            Err(e) => {
-                error!("pw-record failed: {e}");
-                break;
-            }
-        }
+            }),
+        };
+        streams.push(stream);
     }
 
-    child.kill().await.ok();
-    child.wait().await.ok();
+    let _ = get_audio(streams, stop);
 }
 
+#[derive(Clone)]
 pub struct DynamicSpectrumAnalyzer {
     history: Vec<f32>,
     sample_rate: f32,

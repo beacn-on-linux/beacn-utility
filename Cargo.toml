@@ -74,6 +74,7 @@ rayon = "1.12.0"
 
 
 # Used for Spectrum Analysis
+dlopen2 = "0.9.0"
 rustfft = "6.4.1"
 num-complex = "0.4.6"
 
