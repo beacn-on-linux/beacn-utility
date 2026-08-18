@@ -137,15 +137,14 @@ impl AudioPage for Configuration {
             // We found something, we need to find the mic node
             for node in nodes {
                 // Immediately ignore UCM child nodes, they'll never contain what we need.
-                if node.is_split_child {
+                if node.is_split_child || node.node_type != PipeWireNodeType::Source {
                     continue;
                 }
 
                 debug!("Found node: {:?}", node);
                 // AUX3 is the Dry Mix for the Mic on the Mic / Studio. We can only get this
                 // in UCM mode if we find the internal 4-port source.
-                if node.node_type == PipeWireNodeType::Source
-                    && node.channels.len() == expected_channels
+                if node.channels.len() == expected_channels
                     && let Some(port) = node.channels.get("AUX3")
                 {
                     use_port.replace(vec![*port]);
