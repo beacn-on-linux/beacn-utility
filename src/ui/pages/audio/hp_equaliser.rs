@@ -11,7 +11,6 @@ use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
 use crate::ui::widgets::helpers::svg::{svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::equaliser::{EQMode, EQQ};
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
@@ -127,6 +126,9 @@ impl HPEqualiser {
             EqualiserValue(value) => {
                 let channel = self.active_channel;
                 let other = self.active_channel.other();
+
+                // Let the commands fill this vec with messages, we'll send them to the handler,
+                // then apply changes to the view at the end.
                 let messages = vec![];
                 if let Some(band) = self.active_band {
                     match value {
@@ -181,8 +183,82 @@ impl HPEqualiser {
                 }
             }
 
-            HPEQMessage::AddBand => {}
-            HPEQMessage::RemoveBand => {}
+            AddBand => {
+                // This is kinda awkward, but here we go :)
+                let channel = self.active_channel;
+                let other = channel.other();
+
+                // We just need to find the first disabled band..
+                let found = self.temp[channel]
+                    .iter()
+                    .find(|(_, b)| !b.enabled)
+                    .map(|(band, _)| band);
+
+                // Update and Send it, this will probably be easier with a real state!
+                if let Some(band) = found {
+                    // There could be up to 4 message state changes, so collect and send later.
+                    let messages = vec![];
+                    if self.temp[channel][band].band_type == EqualiserBandType::NotSet {
+                        warn!("EQ Band doesn't have type set, defaulting to BellBand");
+
+                        // TODO - MESSAGE
+                        self.temp[channel][band].band_type = EqualiserBandType::BellBand;
+                        if self.is_linked {
+                            self.temp[other][band].band_type = EqualiserBandType::BellBand;
+                        }
+                    }
+
+                    // Enable the band
+                    // TODO - MESSAGE
+                    self.temp[channel][band].enabled = true;
+                    if self.is_linked {
+                        self.temp[other][band].enabled = true;
+                    }
+
+                    // Send and update the state
+                    for message in messages {
+                        let _ = state.handle_message(message);
+                    }
+
+                    // Update the views
+                    self.active_band = Some(band);
+                    self.view[channel].set_active(Some(band));
+                    self.view[channel].set_band(band, self.temp[channel][band]);
+                    if self.is_linked {
+                        self.view[other].set_active(Some(band));
+                        self.view[other].set_band(band, self.temp[other][band]);
+                    }
+                }
+            }
+            RemoveBand => {
+                let channel = self.active_channel;
+                let other = channel.other();
+
+                if let Some(active) = self.active_band {
+                    // TODO - MESSAGE
+                    self.temp[channel][active].enabled = false;
+                    self.view[channel].set_band(active, self.temp[channel][active]);
+                    if self.is_linked {
+                        self.temp[other][active].enabled = false;
+                        self.view[other].set_band(active, self.temp[other][active]);
+                    }
+
+                    // Try and find a new active band on this channel.
+                    self.active_band = None;
+                    for band in EqualiserBand::iter() {
+                        if self.temp[channel][band].enabled {
+                            self.active_band = Some(band);
+                            break;
+                        }
+                    }
+
+                    let active_band = self.active_band;
+                    self.view[channel].set_active(active_band);
+                    if self.is_linked {
+                        self.view[other].set_active(active_band);
+                    }
+                }
+            }
 
             Balance(amount) => {
                 self.balance = amount;
