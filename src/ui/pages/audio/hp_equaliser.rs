@@ -1,10 +1,18 @@
 use crate::devices::states::audio::AudioState;
+use crate::ui::pages::audio::hp_equaliser::HPEQMessage::{Balance, SubWoofer};
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
+use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
+use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
+use beacn_lib::manager::DeviceType;
+use beacn_lib::types::HasRange;
 use enum_map::Enum;
 use iced::border::Radius;
 use iced::font::Weight;
 use iced::widget::{Space, column, container, row, stack, text};
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Task};
+use std::ops::RangeInclusive;
 use strum_macros::EnumIter;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Enum, EnumIter)]
@@ -15,17 +23,42 @@ enum ActiveEQ {
 
 #[derive(Debug, Clone)]
 pub enum HPEQMessage {
-    DUMMY,
+    Balance(i32),
+    SubWoofer(u8),
+
+    // Direct State Change
+    State(Message),
 }
 
-pub struct HPEqualiser {}
+pub struct HPEqualiser {
+    // Needs to be fed from the state, currently unavailable.
+    balance: i32,
+}
 
 impl HPEqualiser {
     pub fn new() -> Self {
-        Self {}
+        Self { balance: 0 }
     }
 
     fn update(&mut self, state: &mut AudioState, msg: HPEQMessage) -> Task<HPEQMessage> {
+        match msg {
+            Balance(amount) => {
+                self.balance = amount;
+            }
+
+            SubWoofer(amount) => {
+                // Subwoofer is fun, get various messages based on amount
+                let messages = Subwoofer::get_amount_messages(amount);
+                for message in messages {
+                    let _ = state.handle_message(message);
+                }
+            }
+
+            HPEQMessage::State(msg) => {
+                let _ = state.handle_message(msg);
+            }
+        }
+
         Task::none()
     }
 
@@ -94,11 +127,65 @@ impl HPEqualiser {
     }
 
     fn volume_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Volume!")).into()
+        let device_type = state.device_definition.device_type;
+        let value = state.headphones.mic_monitor;
+        let range = HPMicMonitorLevel::range();
+        let monitor = themed_slider(range, value, move |v| {
+            let command = match device_type {
+                DeviceType::BeacnMic => Headphones::MicMonitor(HPMicMonitorLevel(v)),
+                DeviceType::BeacnStudio => Headphones::StudioMicMonitor(HPMicMonitorLevel(v)),
+                _ => unreachable!(),
+            };
+
+            let msg = Message::Headphones(command);
+            HPEQMessage::State(msg)
+        });
+
+        let value = state.headphones.level;
+        let range = HPLevel::range();
+        let level = themed_slider(range, value, |v| {
+            let msg = Message::Headphones(Headphones::HeadphoneLevel(HPLevel(v)));
+            HPEQMessage::State(msg)
+        });
+
+        column![
+            text("Headphone Level").size(11.0),
+            level,
+            Space::new().height(7),
+            text("Mic Monitor").size(11.0),
+            monitor,
+        ]
+        .align_x(Alignment::Center)
+        .width(Length::Fixed(120.0))
+        .into()
     }
 
     fn balance_sub_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Balance!")).into()
+        let balance_at_zero = self.balance == 0;
+        let balance_slider = themed_slider(-100..=100, self.balance, Balance)
+            .style(move |theme, status| {
+                let mut style = slider_theme(theme, status);
+                if balance_at_zero {
+                    style.handle.border_color = Color::from_rgb(0.0, 1.0, 0.0);
+                }
+                style
+            })
+            .trail_start(0);
+
+        let value = state.subwoofer.amount;
+        let range = SubwooferAmount::range();
+        let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
+        let woofer = themed_slider(range, value, SubWoofer);
+        column![
+            text("Balance").size(11.0),
+            balance_slider,
+            Space::new().height(7),
+            text("Subwoofer").size(11.0),
+            woofer,
+        ]
+        .align_x(Alignment::Center)
+        .width(Length::Fixed(120.0))
+        .into()
     }
 
     fn mono_stereo_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
