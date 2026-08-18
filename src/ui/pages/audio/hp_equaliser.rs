@@ -8,9 +8,12 @@ use crate::ui::widgets::equaliser::eq_common::{
     get_q_delta,
 };
 use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
+use crate::ui::widgets::helpers::buttons::padded_button;
+use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
-use crate::ui::widgets::helpers::svg::{svg_button_style, svg_button_unstyled};
+use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
+use beacn_lib::audio::messages::equaliser::{EQFrequency, EQGain, EQQ};
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
@@ -112,7 +115,7 @@ impl HPEqualiser {
     fn load_temp_data(&mut self, state: &AudioState) {
         for channel in Channel::iter() {
             self.temp[channel] = state.equaliser.bands[state.equaliser.mode];
-            self.view[channel].set_bands(self.temp[channel].clone());
+            self.view[channel].set_bands(self.temp[channel]);
         }
         self.switch_active_channel_force(Channel::Left, true);
     }
@@ -297,7 +300,7 @@ impl HPEqualiser {
         }
     }
 
-    fn handle_eq_press(&mut self, state: &mut AudioState, channel: Channel, point: Point) {
+    fn handle_eq_press(&mut self, _state: &mut AudioState, channel: Channel, point: Point) {
         // Do we have a hit on a band?
         if self.check_band_hit(channel, point).is_some() {
             // Prepare for a drag, will be taken care of during the handle_eq_move callback
@@ -305,7 +308,7 @@ impl HPEqualiser {
             self.drag_start = Some(Instant::now());
         }
     }
-    fn handle_eq_moved(&mut self, state: &mut AudioState, channel: Channel, point: Point) {
+    fn handle_eq_moved(&mut self, _state: &mut AudioState, channel: Channel, point: Point) {
         if self.drag_start.is_some_and(|t| t.elapsed() >= DRAG_DELAY) {
             // We're dragging the active band, so should be updating its state
             let Some(band) = self.active_band else {
@@ -343,11 +346,11 @@ impl HPEqualiser {
             }
         }
     }
-    fn handle_eq_released(&mut self, state: &AudioState, channel: Channel) {
+    fn handle_eq_released(&mut self, _state: &AudioState, channel: Channel) {
         self.view[channel].set_track_motion(false);
         self.drag_start = None;
     }
-    fn handle_eq_scrolled(&mut self, state: &AudioState, c: Channel, p: Point, d: ScrollDelta) {
+    fn handle_eq_scrolled(&mut self, _state: &AudioState, c: Channel, p: Point, d: ScrollDelta) {
         let (channel, point, delta) = (c, p, d);
 
         if let Some(band) = self.check_band_hit(channel, point) {
@@ -464,8 +467,7 @@ impl HPEqualiser {
             Canvas::new(&self.view[active])
                 .width(Length::Fill)
                 .height(Length::Fill),
-        )
-        .into();
+        );
 
         let canvas = match active {
             Channel::Left => canvas.map(|m| Equaliser(Channel::Left, m)),
@@ -533,14 +535,14 @@ impl HPEqualiser {
             };
 
             let msg = Message::Headphones(command);
-            HPEQMessage::State(msg)
+            State(msg)
         });
 
         let value = state.headphones.level;
         let range = HPLevel::range();
         let level = themed_slider(range, value, |v| {
             let msg = Message::Headphones(Headphones::HeadphoneLevel(HPLevel(v)));
-            HPEQMessage::State(msg)
+            State(msg)
         });
 
         column![
@@ -583,7 +585,7 @@ impl HPEqualiser {
         .into()
     }
 
-    fn mono_stereo_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+    fn mono_stereo_controls(&self, _state: &AudioState) -> Element<'_, HPEQMessage> {
         // TODO: Need a Stereo / Mono Icon!
 
         column![
@@ -596,20 +598,134 @@ impl HPEqualiser {
         .into()
     }
 
-    fn equaliser_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        container(text("Equaliser")).into()
+    fn equaliser_controls(&self, _state: &AudioState) -> Element<'_, HPEQMessage> {
+        let channel = self.active_channel;
+        let bands = &self.temp[channel];
+
+        let add_band = bands.values().any(|b| !b.enabled).then_some(AddBand);
+        let remove_band = self.active_band.map(|_| RemoveBand);
+
+        let add_button = padded_button("Add Band", Alignment::Center)
+            .width(Length::Fixed(120.0))
+            .on_press_maybe(add_band);
+
+        let remove_button = padded_button("Remove Band", Alignment::Center)
+            .width(Length::Fixed(120.0))
+            .on_press_maybe(remove_band);
+
+        let buttons = column![
+            add_button,
+            container(text("")).height(Length::Fixed(12.0)),
+            remove_button
+        ]
+        .align_x(Alignment::Center);
+
+        let type_grid = self.eq_type_grid().map(EqualiserValue);
+        let values = self.eq_values().map(EqualiserValue);
+
+        row![buttons, type_grid, values]
+            .spacing(10.0)
+            .align_y(Alignment::Center)
+            .into()
     }
 
-    fn link_control(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
+    fn eq_type_grid(&self) -> Element<'_, HPEQValue> {
+        let Some(active) = self.active_band else {
+            return row![].into();
+        };
+
+        let current_type = self.temp[self.active_channel][active].band_type;
+        let types: [(&'static str, EqualiserBandType); 6] = [
+            ("eq_low_pass", EqualiserBandType::LowPassFilter),
+            ("eq_high_pass", EqualiserBandType::HighPassFilter),
+            ("eq_notch", EqualiserBandType::NotchFilter),
+            ("eq_bell", EqualiserBandType::BellBand),
+            ("eq_low_shelf", EqualiserBandType::LowShelf),
+            ("eq_high_shelf", EqualiserBandType::HighShelf),
+        ];
+
+        let mut top = row![].spacing(1.0);
+        let mut bottom = row![].spacing(1.0);
+
+        for (index, (name, band_type)) in types.into_iter().enumerate() {
+            let selected = current_type == band_type;
+            let is_first_row = index < 3;
+            let col = index % 3;
+
+            let button = svg_button(name, selected)
+                .width(Length::Fixed(45.0))
+                .on_press(Type(band_type));
+
+            let button = button.style(move |theme, status| {
+                let mut style = svg_button_style(theme, status, selected);
+                style.border.radius = Radius {
+                    top_left: if is_first_row && col == 0 { 6.0 } else { 0.0 },
+                    top_right: if is_first_row && col == 2 { 6.0 } else { 0.0 },
+                    bottom_right: if !is_first_row && col == 2 { 6.0 } else { 0.0 },
+                    bottom_left: if !is_first_row && col == 0 { 6.0 } else { 0.0 },
+                };
+                style
+            });
+
+            if is_first_row {
+                top = top.push(button);
+            } else {
+                bottom = bottom.push(button);
+            }
+        }
+
+        column![top, bottom].spacing(1.0).into()
+    }
+
+    fn eq_values(&self) -> Element<'_, HPEQValue> {
+        let Some(active) = self.active_band else {
+            return row![].into();
+        };
+
+        // Clone the band so we can extract values
+        let band = self.temp[self.active_channel][active];
+
+        let freq_r = EQFrequency::range();
+        let freq_r: RangeInclusive<u32> = (*freq_r.start() as u32)..=(*freq_r.end() as u32);
+        let frequency = styled_drag_value(band.frequency, freq_r)
+            .suffix("Hz")
+            .on_change(Frequency)
+            .width(Length::Fixed(100.0));
+
+        let has_gain = band_type_has_gain(band.band_type);
+        let gain_value = if has_gain { band.gain } else { 0.0 };
+        let gain_range = EQGain::range();
+        let gain = styled_drag_value(gain_value, gain_range)
+            .suffix("dB")
+            .on_change_maybe(has_gain.then_some(Gain))
+            .width(Length::Fixed(100.0));
+
+        let q_range = EQQ::range();
+        let q = styled_drag_value(band.q, q_range)
+            .on_change(Q)
+            .width(Length::Fixed(100.0));
+
+        column![
+            row![text("Freq").width(Length::Fixed(34.0)), frequency]
+                .spacing(4.0)
+                .align_y(Alignment::Center),
+            row![text("Gain").width(Length::Fixed(34.0)), gain]
+                .spacing(4.0)
+                .align_y(Alignment::Center),
+            row![text("Q").width(Length::Fixed(34.0)), q]
+                .spacing(4.0)
+                .align_y(Alignment::Center),
+        ]
+        .spacing(4.0)
+        .into()
+    }
+
+    fn link_control(&self, _state: &AudioState) -> Element<'_, HPEQMessage> {
         let name = if self.is_linked { "unlink" } else { "link" };
         svg_button_unstyled(name)
             .on_press(ToggleLinked)
             .width(Length::Fixed(30.0))
-            .style(move |theme, status| {
-                let style = svg_button_style(theme, status, self.is_linked);
-
-                style
-            })
+            .style(move |t, s| svg_button_style(t, s, self.is_linked))
             .width(Length::Fixed(32.0))
             .height(Length::Fixed(60.0))
             .into()
