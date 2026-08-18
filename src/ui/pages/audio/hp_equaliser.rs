@@ -2,7 +2,10 @@ use crate::devices::states::audio::{AudioState, EqualiserBand, EqualiserBandType
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::*;
 use crate::ui::pages::audio::hp_equaliser::HPEQValue::*;
 
+use crate::devices::states::State;
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::utility::pipewire::device::{PipeWireNodeType, find_pipewire_nodes_for_usb};
+use crate::ui::utility::pipewire::spectrum::{SpectrumHandle, start_spectrum_analyser};
 use crate::ui::widgets::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
     get_q_delta,
@@ -18,7 +21,7 @@ use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headpho
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
-use enum_map::{Enum, EnumMap};
+use enum_map::{Enum, EnumMap, enum_map};
 use iced::border::Radius;
 use iced::font::Weight;
 use iced::mouse::ScrollDelta;
@@ -26,6 +29,7 @@ use iced::widget::{Canvas, Space, checkbox, column, container, row, stack, text}
 use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding, Point, Task};
 use log::warn;
 use std::ops::RangeInclusive;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
@@ -79,6 +83,8 @@ pub enum HPEQValue {
 pub struct HPEqualiser {
     // Just one equaliser, although we need two..
     view: EnumMap<Channel, EQDrawView>,
+    spectrum_handler: Option<SpectrumHandle>,
+    spectrum_data: EnumMap<Channel, Option<Arc<Mutex<Vec<f32>>>>>,
 
     // Temporary data so we can test interactions. The state will eventually feed this
     temp: EnumMap<Channel, Bands>,
@@ -101,6 +107,9 @@ impl HPEqualiser {
         Self {
             view: Default::default(),
             temp: Default::default(),
+
+            spectrum_handler: None,
+            spectrum_data: Default::default(),
 
             active_channel: Channel::Left,
             active_band: None,
@@ -756,6 +765,116 @@ impl AudioPage for HPEqualiser {
 
     fn on_open(&mut self, state: &AudioState) {
         self.load_temp_data(state);
+
+        // This will look familiar, except this time we're pulling the stereo output rather than
+        // the mono input :)
+        let location = state.location();
+        let bus_addr = location.bus_id.parse::<u8>().unwrap_or(0);
+        let dev_addr = location.device_address;
+        let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
+
+        let mut use_port = None;
+        if let Ok(nodes) = nodes {
+            for node in nodes {
+                // Immediately ignore UCM child nodes and Sink nodes, they'll never contain what we need.
+                if node.is_split_child || node.node_type != PipeWireNodeType::Sink {
+                    continue;
+                }
+
+                match state.device_definition.device_type {
+                    DeviceType::BeacnMic => {
+                        // If we have 2 channels, we're in compliancy mode, so these are FL,FR
+                        if node.channels.len() == 2
+                            && let Some(left) = node.channels.get("FL")
+                            && let Some(right) = node.channels.get("FR")
+                        {
+                            use_port.replace(vec![*left, *right]);
+                            break;
+                        }
+
+                        // Otherwise, we're in UCM / Pro mode, so these are AUX0, AUX1
+                        if node.channels.len() == 3
+                            && let Some(left) = node.channels.get("AUX0")
+                            && let Some(right) = node.channels.get("AUX1")
+                        {
+                            use_port.replace(vec![*left, *right]);
+                            break;
+                        }
+                    }
+
+                    // Beacn Studio can only ever have 11 channels, so this is easy.
+                    DeviceType::BeacnStudio => {
+                        if node.channels.len() == 11
+                            && let Some(left) = node.channels.get("AUX0")
+                            && let Some(right) = node.channels.get("AUX1")
+                        {
+                            use_port.replace(vec![*left, *right]);
+                            break;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        if let Some(ports) = use_port {
+            // Ok, we have a usable port list, let's fire up a listener..
+            let handler = start_spectrum_analyser(ports, 48000);
+
+            // Get the internal Spectrum Data. We only use a single port here, so grab the only entry.
+            self.spectrum_data = enum_map! {
+                Channel::Left => Some(handler.data[0].clone()),
+                Channel::Right => Some(handler.data[1].clone()),
+            };
+            self.spectrum_handler = Some(handler);
+        }
+    }
+
+    fn on_close(&mut self) {
+        if let Some(handler) = self.spectrum_handler.take() {
+            handler.stop();
+        }
+
+        for channel in Channel::iter() {
+            self.view[channel].clear();
+        }
+    }
+
+    fn on_tick(&mut self, _state: &mut AudioState) -> Task<PageMessage> {
+        let Some(handler) = self.spectrum_handler.as_mut() else {
+            return Task::none();
+        };
+
+        if handler.has_stopped() {
+            self.spectrum_handler = None;
+            self.spectrum_data = Default::default();
+
+            for channel in Channel::iter() {
+                self.view[channel].clear_spectrum();
+            }
+            return Task::none();
+        }
+
+        // This shouldn't happen if the handler is active, but just in case..
+        for channel in Channel::iter() {
+            let Some(data) = self.spectrum_data[channel].as_mut() else {
+                // Something has gone wrong, nuke everything.
+                self.spectrum_handler = None;
+                self.spectrum_data = Default::default();
+
+                for channel in Channel::iter() {
+                    self.view[channel].clear_spectrum();
+                }
+                return Task::none();
+            };
+
+            if let Ok(guard) = data.lock() {
+                let spectrum = guard.clone();
+                self.view[channel].set_spectrum(spectrum);
+            }
+        }
+
+        Task::none()
     }
 
     fn update(&mut self, state: &mut AudioState, msg: PageMessage) -> Task<PageMessage> {
