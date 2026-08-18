@@ -248,7 +248,7 @@ impl HPEqualiser {
 
                     // Try and find a new active band on this channel.
                     self.active_band = None;
-                    for band in EqualiserBand::iter() {
+                    for band in EqualiserBand::iter().rev() {
                         if self.temp[channel][band].enabled {
                             self.active_band = Some(band);
                             break;
