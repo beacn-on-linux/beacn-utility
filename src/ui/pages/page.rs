@@ -5,12 +5,12 @@ use crate::devices::states::control::ControlState;
 use crate::ui::app::DeviceState;
 use crate::ui::pages::audio::about::AboutMessage;
 use crate::ui::pages::audio::config::ConfigMessage;
+use crate::ui::pages::audio::hp_equaliser::HPEQMessage;
 use crate::ui::pages::audio::lighting::LightingMessage;
 use crate::ui::pages::audio::studio_link::StudioLinkMessage;
 use crate::ui::pages::common::error_page::ErrorPageMessages;
 use crate::ui::pages::control::about::ControlAboutMessage;
 use iced::{Element, Task};
-use crate::ui::pages::audio::hp_equaliser::HPEQMessage;
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
