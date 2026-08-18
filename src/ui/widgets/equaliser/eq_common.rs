@@ -1,8 +1,8 @@
-use enum_map::EnumMap;
-use iced::{Point, Rectangle, Size};
-
 use crate::devices::states::audio::EqualiserBandType::*;
 use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
+use enum_map::EnumMap;
+use iced::mouse::ScrollDelta;
+use iced::{Point, Rectangle, Size};
 
 /// A full set of equaliser bands, keyed by `EqualiserBand`.
 pub type Bands = EnumMap<EqualiserBand, EqualiserBandConfig>;
@@ -25,6 +25,16 @@ pub const EQ_GRAB_THRESHOLD: f32 = 20.0;
 /// filters like High/Low Pass or Notch, which are always drawn at 0dB).
 pub fn band_type_has_gain(band_type: EqualiserBandType) -> bool {
     !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
+}
+
+const VALUE_PER_LINE: f32 = 0.2;
+const PIXELS_PER_LINE: f32 = 20.0;
+
+pub fn get_q_delta(delta: ScrollDelta) -> f32 {
+    match delta {
+        ScrollDelta::Lines { y, .. } => y * VALUE_PER_LINE,
+        ScrollDelta::Pixels { y, .. } => y * VALUE_PER_LINE / PIXELS_PER_LINE,
+    }
 }
 
 /// Pure coordinate-space math shared by both the rendering view and the
