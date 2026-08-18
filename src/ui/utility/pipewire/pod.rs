@@ -22,7 +22,12 @@ pub const SPA_FORMAT_AUDIO_position: u32 = 0x10005;
 pub const SPA_MEDIA_TYPE_audio: u32 = 1;
 pub const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
 
+// Interleaved, we don't actually want this..
+#[allow(unused)]
 pub const SPA_AUDIO_FORMAT_F32le: u32 = 0x11b;
+
+// We want planar so the samples are split in the buffer.
+pub const SPA_AUDIO_FORMAT_F32P: u32 = 0x206;
 
 // ---------------------------------------------------------------------
 
@@ -119,7 +124,7 @@ pub fn build_audio_pod<S: AsRef<str>>(rate: u32, channels: &[S]) -> Vec<u8> {
     object_body.write_u32(SPA_PARAM_EnumFormat);
     object_body.prop_id(SPA_FORMAT_mediaType, SPA_MEDIA_TYPE_audio);
     object_body.prop_id(SPA_FORMAT_mediaSubtype, SPA_MEDIA_SUBTYPE_raw);
-    object_body.prop_id(SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32le);
+    object_body.prop_id(SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32P);
     object_body.prop_int(SPA_FORMAT_AUDIO_rate, rate as i32);
     object_body.prop_int(SPA_FORMAT_AUDIO_channels, channel_ids.len() as i32);
     object_body.prop_id_array(SPA_FORMAT_AUDIO_position, &channel_ids);

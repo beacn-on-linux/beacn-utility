@@ -14,6 +14,7 @@ use crate::ui::widgets::helpers::composite::draw_range;
 use crate::ui::widgets::helpers::tabs::render_tab;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
+use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
 use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
@@ -125,20 +126,25 @@ impl AudioPage for Configuration {
         let dev_addr = location.device_address;
         let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
 
+        let expected_channels = match state.device_definition.device_type {
+            DeviceType::BeacnMic => 4,
+            DeviceType::BeacnStudio => 12,
+            _ => unreachable!(),
+        };
+
         let mut use_port = None;
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
                 // Immediately ignore UCM child nodes, they'll never contain what we need.
-                if node.is_split_child {
+                if node.is_split_child || node.node_type != PipeWireNodeType::Source {
                     continue;
                 }
 
                 debug!("Found node: {:?}", node);
                 // AUX3 is the Dry Mix for the Mic on the Mic / Studio. We can only get this
                 // in UCM mode if we find the internal 4-port source.
-                if node.node_type == PipeWireNodeType::Source
-                    && node.channels.len() == 4
+                if node.channels.len() == expected_channels
                     && let Some(port) = node.channels.get("AUX3")
                 {
                     use_port.replace(vec![*port]);
