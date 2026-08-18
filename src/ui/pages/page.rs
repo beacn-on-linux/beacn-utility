@@ -10,6 +10,7 @@ use crate::ui::pages::audio::studio_link::StudioLinkMessage;
 use crate::ui::pages::common::error_page::ErrorPageMessages;
 use crate::ui::pages::control::about::ControlAboutMessage;
 use iced::{Element, Task};
+use crate::ui::pages::audio::hp_equaliser::HPEQMessage;
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
@@ -17,6 +18,7 @@ pub(crate) enum PageMessage {
     AudioConfig(ConfigMessage),
     AudioLighting(LightingMessage),
     AudioStudioLink(StudioLinkMessage),
+    AudioHPEqualiser(HPEQMessage),
 
     ControlAbout(ControlAboutMessage),
 
