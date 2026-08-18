@@ -17,7 +17,7 @@ use beacn_lib::audio::messages::equaliser::{
 use beacn_lib::types::HasRange;
 use iced::border::Radius;
 use iced::mouse::ScrollDelta;
-use iced::widget::{Button, Canvas, button, checkbox, container, row, rule, text};
+use iced::widget::{Canvas, checkbox, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Point, Rectangle, Task};
 use log::warn;
 use std::ops::RangeInclusive;
