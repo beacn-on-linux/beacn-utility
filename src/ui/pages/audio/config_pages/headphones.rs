@@ -68,6 +68,8 @@ impl ConfigPage for HeadphonesPage {
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
+        let device_version = state.device_definition.device_info.version;
+        
         let device_type = state.device_definition.device_type;
         let value = state.headphones.mic_monitor;
         let range = HPMicMonitorLevel::range();
@@ -167,20 +169,36 @@ impl ConfigPage for HeadphonesPage {
             .width(Length::Shrink)
             .align_x(Alignment::Start);
 
-        row![
-            levels,
-            rule::vertical(1.0),
-            eq,
-            rule::vertical(1.0),
-            amp_power
-        ]
-        .spacing(15)
-        .padding(Padding {
-            top: 7.0,
-            bottom: 7.0,
-            left: 20.0,
-            right: 00.0,
-        })
-        .into()
+        if device_version > beacn_lib::EQ_HEADPHONES_VERSION {
+            row![
+                levels,
+                rule::vertical(1.0),
+                amp_power
+            ]
+                .spacing(15)
+                .padding(Padding {
+                    top: 7.0,
+                    bottom: 7.0,
+                    left: 20.0,
+                    right: 00.0,
+                })
+                .into()
+        } else {
+            row![
+                levels,
+                rule::vertical(1.0),
+                eq,
+                rule::vertical(1.0),
+                amp_power
+            ]
+                .spacing(15)
+                .padding(Padding {
+                    top: 7.0,
+                    bottom: 7.0,
+                    left: 20.0,
+                    right: 00.0,
+                })
+                .into()
+        }
     }
 }
