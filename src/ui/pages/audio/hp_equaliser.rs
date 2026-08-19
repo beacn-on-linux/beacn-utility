@@ -4,8 +4,9 @@ use crate::ui::pages::audio::hp_equaliser::HPEQValue::*;
 
 use crate::devices::states::State;
 use crate::ui::pages::page::{AudioPage, PageMessage};
-use crate::ui::utility::pipewire::device::{PipeWireNodeType, find_pipewire_nodes_for_usb};
-use crate::ui::utility::pipewire::spectrum::{SpectrumHandle, start_spectrum_analyser};
+use crate::ui::utility::pipewire::{
+    PipeWireNodeType, SpectrumHandle, find_pipewire_nodes_for_usb, start_spectrum_analyser,
+};
 use crate::ui::widgets::equaliser::eq_common::{
     Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
     get_q_delta,
