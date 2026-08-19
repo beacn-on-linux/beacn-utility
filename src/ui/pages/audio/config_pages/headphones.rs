@@ -2,7 +2,7 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::widgets::helpers::composite::draw_range;
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::headphone_eq::{HPEQType, HPEQValue, HeadphoneEQ};
+use beacn_lib::audio::messages::eq_headphones_legacy::{EQHPLegacy, HPEQType, HPEQValue};
 use beacn_lib::audio::messages::headphones::HeadphoneTypes::{
     HighImpedance, InEarMonitors, LineLevel, NormalPower,
 };
@@ -41,9 +41,9 @@ impl ConfigPage for HeadphonesPage {
             HeadphonesMessage::EQEnabled(enabled) => {
                 let messages = vec![
                     Message::Headphones(Headphones::FXEnabled(enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Bass, enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Mids, enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Treble, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Bass, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Mids, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Treble, enabled)),
                     Message::Subwoofer(Subwoofer::Enabled(enabled)),
                 ];
                 for message in messages {
@@ -117,24 +117,24 @@ impl ConfigPage for HeadphonesPage {
             .on_toggle(HeadphonesMessage::EQEnabled);
         let enabled = Element::from(enabled).map(ChildMessage::Headphones);
 
-        let value = state.headphone_eq.eq[HPEQType::Bass].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Bass].amount;
         let range = HPEQValue::range();
         let bass = draw_range("Bass", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Bass, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Bass, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
-        let value = state.headphone_eq.eq[HPEQType::Mids].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Mids].amount;
         let range = HPEQValue::range();
         let mids = draw_range("Mids", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Mids, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Mids, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
-        let value = state.headphone_eq.eq[HPEQType::Treble].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Treble].amount;
         let range = HPEQValue::range();
         let treble = draw_range("Treble", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Treble, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Treble, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
