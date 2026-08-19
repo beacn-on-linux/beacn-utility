@@ -17,7 +17,6 @@ use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
 use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style, svg_button_unstyled};
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::equaliser::{EQFrequency, EQGain, EQQ};
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
@@ -32,6 +31,7 @@ use log::warn;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use beacn_lib::audio::messages::eq_common::{EQFrequency, EQGain, EQQ};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -124,7 +124,7 @@ impl HPEqualiser {
 
     fn load_temp_data(&mut self, state: &AudioState) {
         for channel in Channel::iter() {
-            self.temp[channel] = state.equaliser.bands[state.equaliser.mode];
+            self.temp[channel] = state.eq_microphone.bands[state.eq_microphone.mode];
             self.view[channel].set_bands(self.temp[channel]);
         }
         self.switch_active_channel_force(Channel::Left, true);

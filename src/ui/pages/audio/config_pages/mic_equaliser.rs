@@ -11,9 +11,8 @@ use crate::ui::widgets::helpers::buttons::padded_button;
 use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style};
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::equaliser::{
-    EQBand, EQBandType, EQFrequency, EQGain, EQMode, EQQ, Equaliser,
-};
+use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType, EQFrequency, EQGain, EQQ};
+use beacn_lib::audio::messages::eq_microphone::{EQMicrophone, EQMode};
 use beacn_lib::types::HasRange;
 use iced::border::Radius;
 use iced::mouse::ScrollDelta;
@@ -79,7 +78,7 @@ impl MicEqualiser {
                 EQMouseEvent::Pressed(position) => {
                     // Perform Hit Detection, and switch active point
                     let rect = self.view.plot_rect();
-                    let bands = state.equaliser.bands[state.equaliser.mode];
+                    let bands = state.eq_microphone.bands[state.eq_microphone.mode];
                     if let Some(band) = EqGeometry::hit_test(rect, position, &bands) {
                         // Flag the time this was pressed, in case the user wants to drag..
                         self.pressed_at = Some(Instant::now());
@@ -134,10 +133,10 @@ impl MicEqualiser {
                         let adjusted = (q + delta).clamp(0.1, 10.0);
                         let adjusted = (adjusted * 10.0).round() / 10.0;
 
-                        let msg = Equaliser::Q(self.eq_mode, band.into(), EQQ(adjusted));
-                        let _ = state.handle_message(Message::Equaliser(msg));
+                        let msg = EQMicrophone::Q(self.eq_mode, band.into(), EQQ(adjusted));
+                        let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                        let active = state.equaliser.bands[self.eq_mode][band];
+                        let active = state.eq_microphone.bands[self.eq_mode][band];
                         self.view.set_band(band, active);
                         self.view.set_active(self.active_band);
                     }
@@ -149,21 +148,21 @@ impl MicEqualiser {
                     true => EQMode::Advanced,
                     false => EQMode::Simple,
                 };
-                let _ = state.handle_message(Message::Equaliser(Equaliser::Mode(new_mode)));
+                let _ = state.handle_message(Message::EQMicrophone(EQMicrophone::Mode(new_mode)));
 
                 self.eq_mode = new_mode;
                 self.view.invalidate_all();
-                self.view.set_bands(state.equaliser.bands[new_mode]);
+                self.view.set_bands(state.eq_microphone.bands[new_mode]);
 
                 // Can we transition cleanly?
                 if let Some(band) = self.active_band
-                    && !state.equaliser.bands[new_mode][band].enabled
+                    && !state.eq_microphone.bands[new_mode][band].enabled
                 {
                     // Current band isn't active in the new mode, clear it, then try and find a new one
                     self.active_band = None;
 
                     for band in EqualiserBand::iter() {
-                        if state.equaliser.bands[new_mode][band].enabled {
+                        if state.eq_microphone.bands[new_mode][band].enabled {
                             self.active_band = Some(band);
                             break;
                         }
@@ -173,69 +172,71 @@ impl MicEqualiser {
             SetFrequency(frequency) => {
                 if let Some(active) = self.active_band {
                     let value = EQFrequency(frequency as f32);
-                    let msg = Equaliser::Frequency(state.equaliser.mode, active.into(), value);
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let msg =
+                        EQMicrophone::Frequency(state.eq_microphone.mode, active.into(), value);
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    let band = state.eq_microphone.bands[state.eq_microphone.mode][active];
                     self.view.set_band(active, band);
                 }
             }
             SetType(band_type) => {
                 if let Some(active) = self.active_band {
-                    let mode = state.equaliser.mode;
-                    let msg = Equaliser::Type(mode, active.into(), band_type.into());
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let mode = state.eq_microphone.mode;
+                    let msg = EQMicrophone::Type(mode, active.into(), band_type.into());
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                    let band = state.equaliser.bands[mode][active];
+                    let band = state.eq_microphone.bands[mode][active];
                     self.view.set_band(active, band);
                 }
             }
             SetGain(gain) => {
                 if let Some(active) = self.active_band {
                     let value = EQGain(gain);
-                    let msg = Equaliser::Gain(state.equaliser.mode, active.into(), value);
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let msg = EQMicrophone::Gain(state.eq_microphone.mode, active.into(), value);
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    let band = state.eq_microphone.bands[state.eq_microphone.mode][active];
                     self.view.set_band(active, band);
                 }
             }
             SetQ(q) => {
                 if let Some(active) = self.active_band {
-                    let msg = Equaliser::Q(state.equaliser.mode, active.into(), EQQ(q));
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let msg = EQMicrophone::Q(state.eq_microphone.mode, active.into(), EQQ(q));
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                    let band = state.equaliser.bands[state.equaliser.mode][active];
+                    let band = state.eq_microphone.bands[state.eq_microphone.mode][active];
                     self.view.set_band(active, band);
                 }
             }
             LoadDefault => {
-                let mode = state.equaliser.mode;
+                let mode = state.eq_microphone.mode;
                 self.load_default_state(state);
 
                 self.view.invalidate_all();
-                self.view.set_bands(state.equaliser.bands[mode]);
+                self.view.set_bands(state.eq_microphone.bands[mode]);
 
                 self.active_band = Some(EqualiserBand::Band1);
                 self.view.set_active(self.active_band);
             }
             AddBand => {
                 // Simple process, find a band that's not enabled, and enable it
-                let mode = state.equaliser.mode;
-                let bands = state.equaliser.bands[mode];
+                let mode = state.eq_microphone.mode;
+                let bands = state.eq_microphone.bands[mode];
 
                 if let Some((band, eq)) = bands.iter().find(|(_, b)| !b.enabled) {
                     if eq.band_type == NotSet {
                         warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
-                        let msg = Equaliser::Type(mode, band.into(), BellBand.into());
-                        let _ = state.handle_message(Message::Equaliser(msg));
+                        let msg = EQMicrophone::Type(mode, band.into(), BellBand.into());
+                        let _ = state.handle_message(Message::EQMicrophone(msg));
                     }
 
-                    let msg = Equaliser::Enabled(mode, band.into(), true);
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let msg = EQMicrophone::Enabled(mode, band.into(), true);
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
-                    self.view.set_band(band, state.equaliser.bands[mode][band]);
+                    let value = state.eq_microphone.bands[mode][band];
+                    self.view.set_band(band, value);
 
                     self.active_band = Some(band);
                     self.view.set_active(self.active_band);
@@ -243,13 +244,13 @@ impl MicEqualiser {
             }
             RemoveBand => {
                 if let Some(active) = self.active_band {
-                    let mode = state.equaliser.mode;
+                    let mode = state.eq_microphone.mode;
 
-                    let msg = Equaliser::Enabled(mode, active.into(), false);
-                    let _ = state.handle_message(Message::Equaliser(msg));
+                    let msg = EQMicrophone::Enabled(mode, active.into(), false);
+                    let _ = state.handle_message(Message::EQMicrophone(msg));
 
                     // Borrow this after we send the handle message, so we can get the new state.
-                    let bands = &state.equaliser.bands[mode];
+                    let bands = &state.eq_microphone.bands[mode];
 
                     // Try and find a new band to set active
                     self.active_band = None;
@@ -263,7 +264,7 @@ impl MicEqualiser {
                         }
                     }
 
-                    let band = state.equaliser.bands[mode][active];
+                    let band = state.eq_microphone.bands[mode][active];
                     self.view.set_band(active, band);
                 }
             }
@@ -274,7 +275,7 @@ impl MicEqualiser {
 
     fn load_default_state(&self, state: &mut AudioState) {
         // This can be used later as a 'Default' button
-        let mode = state.equaliser.mode;
+        let mode = state.eq_microphone.mode;
         if mode == EQMode::Simple {
             warn!("Should not be called in Simple Mode!");
         }
@@ -288,25 +289,33 @@ impl MicEqualiser {
 
         // This is basically the default setup for the 'Simple' Mode
         let messages = vec![
-            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band1, true)),
-            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band2, true)),
-            Message::Equaliser(Equaliser::Enabled(mode, EQBand::Band3, true)),
-            Message::Equaliser(Equaliser::Type(
+            Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band1, true)),
+            Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band2, true)),
+            Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band3, true)),
+            Message::EQMicrophone(EQMicrophone::Type(
                 mode,
                 EQBand::Band1,
                 EQBandType::HighPassFilter,
             )),
-            Message::Equaliser(Equaliser::Type(mode, EQBand::Band2, EQBandType::BellBand)),
-            Message::Equaliser(Equaliser::Type(mode, EQBand::Band3, EQBandType::HighShelf)),
-            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band1, eq_freq_1)),
-            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band2, eq_freq_2)),
-            Message::Equaliser(Equaliser::Frequency(mode, EQBand::Band3, eq_freq_3)),
-            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band1, gain)),
-            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band2, gain)),
-            Message::Equaliser(Equaliser::Gain(mode, EQBand::Band3, gain)),
-            Message::Equaliser(Equaliser::Q(mode, EQBand::Band1, q)),
-            Message::Equaliser(Equaliser::Q(mode, EQBand::Band2, q)),
-            Message::Equaliser(Equaliser::Q(mode, EQBand::Band3, q)),
+            Message::EQMicrophone(EQMicrophone::Type(
+                mode,
+                EQBand::Band2,
+                EQBandType::BellBand,
+            )),
+            Message::EQMicrophone(EQMicrophone::Type(
+                mode,
+                EQBand::Band3,
+                EQBandType::HighShelf,
+            )),
+            Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band1, eq_freq_1)),
+            Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band2, eq_freq_2)),
+            Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band3, eq_freq_3)),
+            Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band1, gain)),
+            Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band2, gain)),
+            Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band3, gain)),
+            Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band1, q)),
+            Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band2, q)),
+            Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band3, q)),
         ];
 
         for message in messages {
@@ -323,12 +332,12 @@ impl MicEqualiser {
             let frequency = EqGeometry::x_to_freq(pointer.x, plot)
                 .clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
 
-            let msg = Equaliser::Frequency(self.eq_mode, active.into(), frequency.into());
-            let _ = state.handle_message(Message::Equaliser(msg));
+            let msg = EQMicrophone::Frequency(self.eq_mode, active.into(), frequency.into());
+            let _ = state.handle_message(Message::EQMicrophone(msg));
         }
 
         let has_gain = {
-            let band = &mut state.equaliser.bands[state.equaliser.mode][active];
+            let band = &mut state.eq_microphone.bands[state.eq_microphone.mode][active];
             band_type_has_gain(band.band_type)
         };
 
@@ -336,11 +345,11 @@ impl MicEqualiser {
             let gain = EqGeometry::y_to_db(pointer.y, plot).clamp(MIN_GAIN, MAX_GAIN);
             let gain = (gain * 10.0).round() / 10.0;
 
-            let msg = Equaliser::Gain(self.eq_mode, active.into(), gain.into());
-            let _ = state.handle_message(Message::Equaliser(msg));
+            let msg = EQMicrophone::Gain(self.eq_mode, active.into(), gain.into());
+            let _ = state.handle_message(Message::EQMicrophone(msg));
         }
 
-        let band = state.equaliser.bands[state.equaliser.mode][active];
+        let band = state.eq_microphone.bands[state.eq_microphone.mode][active];
         self.view.set_band(active, band);
     }
 
@@ -363,7 +372,7 @@ impl MicEqualiser {
     }
 
     pub(crate) fn eq_controls(&self, state: &AudioState) -> Element<'_, MicEqualiserEvent> {
-        let is_advanced = state.equaliser.mode == EQMode::Advanced;
+        let is_advanced = state.eq_microphone.mode == EQMode::Advanced;
 
         // Ok, lets make some buttons :D
         let advanced_button = checkbox(is_advanced).on_toggle(SetAdvanced);
@@ -374,7 +383,8 @@ impl MicEqualiser {
 
         let eq_buttons = if let Some(band) = self.active_band {
             // Ok, these are the EQ buttons
-            let current_band_type = state.equaliser.bands[state.equaliser.mode][band].band_type;
+            let current_band_type =
+                state.eq_microphone.bands[state.eq_microphone.mode][band].band_type;
             let eq_types = [
                 (
                     "eq_low_pass",
@@ -466,7 +476,7 @@ impl MicEqualiser {
         };
 
         let frequency = if let Some(band) = self.active_band {
-            let value = state.equaliser.bands[state.equaliser.mode][band].frequency;
+            let value = state.eq_microphone.bands[state.eq_microphone.mode][band].frequency;
             let range = EQFrequency::range();
             let range: RangeInclusive<u32> = (*range.start() as u32)..=(*range.end() as u32);
             let frequency = styled_drag_value(value, range)
@@ -483,14 +493,14 @@ impl MicEqualiser {
         };
 
         let gain = if let Some(band) = self.active_band {
-            let band_type = state.equaliser.bands[state.equaliser.mode][band].band_type;
+            let band_type = state.eq_microphone.bands[state.eq_microphone.mode][band].band_type;
             let has_gain = band_type_has_gain(band_type);
             let enabled = match has_gain {
                 true => Some(SetGain),
                 false => None,
             };
             let value = match has_gain {
-                true => state.equaliser.bands[state.equaliser.mode][band].gain,
+                true => state.eq_microphone.bands[state.eq_microphone.mode][band].gain,
                 false => 0.0,
             };
             let range = EQGain::range();
@@ -508,7 +518,7 @@ impl MicEqualiser {
         };
 
         let q = if let Some(band) = self.active_band {
-            let value = state.equaliser.bands[state.equaliser.mode][band].q;
+            let value = state.eq_microphone.bands[state.eq_microphone.mode][band].q;
             let range = EQQ::range();
             let q = styled_drag_value(value, range)
                 .width(Length::Fixed(75.0))
@@ -581,8 +591,8 @@ impl MicEqualiser {
 
     // Gives us an oppertunity to prepare for a new device
     pub(crate) fn load_device(&mut self, state: &AudioState) {
-        let mode = state.equaliser.mode;
-        let bands = state.equaliser.bands[state.equaliser.mode];
+        let mode = state.eq_microphone.mode;
+        let bands = state.eq_microphone.bands[state.eq_microphone.mode];
 
         if self.active_band.is_none() {
             for band in EqualiserBand::iter() {
