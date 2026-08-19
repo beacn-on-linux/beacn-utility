@@ -459,7 +459,7 @@ impl AudioState {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
                 MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
                 MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as u8,
-                _ => unreachable!(),
+                _ => {},
             },
             Message::Compressor(c) => match c {
                 MicCompressor::Mode(mode) => self.compressor.mode = mode,
@@ -598,7 +598,7 @@ impl AudioState {
             Message::Subwoofer(s) => match s {
                 MicSubwoofer::Enabled(e) => self.subwoofer.enabled = e,
                 MicSubwoofer::Amount(a) => self.subwoofer.amount = a.to_inner() as u8,
-                _ => unreachable!(),
+                _ => {},
             },
             Message::Suppressor(s) => match s {
                 MicSuppressor::Enabled(e) => self.suppressor.enabled = e,
@@ -608,6 +608,9 @@ impl AudioState {
                     // Convert this to a percent
                     let percent = ((s.to_inner() + 120.0) / 60.0) * 100.0;
                     self.suppressor.sense = percent as u8
+                }
+                MicSuppressor::AdaptTime(_t) => {
+                    // This might be useful once snapshot is finalised.
                 }
                 _ => unreachable!(),
             },
