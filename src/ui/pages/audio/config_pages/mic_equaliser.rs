@@ -1,4 +1,4 @@
-use crate::devices::states::audio::{AudioState, EqualiserBand};
+use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::mic_equaliser::MicEqualiserEvent::{
     AddBand, LoadDefault, RemoveBand, SetAdvanced, SetFrequency, SetGain, SetQ, SetType,
 };
@@ -43,8 +43,8 @@ pub struct MicEqualiser {
 
     view: EQDrawView,
 
-    active_band: Option<EqualiserBand>,
-    active_band_drag: Option<EqualiserBand>,
+    active_band: Option<EQBand>,
+    active_band_drag: Option<EQBand>,
 
     // Used to help drag detection
     pressed_at: Option<Instant>,
@@ -160,7 +160,7 @@ impl MicEqualiser {
                     // Current band isn't active in the new mode, clear it, then try and find a new one
                     self.active_band = None;
 
-                    for band in EqualiserBand::iter() {
+                    for band in EQBand::iter() {
                         if state.eq_microphone.bands[new_mode][band].enabled {
                             self.active_band = Some(band);
                             break;
@@ -215,7 +215,7 @@ impl MicEqualiser {
                 self.view.invalidate_all();
                 self.view.set_bands(state.eq_microphone.bands[mode]);
 
-                self.active_band = Some(EqualiserBand::Band1);
+                self.active_band = Some(EQBand::Band1);
                 self.view.set_active(self.active_band);
             }
             AddBand => {
@@ -255,7 +255,7 @@ impl MicEqualiser {
                     self.active_band = None;
 
                     // Try and find an active band
-                    for band in EqualiserBand::iter().rev() {
+                    for band in EQBand::iter().rev() {
                         if bands[band].enabled {
                             self.active_band = Some(band);
                             self.view.set_active(self.active_band);
@@ -594,7 +594,7 @@ impl MicEqualiser {
         let bands = state.eq_microphone.bands[state.eq_microphone.mode];
 
         if self.active_band.is_none() {
-            for band in EqualiserBand::iter() {
+            for band in EQBand::iter() {
                 if bands[band].enabled {
                     self.active_band = Some(band);
                     self.view.set_active(self.active_band);

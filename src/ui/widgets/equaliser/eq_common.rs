@@ -1,11 +1,12 @@
-use crate::devices::states::audio::EqualiserBandType::*;
-use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig, EqualiserBandType};
+use crate::devices::states::audio::EqualiserBandConfig;
+use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType};
+use beacn_lib::audio::messages::eq_common::EQBandType::*;
 use enum_map::EnumMap;
 use iced::mouse::ScrollDelta;
 use iced::{Point, Rectangle, Size};
 
 /// A full set of equaliser bands, keyed by `EqualiserBand`.
-pub type Bands = EnumMap<EqualiserBand, EqualiserBandConfig>;
+pub type Bands = EnumMap<EQBand, EqualiserBandConfig>;
 
 // The frequency range to be rendered.
 pub const MIN_FREQUENCY: u32 = 20;
@@ -23,7 +24,7 @@ pub const EQ_GRAB_THRESHOLD: f32 = 20.0;
 
 /// Whether this band type has a meaningful gain value (as opposed to
 /// filters like High/Low Pass or Notch, which are always drawn at 0dB).
-pub fn band_type_has_gain(band_type: EqualiserBandType) -> bool {
+pub fn band_type_has_gain(band_type: EQBandType) -> bool {
     !matches!(band_type, HighPassFilter | LowPassFilter | NotchFilter)
 }
 
@@ -109,7 +110,7 @@ impl EqGeometry {
     ///
     /// This is deliberately kept in the geometry/interaction layer rather
     /// than inside the drawing widget.
-    pub fn hit_test(plot_rect: Rectangle, pointer: Point, bands: &Bands) -> Option<EqualiserBand> {
+    pub fn hit_test(plot_rect: Rectangle, pointer: Point, bands: &Bands) -> Option<EQBand> {
         let mut closest_dist = f32::MAX;
         let mut closest_band = None;
 

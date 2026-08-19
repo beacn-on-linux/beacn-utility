@@ -12,7 +12,7 @@ use beacn_lib::audio::messages::lighting::{
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
-use enum_map::{Enum, EnumMap};
+use enum_map::{EnumMap};
 
 use crate::devices::manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
@@ -34,7 +34,6 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use strum_macros::EnumIter;
 
 type Rgb = [u8; 3];
 
@@ -107,13 +106,13 @@ pub struct Lighting {
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct EQMicrophone {
     pub mode: EQMode,
-    pub bands: EnumMap<EQMode, EnumMap<EqualiserBand, EqualiserBandConfig>>,
+    pub bands: EnumMap<EQMode, EnumMap<EQBand, EqualiserBandConfig>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct EQHeadphones {
     pub linked: bool,
-    pub bands: EnumMap<EQChannel, EnumMap<EqualiserBand, EqualiserBandConfig>>,
+    pub bands: EnumMap<EQChannel, EnumMap<EQBand, EqualiserBandConfig>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -619,52 +618,6 @@ impl AudioState {
                 DControls::Balance(_) => {}
                 _ => unreachable!(),
             },
-        }
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone, Enum, EnumIter, PartialEq)]
-pub(crate) enum EqualiserBand {
-    #[default]
-    Band1,
-    Band2,
-    Band3,
-    Band4,
-    Band5,
-    Band6,
-    Band7,
-    Band8,
-    Band9,
-}
-
-impl From<EQBand> for EqualiserBand {
-    fn from(band: EQBand) -> Self {
-        match band {
-            EQBand::Band1 => EqualiserBand::Band1,
-            EQBand::Band2 => EqualiserBand::Band2,
-            EQBand::Band3 => EqualiserBand::Band3,
-            EQBand::Band4 => EqualiserBand::Band4,
-            EQBand::Band5 => EqualiserBand::Band5,
-            EQBand::Band6 => EqualiserBand::Band6,
-            EQBand::Band7 => EqualiserBand::Band7,
-            EQBand::Band8 => EqualiserBand::Band8,
-            EQBand::Band9 => EqualiserBand::Band9,
-        }
-    }
-}
-
-impl From<EqualiserBand> for EQBand {
-    fn from(value: EqualiserBand) -> Self {
-        match value {
-            EqualiserBand::Band1 => EQBand::Band1,
-            EqualiserBand::Band2 => EQBand::Band2,
-            EqualiserBand::Band3 => EQBand::Band3,
-            EqualiserBand::Band4 => EQBand::Band4,
-            EqualiserBand::Band5 => EQBand::Band5,
-            EqualiserBand::Band6 => EQBand::Band6,
-            EqualiserBand::Band7 => EQBand::Band7,
-            EqualiserBand::Band8 => EQBand::Band8,
-            EqualiserBand::Band9 => EQBand::Band9,
         }
     }
 }

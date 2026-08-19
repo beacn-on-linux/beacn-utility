@@ -1,5 +1,6 @@
-use crate::devices::states::audio::EqualiserBandType::*;
-use crate::devices::states::audio::{EqualiserBand, EqualiserBandConfig};
+use crate::devices::states::audio::EqualiserBandConfig;
+use beacn_lib::audio::messages::eq_common::EQBand;
+use beacn_lib::audio::messages::eq_common::EQBandType::*;
 
 use crate::ui::widgets::equaliser::eq_common::{
     Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
@@ -67,7 +68,7 @@ pub enum EQMouseEvent {
 // The main widget
 pub struct EQDrawView {
     bands: Bands,
-    active: Option<EqualiserBand>,
+    active: Option<EQBand>,
     border_colour: Option<Color>,
 
     // Flag to indicate whether we should send move events
@@ -77,7 +78,7 @@ pub struct EQDrawView {
     bounds: Cell<Rectangle>,
 
     // Caches of the individual band curves / fill geometry
-    band_caches: EnumMap<EqualiserBand, Cache>,
+    band_caches: EnumMap<EQBand, Cache>,
 
     // Cache of the grid, the main curve, and the spectrum
     grid_cache: Cache,
@@ -85,7 +86,7 @@ pub struct EQDrawView {
     spectrum_cache: Cache,
 
     // Frequency response cache, so we can avoid regenerating when one changes
-    band_freq_response: RefCell<EnumMap<EqualiserBand, Option<Vec<f32>>>>,
+    band_freq_response: RefCell<EnumMap<EQBand, Option<Vec<f32>>>>,
 
     // Spectrum Data points
     spectrum_bins: Vec<f32>,
@@ -141,13 +142,13 @@ impl EQDrawView {
 
     /// Replace a single band's data
     #[allow(unused)]
-    pub fn set_band(&mut self, band: EqualiserBand, config: EqualiserBandConfig) {
+    pub fn set_band(&mut self, band: EQBand, config: EqualiserBandConfig) {
         self.bands[band] = config;
         self.invalidate_band(band);
     }
 
     /// Draws the ring around a band dot
-    pub fn set_active(&mut self, active: Option<EqualiserBand>) {
+    pub fn set_active(&mut self, active: Option<EQBand>) {
         debug!("Setting Active to {:?}", active);
         self.active = active;
     }
@@ -191,7 +192,7 @@ impl EQDrawView {
     }
 
     /// Drop cached geometry for a single band
-    pub fn invalidate_band(&mut self, band: EqualiserBand) {
+    pub fn invalidate_band(&mut self, band: EQBand) {
         self.band_freq_response.borrow_mut()[band] = None;
         self.band_caches[band].clear();
         self.curve_cache.clear();
@@ -268,7 +269,7 @@ impl EQDrawView {
     fn draw_eq_curve(&self, frame: &mut Frame, plot_rect: Rectangle) {
         let curve_colour = Color::WHITE;
 
-        let sources: Vec<Vec<f32>> = EqualiserBand::iter()
+        let sources: Vec<Vec<f32>> = EQBand::iter()
             .filter(|&band| self.bands[band].enabled)
             .map(|band| self.get_eq_frequency_response(plot_rect, band, EQ_CURVE_RESOLUTION))
             .collect();
@@ -315,7 +316,7 @@ impl EQDrawView {
     fn draw_eq_individual(
         &self,
         frame: &mut Frame,
-        band: EqualiserBand,
+        band: EQBand,
         plot_rect: Rectangle,
         colour: Color,
     ) {
@@ -466,7 +467,7 @@ impl EQDrawView {
     fn get_eq_frequency_response(
         &self,
         plot_rect: Rectangle,
-        band: EqualiserBand,
+        band: EQBand,
         steps: usize,
     ) -> Vec<f32> {
         if let Some(frequencies) = &self.band_freq_response.borrow()[band] {
@@ -486,12 +487,12 @@ impl EQDrawView {
     }
 
     /// Calculate the gain for a band at a specific frequency
-    fn eq_gain(freq: f32, band: EqualiserBand, bands: &Bands) -> f32 {
+    fn eq_gain(freq: f32, band: EQBand, bands: &Bands) -> f32 {
         let coefficient = Self::get_coefficient(&bands[band]);
         EQUtil::freq_response_scalar(freq, &coefficient)
     }
 
-    fn eq_gain_simd(frequencies: &[f32], band: EqualiserBand, bands: &Bands) -> Vec<f32> {
+    fn eq_gain_simd(frequencies: &[f32], band: EQBand, bands: &Bands) -> Vec<f32> {
         let mut gains = vec![0.0; frequencies.len()];
         let chunks = frequencies.chunks_exact(8);
         let remainder = chunks.remainder();
@@ -593,7 +594,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
             *self.band_freq_response.borrow_mut() = Default::default();
         }
 
-        let mut geometries = Vec::with_capacity(EqualiserBand::iter().count() + 3);
+        let mut geometries = Vec::with_capacity(EQBand::iter().count() + 3);
 
         geometries.push(self.grid_cache.draw(renderer, bounds.size(), |frame| {
             self.draw_grid(frame, local_rect, plot_rect);
@@ -604,7 +605,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         plot_rect.x += EQ_PLOT_BORDER_WIDTH;
         plot_rect.width -= EQ_PLOT_BORDER_WIDTH * 2.0;
 
-        for (index, band) in EqualiserBand::iter().enumerate() {
+        for (index, band) in EQBand::iter().enumerate() {
             if self.bands[band].enabled {
                 let colour = eq_transparent_colour(index);
                 geometries.push(
