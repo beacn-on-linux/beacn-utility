@@ -71,13 +71,6 @@ json-patch = "4.2.0"
 directories = "6.0.0"
 rayon = "1.12.0"
 
-
-
-# Used for Spectrum Analysis
-dlopen2 = "0.9.0"
-rustfft = "6.4.1"
-num-complex = "0.4.6"
-
 [target.'cfg(unix)'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["tokio", "raw_handle", "background"] }
@@ -87,6 +80,11 @@ ksni = { version = "0.3.6", features = ["blocking"] }
 
 # Sleep Management
 zbus = { version = "5.18.0", features = ["tokio"] }
+
+# Used for Spectrum Analysis
+dlopen2 = "0.9.0"
+rustfft = "6.4.1"
+num-complex = "0.4.6"
 
 # Packaging
 [package.metadata.deb]
