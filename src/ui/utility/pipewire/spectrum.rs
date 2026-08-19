@@ -1,11 +1,9 @@
-use crate::ui::utility::pipewire::audio::{ChannelStream, get_audio};
+use crate::ui::utility::pipewire::audio::get_audio;
+use crate::ui::utility::pipewire::{ChannelStream, SpectrumData, SpectrumHandle};
 use log::debug;
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::thread;
 
 const EQ_CURVE_RESOLUTION: usize = 128;
@@ -15,25 +13,6 @@ pub(crate) const MIN_FREQUENCY: f32 = 20.0;
 pub(crate) const MAX_FREQUENCY: f32 = 20000.0;
 
 pub(crate) const MIN_DB: f32 = -120.0;
-
-type SpectrumData = Vec<Arc<Mutex<Vec<f32>>>>;
-
-pub struct SpectrumHandle {
-    task: thread::JoinHandle<()>,
-    stop_signal: Arc<AtomicBool>,
-    pub data: SpectrumData,
-}
-
-impl SpectrumHandle {
-    pub(crate) fn stop(self) {
-        self.stop_signal.store(true, Ordering::Relaxed);
-        let _ = self.task.join();
-    }
-
-    pub fn has_stopped(&self) -> bool {
-        self.task.is_finished()
-    }
-}
 
 // Take a vec of pipewire ports, spawn up the analyser in its own thread.
 pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
