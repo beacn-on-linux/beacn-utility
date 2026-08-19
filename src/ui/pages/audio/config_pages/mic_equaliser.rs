@@ -1,5 +1,4 @@
-use crate::devices::states::audio::EqualiserBandType::{BellBand, NotSet};
-use crate::devices::states::audio::{AudioState, EqualiserBand, EqualiserBandType};
+use crate::devices::states::audio::{AudioState, EqualiserBand};
 use crate::ui::pages::audio::config_pages::mic_equaliser::MicEqualiserEvent::{
     AddBand, LoadDefault, RemoveBand, SetAdvanced, SetFrequency, SetGain, SetQ, SetType,
 };
@@ -30,7 +29,7 @@ pub enum MicEqualiserEvent {
     Equaliser(EQMouseEvent),
     SetAdvanced(bool),
     SetFrequency(u32),
-    SetType(EqualiserBandType),
+    SetType(EQBandType),
     SetGain(f32),
     SetQ(f32),
 
@@ -225,10 +224,10 @@ impl MicEqualiser {
                 let bands = state.eq_microphone.bands[mode];
 
                 if let Some((band, eq)) = bands.iter().find(|(_, b)| !b.enabled) {
-                    if eq.band_type == NotSet {
+                    if eq.band_type == EQBandType::NotSet {
                         warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
-                        let msg = EQMicrophone::Type(mode, band.into(), BellBand.into());
+                        let msg = EQMicrophone::Type(mode, band.into(), EQBandType::BellBand);
                         let _ = state.handle_message(Message::EQMicrophone(msg));
                     }
 
@@ -388,33 +387,33 @@ impl MicEqualiser {
             let eq_types = [
                 (
                     "eq_low_pass",
-                    current_band_type == EqualiserBandType::LowPassFilter,
-                    SetType(EqualiserBandType::LowPassFilter),
+                    current_band_type == EQBandType::LowPassFilter,
+                    SetType(EQBandType::LowPassFilter),
                 ),
                 (
                     "eq_high_pass",
-                    current_band_type == EqualiserBandType::HighPassFilter,
-                    SetType(EqualiserBandType::HighPassFilter),
+                    current_band_type == EQBandType::HighPassFilter,
+                    SetType(EQBandType::HighPassFilter),
                 ),
                 (
                     "eq_notch",
-                    current_band_type == EqualiserBandType::NotchFilter,
-                    SetType(EqualiserBandType::NotchFilter),
+                    current_band_type == EQBandType::NotchFilter,
+                    SetType(EQBandType::NotchFilter),
                 ),
                 (
                     "eq_bell",
-                    current_band_type == EqualiserBandType::BellBand,
-                    SetType(EqualiserBandType::BellBand),
+                    current_band_type == EQBandType::BellBand,
+                    SetType(EQBandType::BellBand),
                 ),
                 (
                     "eq_low_shelf",
-                    current_band_type == EqualiserBandType::LowShelf,
-                    SetType(EqualiserBandType::LowShelf),
+                    current_band_type == EQBandType::LowShelf,
+                    SetType(EQBandType::LowShelf),
                 ),
                 (
                     "eq_high_shelf",
-                    current_band_type == EqualiserBandType::HighShelf,
-                    SetType(EqualiserBandType::HighShelf),
+                    current_band_type == EQBandType::HighShelf,
+                    SetType(EQBandType::HighShelf),
                 ),
             ];
 

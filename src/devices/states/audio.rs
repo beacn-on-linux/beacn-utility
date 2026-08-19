@@ -20,6 +20,7 @@ use crate::devices::manager::{
 use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
+use beacn_lib::audio::messages::controls::Controls as DControls;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
 use beacn_lib::audio::messages::eq_headphones::{EQChannel, EQHeadphones as DEQHeadphones}; // The D means device :p
 use beacn_lib::audio::messages::eq_headphones_legacy::EQHPLegacy as MicHeadphoneEQ;
@@ -31,7 +32,6 @@ use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
 use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
-use beacn_lib::audio::messages::controls::Controls as DControls;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
 use strum_macros::EnumIter;
@@ -119,7 +119,7 @@ pub(crate) struct EQHeadphones {
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct EqualiserBandConfig {
     pub enabled: bool,
-    pub band_type: EqualiserBandType,
+    pub band_type: EQBandType,
     pub frequency: u32, // [0..=20000]Hz
     pub gain: f32,      // [-12.0..=12.0]dB
     pub q: f32,         // [0.1..=10.0]
@@ -459,7 +459,7 @@ impl AudioState {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
                 MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
                 MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as u8,
-                _ => {},
+                _ => {}
             },
             Message::Compressor(c) => match c {
                 MicCompressor::Mode(mode) => self.compressor.mode = mode,
@@ -598,7 +598,7 @@ impl AudioState {
             Message::Subwoofer(s) => match s {
                 MicSubwoofer::Enabled(e) => self.subwoofer.enabled = e,
                 MicSubwoofer::Amount(a) => self.subwoofer.amount = a.to_inner() as u8,
-                _ => {},
+                _ => {}
             },
             Message::Suppressor(s) => match s {
                 MicSuppressor::Enabled(e) => self.suppressor.enabled = e,
@@ -665,46 +665,6 @@ impl From<EqualiserBand> for EQBand {
             EqualiserBand::Band7 => EQBand::Band7,
             EqualiserBand::Band8 => EQBand::Band8,
             EqualiserBand::Band9 => EQBand::Band9,
-        }
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone, Enum, EnumIter, PartialEq)]
-pub(crate) enum EqualiserBandType {
-    #[default]
-    NotSet,
-    LowPassFilter,
-    HighPassFilter,
-    NotchFilter,
-    BellBand,
-    LowShelf,
-    HighShelf,
-}
-
-impl From<EQBandType> for EqualiserBandType {
-    fn from(value: EQBandType) -> Self {
-        match value {
-            EQBandType::NotSet => EqualiserBandType::NotSet,
-            EQBandType::LowPassFilter => EqualiserBandType::LowPassFilter,
-            EQBandType::HighPassFilter => EqualiserBandType::HighPassFilter,
-            EQBandType::NotchFilter => EqualiserBandType::NotchFilter,
-            EQBandType::BellBand => EqualiserBandType::BellBand,
-            EQBandType::LowShelf => EqualiserBandType::LowShelf,
-            EQBandType::HighShelf => EqualiserBandType::HighShelf,
-        }
-    }
-}
-
-impl From<EqualiserBandType> for EQBandType {
-    fn from(value: EqualiserBandType) -> Self {
-        match value {
-            EqualiserBandType::NotSet => EQBandType::NotSet,
-            EqualiserBandType::LowPassFilter => EQBandType::LowPassFilter,
-            EqualiserBandType::HighPassFilter => EQBandType::HighPassFilter,
-            EqualiserBandType::NotchFilter => EQBandType::NotchFilter,
-            EqualiserBandType::BellBand => EQBandType::BellBand,
-            EqualiserBandType::LowShelf => EQBandType::LowShelf,
-            EqualiserBandType::HighShelf => EQBandType::HighShelf,
         }
     }
 }
