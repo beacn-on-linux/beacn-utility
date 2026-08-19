@@ -3,9 +3,9 @@ use beacn_lib::audio::LinkedApp;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
-use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
+use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType};
+use beacn_lib::audio::messages::eq_headphones_legacy::HPEQType;
 use beacn_lib::audio::messages::expander::ExpanderMode;
-use beacn_lib::audio::messages::headphone_eq::HPEQType;
 use beacn_lib::audio::messages::headphones::HeadphoneTypes;
 use beacn_lib::audio::messages::lighting::{
     LightingMeterSource, LightingMode, LightingMuteMode, LightingSuspendMode, StudioLightingMode,
@@ -21,15 +21,17 @@ use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
-use beacn_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
+use beacn_lib::audio::messages::eq_headphones::{EQChannel, EQHeadphones as DEQHeadphones}; // The D means device :p
+use beacn_lib::audio::messages::eq_headphones_legacy::EQHPLegacy as MicHeadphoneEQ;
+use beacn_lib::audio::messages::eq_microphone::{EQMicrophone as MicEqualiser, EQMode};
 use beacn_lib::audio::messages::exciter::Exciter as MicExciter;
 use beacn_lib::audio::messages::expander::Expander as MicExpander;
-use beacn_lib::audio::messages::headphone_eq::HeadphoneEQ as MicHeadphoneEQ;
 use beacn_lib::audio::messages::headphones::Headphones as MicHeadphones;
 use beacn_lib::audio::messages::lighting::Lighting as MicLighting;
 use beacn_lib::audio::messages::mic_setup::MicSetup as MicMicSetup;
 use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
+use beacn_lib::audio::messages::controls::Controls as DControls;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
 use strum_macros::EnumIter;
@@ -46,8 +48,11 @@ pub(crate) struct AudioState {
 
     pub headphones: Headphones,
     pub lighting: Lighting,
-    pub equaliser: Equaliser,
-    pub headphone_eq: HeadphoneEq,
+
+    pub eq_microphone: EQMicrophone,
+    pub eq_headphones: EQHeadphones,
+    pub eq_hp_legacy: EQHPLegacy,
+
     pub bass_enhancement: BassEnhancement,
     pub compressor: Compressor,
     pub de_esser: DeEsser,
@@ -100,9 +105,15 @@ pub struct Lighting {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub(crate) struct Equaliser {
+pub(crate) struct EQMicrophone {
     pub mode: EQMode,
     pub bands: EnumMap<EQMode, EnumMap<EqualiserBand, EqualiserBandConfig>>,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub(crate) struct EQHeadphones {
+    pub linked: bool,
+    pub bands: EnumMap<EQChannel, EnumMap<EqualiserBand, EqualiserBandConfig>>,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -115,7 +126,7 @@ pub(crate) struct EqualiserBandConfig {
 }
 
 #[derive(Debug, Default, Copy, Clone)]
-pub struct HeadphoneEq {
+pub struct EQHPLegacy {
     pub eq: EnumMap<HPEQType, HeadphoneEQValue>,
 }
 
@@ -148,6 +159,11 @@ pub struct CompressorValue {
     pub threshold: i8, // [-90..=0]db
     pub ratio: f32,    // [0.0..=10.0]:1
     pub makeup: f32,   // [0.0..=12.0]dB
+}
+
+pub struct Controls {
+    pub balance: i8,
+    pub mono: bool,
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -298,6 +314,7 @@ impl AudioState {
     #[allow(unused)]
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
+        let version = definition.device_info.version;
 
         let mut state = AudioState {
             device_definition: definition,
@@ -340,7 +357,7 @@ impl AudioState {
         }
 
         // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type);
+        let messages = Message::generate_fetch_message(device_type, version);
         for message in messages {
             // Skip this message if it's not valid for this version
             if message.get_message_minimum_version() > state.device_definition.device_info.version {
@@ -370,6 +387,7 @@ impl AudioState {
         sender: Sender<AudioMessage>,
     ) -> Self {
         let device_type = definition.device_type;
+        let version = definition.device_info.version;
 
         let mut state = AudioState {
             device_definition: definition,
@@ -407,7 +425,7 @@ impl AudioState {
         }
 
         // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type);
+        let messages = Message::generate_fetch_message(device_type, version);
         for message in messages {
             // Skip this message if it's not valid for this version
             if message.get_message_minimum_version() > state.device_definition.device_info.version {
@@ -441,7 +459,7 @@ impl AudioState {
                 MicBaseEnhancement::Enabled(v) => self.bass_enhancement.enabled = v,
                 MicBaseEnhancement::Preset(v) => self.bass_enhancement.preset = v,
                 MicBaseEnhancement::Amount(v) => self.bass_enhancement.amount = v.to_inner() as u8,
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Compressor(c) => match c {
                 MicCompressor::Mode(mode) => self.compressor.mode = mode,
@@ -461,37 +479,66 @@ impl AudioState {
                     self.compressor.values[mode].makeup = value.to_inner()
                 }
                 MicCompressor::Enabled(mode, value) => self.compressor.values[mode].enabled = value,
-                _ => {}
+                _ => unreachable!(),
             },
             Message::DeEsser(d) => match d {
                 MicDeEsser::Amount(value) => self.de_esser.amount = value.to_inner() as u8,
                 MicDeEsser::Enabled(value) => self.de_esser.enabled = value,
-                _ => {}
+                _ => unreachable!(),
             },
-            Message::Equaliser(e) => match e {
-                MicEqualiser::Mode(mode) => self.equaliser.mode = mode,
+            Message::EQMicrophone(e) => match e {
+                MicEqualiser::Mode(mode) => self.eq_microphone.mode = mode,
                 MicEqualiser::Type(mode, band, value) => {
-                    self.equaliser.bands[mode][band.into()].band_type = value.into()
+                    self.eq_microphone.bands[mode][band.into()].band_type = value.into()
                 }
                 MicEqualiser::Gain(mode, band, value) => {
-                    self.equaliser.bands[mode][band.into()].gain = value.to_inner()
+                    self.eq_microphone.bands[mode][band.into()].gain = value.to_inner()
                 }
                 MicEqualiser::Frequency(mode, band, value) => {
-                    self.equaliser.bands[mode][band.into()].frequency = value.to_inner() as u32
+                    self.eq_microphone.bands[mode][band.into()].frequency = value.to_inner() as u32
                 }
                 MicEqualiser::Q(mode, band, value) => {
-                    self.equaliser.bands[mode][band.into()].q = value.to_inner()
+                    self.eq_microphone.bands[mode][band.into()].q = value.to_inner()
                 }
                 MicEqualiser::Enabled(mode, band, value) => {
-                    self.equaliser.bands[mode][band.into()].enabled = value
+                    self.eq_microphone.bands[mode][band.into()].enabled = value
                 }
-                _ => {}
+                _ => unreachable!(),
+            },
+            Message::EQHeadphones(h) => match h {
+                DEQHeadphones::Linked(linked) => self.eq_headphones.linked = linked,
+                DEQHeadphones::Type(channel, band, value) => {
+                    self.eq_headphones.bands[channel][band.into()].band_type = value.into()
+                }
+                DEQHeadphones::Gain(channel, band, value) => {
+                    self.eq_headphones.bands[channel][band.into()].gain = value.to_inner()
+                }
+                DEQHeadphones::Frequency(channel, band, value) => {
+                    let value = value.to_inner() as u32;
+                    self.eq_headphones.bands[channel][band.into()].frequency = value
+                }
+                DEQHeadphones::Q(channel, band, value) => {
+                    self.eq_headphones.bands[channel][band.into()].q = value.to_inner()
+                }
+                DEQHeadphones::Enabled(channel, band, value) => {
+                    self.eq_headphones.bands[channel][band.into()].enabled = value
+                }
+                _ => unreachable!(),
+            },
+            Message::EQHPLegacy(h) => match h {
+                MicHeadphoneEQ::Amount(eq_type, value) => {
+                    self.eq_hp_legacy.eq[eq_type].amount = value.to_inner()
+                }
+                MicHeadphoneEQ::Enabled(eq_type, value) => {
+                    self.eq_hp_legacy.eq[eq_type].enabled = value
+                }
+                _ => unreachable!(),
             },
             Message::Exciter(e) => match e {
                 MicExciter::Amount(value) => self.exciter.amount = value.to_inner() as u8,
                 MicExciter::Frequency(value) => self.exciter.freq = value.to_inner() as u16,
                 MicExciter::Enabled(value) => self.exciter.enabled = value,
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Expander(e) => match e {
                 MicExpander::Mode(mode) => self.expander.mode = mode,
@@ -508,16 +555,7 @@ impl AudioState {
                 MicExpander::Release(mode, value) => {
                     self.expander.values[mode].release = value.to_inner() as u16
                 }
-                _ => {}
-            },
-            Message::HeadphoneEQ(h) => match h {
-                MicHeadphoneEQ::Amount(eq_type, value) => {
-                    self.headphone_eq.eq[eq_type].amount = value.to_inner()
-                }
-                MicHeadphoneEQ::Enabled(eq_type, value) => {
-                    self.headphone_eq.eq[eq_type].enabled = value
-                }
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Headphones(h) => match h {
                 MicHeadphones::HeadphoneLevel(v) => self.headphones.level = v.to_inner(),
@@ -532,7 +570,7 @@ impl AudioState {
                 MicHeadphones::MicClassCompliant(t) => {
                     self.headphones.mic_class_compliant = Some(t)
                 }
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Lighting(l) => match l {
                 MicLighting::Mode(m) => self.lighting.mic_mode = m,
@@ -549,18 +587,18 @@ impl AudioState {
                 MicLighting::SuspendBrightness(b) => {
                     self.lighting.suspend_brightness = b.to_inner()
                 }
-                _ => {}
+                _ => unreachable!(),
             },
             Message::MicSetup(m) => match m {
                 MicMicSetup::MicGain(g) => self.mic_setup.gain = g.to_inner() as u8,
                 MicMicSetup::StudioMicGain(g) => self.mic_setup.gain = g.to_inner() as u8,
                 MicMicSetup::StudioPhantomPower(p) => self.mic_setup.phantom = p,
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Subwoofer(s) => match s {
                 MicSubwoofer::Enabled(e) => self.subwoofer.enabled = e,
                 MicSubwoofer::Amount(a) => self.subwoofer.amount = a.to_inner() as u8,
-                _ => {}
+                _ => unreachable!(),
             },
             Message::Suppressor(s) => match s {
                 MicSuppressor::Enabled(e) => self.suppressor.enabled = e,
@@ -571,7 +609,12 @@ impl AudioState {
                     let percent = ((s.to_inner() + 120.0) / 60.0) * 100.0;
                     self.suppressor.sense = percent as u8
                 }
-                _ => {}
+                _ => unreachable!(),
+            },
+            Message::Controls(c) => match c {
+                DControls::Mono(_) => {}
+                DControls::Balance(_) => {}
+                _ => unreachable!(),
             },
         }
     }
@@ -588,6 +631,7 @@ pub(crate) enum EqualiserBand {
     Band6,
     Band7,
     Band8,
+    Band9,
 }
 
 impl From<EQBand> for EqualiserBand {
@@ -601,6 +645,7 @@ impl From<EQBand> for EqualiserBand {
             EQBand::Band6 => EqualiserBand::Band6,
             EQBand::Band7 => EqualiserBand::Band7,
             EQBand::Band8 => EqualiserBand::Band8,
+            EQBand::Band9 => EqualiserBand::Band9,
         }
     }
 }
@@ -616,6 +661,7 @@ impl From<EqualiserBand> for EQBand {
             EqualiserBand::Band6 => EQBand::Band6,
             EqualiserBand::Band7 => EQBand::Band7,
             EqualiserBand::Band8 => EQBand::Band8,
+            EqualiserBand::Band9 => EQBand::Band9,
         }
     }
 }
