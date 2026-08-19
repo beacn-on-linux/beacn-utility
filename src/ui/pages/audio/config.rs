@@ -8,8 +8,6 @@ use crate::ui::pages::audio::config_pages::mic_setup::MicrophoneSetup;
 use crate::ui::pages::audio::config_pages::suppressor::SuppressorPage;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::pages::page::{AudioPage, PageMessage};
-use crate::ui::utility::pipewire::device::{PipeWireNodeType, find_pipewire_nodes_for_usb};
-use crate::ui::utility::pipewire::spectrum::{SpectrumHandle, start_spectrum_analyser};
 use crate::ui::widgets::helpers::composite::draw_range;
 use crate::ui::widgets::helpers::tabs::render_tab;
 use beacn_lib::audio::messages::Message;
@@ -20,6 +18,7 @@ use iced::widget::{button, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Task};
 use log::debug;
 use std::sync::{Arc, Mutex};
+use crate::ui::utility::pipewire::{find_pipewire_nodes_for_usb, SpectrumHandle, PipeWireNodeType, start_spectrum_analyser};
 
 #[derive(Debug, Clone)]
 pub(crate) enum ConfigMessage {

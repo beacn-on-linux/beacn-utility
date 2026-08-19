@@ -3,7 +3,7 @@ use crate::ui::utility::pipewire::ffi::{
     PW_VERSION_DEVICE_EVENTS, PW_VERSION_NODE_EVENTS, PipeWire, PortInfo, PwDeviceProxy,
     PwNodeProxy, PwPortProxy,
 };
-use crate::ui::utility::pipewire::{TO_BOOL, TO_U32};
+use crate::ui::utility::pipewire::{PipeWireNode, PipeWireNodeType, TO_BOOL, TO_U32};
 use anyhow::Result;
 use log::{debug, error};
 use std::cell::{Cell, RefCell};
@@ -11,22 +11,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-
-#[derive(Debug, Clone)]
-#[allow(unused)]
-pub struct PipeWireNode {
-    pub name: String,
-    pub id: u32,
-    pub is_split_child: bool,
-    pub node_type: PipeWireNodeType,
-    pub channels: HashMap<String, u32>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PipeWireNodeType {
-    Source,
-    Sink,
-}
 
 pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireNode>> {
     let card = match find_alsa_card(bus, address)? {

@@ -7,7 +7,7 @@
 // I might, in future, wrap this into a struct, so a clean drop will take care of shutdown, rather
 // than having to infer it from the outside.
 
-use crate::ui::utility::pipewire::TO_U32;
+use crate::ui::utility::pipewire::{ChannelStream, TO_U32};
 use crate::ui::utility::pipewire::ffi::{
     CaptureBuffer, PW_DIRECTION_INPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK, PW_TYPE_INTERFACE_NODE,
     PW_TYPE_INTERFACE_PORT, PipeWire, PortInfo, PwCore, PwNodeProxy, PwPortProxy, PwProperties,
@@ -23,18 +23,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 type ChannelMap = HashMap<String, u32>;
-pub type Process = Box<dyn FnMut(&[f32]) + Send + Sync>;
 
 // This is a bit of a hack, but it's the only way I can think of to get a unique ID for each
 // instance of this function.
 fn next_instance_id() -> u64 {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-pub struct ChannelStream {
-    pub channel_id: u32,
-    pub process: Process,
 }
 
 pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> {
