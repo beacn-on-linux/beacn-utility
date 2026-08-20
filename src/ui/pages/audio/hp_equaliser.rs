@@ -7,8 +7,7 @@ use crate::ui::utility::pipewire::{
     PipeWireNodeType, SpectrumHandle, find_pipewire_nodes_for_usb, start_spectrum_analyser,
 };
 use crate::ui::widgets::equaliser::eq_common::{
-    Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
-    get_q_delta,
+    EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain, get_q_delta,
 };
 use crate::ui::widgets::equaliser::eq_drawer::{EQDrawView, EQMouseEvent};
 use crate::ui::widgets::helpers::buttons::padded_button;
@@ -291,7 +290,8 @@ impl HPEqualiser {
             }
 
             Stereo(enabled) => {
-                let msg = Controls::Mono(enabled);
+                // The checkbox is flipped, so we need to unflip it here
+                let msg = Controls::Mono(!enabled);
                 let msg = Message::Controls(msg);
                 let _ = state.handle_message(msg);
             }

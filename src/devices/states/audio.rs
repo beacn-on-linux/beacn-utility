@@ -620,7 +620,7 @@ impl AudioState {
                 _ => unreachable!(),
             },
             Message::Controls(c) => match c {
-                DControls::Mono(bool) => self.controls.mono = bool,
+                DControls::Mono(b) => self.controls.mono = b,
                 DControls::Balance(b) => self.controls.balance = b.to_inner() as i8,
                 _ => unreachable!(),
             },
