@@ -335,7 +335,11 @@ impl BeacnUtility {
                     device.pages[page].on_close_fn();
                 }
 
+                #[cfg(target_os = "linux")]
                 return window::close(id);
+
+                #[cfg(not(target_os = "linux"))]
+                return iced::exit();
             }
             Message::WindowResized((_, size)) => {
                 self.window_settings.size = size;
