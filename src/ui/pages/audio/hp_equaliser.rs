@@ -15,6 +15,7 @@ use crate::ui::widgets::helpers::buttons::padded_button;
 use crate::ui::widgets::helpers::drag_value::styled_drag_value;
 use crate::ui::widgets::helpers::slider::{slider_theme, themed_slider};
 use crate::ui::widgets::helpers::svg::{svg_button, svg_button_style, svg_button_unstyled};
+use beacn_lib::EQ_HEADPHONES_VERSION;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::controls::Controls;
 use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType, EQFrequency, EQGain, EQQ};
@@ -783,6 +784,11 @@ impl HPEqualiser {
 impl AudioPage for HPEqualiser {
     fn icon(&self) -> &'static str {
         "headphones"
+    }
+
+    fn should_show(&self, state: &AudioState) -> bool {
+        let version = state.device_definition.device_info.version;
+        version > EQ_HEADPHONES_VERSION
     }
 
     fn on_open(&mut self, state: &AudioState) {
