@@ -111,7 +111,7 @@ impl HPEqualiser {
 
     fn load_temp_data(&mut self, state: &AudioState) {
         for channel in Channel::iter() {
-            self.temp[channel] = state.eq_microphone.bands[state.eq_microphone.mode];
+            self.temp[channel] = state.eq_headphones.bands[channel];
             self.view[channel].set_bands(self.temp[channel]);
         }
         self.switch_active_channel_force(Channel::Left, true);
