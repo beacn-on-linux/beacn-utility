@@ -76,7 +76,7 @@ pub struct HPEqualiser {
     spectrum_data: EnumMap<Channel, Option<Arc<Mutex<Vec<f32>>>>>,
 
     // Temporary data so we can test interactions. The state will eventually feed this
-    temp: EnumMap<Channel, Bands>,
+    //temp: EnumMap<Channel, Bands>,
 
     // These are internal to this page
     active_channel: Channel,
@@ -84,37 +84,27 @@ pub struct HPEqualiser {
 
     // Time in which a drag was initiated, if any.
     drag_start: Option<Instant>,
-
-    // Needs to be fed from the state, currently unavailable.
-    balance: i8,
-    is_stereo: bool,
 }
 
 impl HPEqualiser {
     pub fn new() -> Self {
         Self {
             view: Default::default(),
-            temp: Default::default(),
-
+            //temp: Default::default(),
             spectrum_handler: None,
             spectrum_data: Default::default(),
 
             active_channel: Channel::Left,
             active_band: None,
             drag_start: None,
-
-            balance: 0,
-            is_stereo: true,
         }
     }
 
     fn load_temp_data(&mut self, state: &AudioState) {
         for channel in Channel::iter() {
-            self.temp[channel] = state.eq_headphones.bands[channel];
-            self.view[channel].set_bands(self.temp[channel]);
+            self.view[channel].set_bands(state.eq_headphones.bands[channel]);
         }
-        let is_linked = state.eq_headphones.linked;
-        self.switch_active_channel_force(Channel::Left, is_linked, true);
+        self.switch_active_channel_force(Channel::Left, state, true);
     }
 
     fn update(&mut self, state: &mut AudioState, msg: HPEQMessage) -> Task<HPEQMessage> {
@@ -190,20 +180,20 @@ impl HPEqualiser {
                         let _ = state.handle_message(message);
                     }
 
-                    self.view[ch].set_band(band, self.temp[ch][band]);
+                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
                     if is_linked {
-                        self.view[ot].set_band(band, self.temp[ot][band]);
+                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
                     }
                 }
             }
 
             AddBand => {
                 // This is kinda awkward, but here we go :)
-                let channel = self.active_channel;
-                let other = channel.other();
+                let ch = self.active_channel;
+                let ot = ch.other();
 
                 // We just need to find the first disabled band..
-                let found = self.temp[channel]
+                let found = state.eq_headphones.bands[ch]
                     .iter()
                     .find(|(_, b)| !b.enabled)
                     .map(|(band, _)| band);
@@ -212,26 +202,26 @@ impl HPEqualiser {
                 if let Some(band) = found {
                     // There could be up to 4 message state changes, so collect and send later.
                     let mut messages = vec![];
-                    if self.temp[channel][band].band_type == EQBandType::NotSet {
+                    if state.eq_headphones.bands[ch][band].band_type == EQBandType::NotSet {
                         warn!("EQ Band doesn't have type set, defaulting to BellBand");
-                        let msg = EQHeadphones::Type(channel, band, EQBandType::BellBand);
+                        let msg = EQHeadphones::Type(ch, band, EQBandType::BellBand);
                         let msg = Message::EQHeadphones(msg);
                         messages.push(msg);
 
                         if is_linked {
-                            let msg = EQHeadphones::Type(other, band, EQBandType::BellBand);
+                            let msg = EQHeadphones::Type(ot, band, EQBandType::BellBand);
                             let msg = Message::EQHeadphones(msg);
                             messages.push(msg);
                         }
                     }
 
                     // Enable the band
-                    let msg = EQHeadphones::Enabled(channel, band, true);
+                    let msg = EQHeadphones::Enabled(ch, band, true);
                     let msg = Message::EQHeadphones(msg);
                     messages.push(msg);
 
                     if is_linked {
-                        let msg = EQHeadphones::Enabled(other, band, true);
+                        let msg = EQHeadphones::Enabled(ot, band, true);
                         let msg = Message::EQHeadphones(msg);
                         messages.push(msg);
                     }
@@ -243,45 +233,45 @@ impl HPEqualiser {
 
                     // Update the views
                     self.active_band = Some(band);
-                    self.view[channel].set_active(Some(band));
-                    self.view[channel].set_band(band, self.temp[channel][band]);
+                    self.view[ch].set_active(Some(band));
+                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
                     if is_linked {
-                        self.view[other].set_active(Some(band));
-                        self.view[other].set_band(band, self.temp[other][band]);
+                        self.view[ot].set_active(Some(band));
+                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
                     }
                 }
             }
             RemoveBand => {
-                let channel = self.active_channel;
-                let other = channel.other();
+                let ch = self.active_channel;
+                let ot = ch.other();
 
                 if let Some(band) = self.active_band {
-                    let msg = EQHeadphones::Enabled(channel, band, false);
+                    let msg = EQHeadphones::Enabled(ch, band, false);
                     let msg = Message::EQHeadphones(msg);
                     let _ = state.handle_message(msg);
 
-                    self.view[channel].set_band(band, self.temp[channel][band]);
+                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
                     if is_linked {
-                        let msg = EQHeadphones::Enabled(other, band, false);
+                        let msg = EQHeadphones::Enabled(ot, band, false);
                         let msg = Message::EQHeadphones(msg);
                         let _ = state.handle_message(msg);
 
-                        self.view[other].set_band(band, self.temp[other][band]);
+                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
                     }
 
                     // Try and find a new active band on this channel.
                     self.active_band = None;
                     for band in EQBand::iter().rev() {
-                        if self.temp[channel][band].enabled {
+                        if state.eq_headphones.bands[ch][band].enabled {
                             self.active_band = Some(band);
                             break;
                         }
                     }
 
                     let active_band = self.active_band;
-                    self.view[channel].set_active(active_band);
+                    self.view[ch].set_active(active_band);
                     if is_linked {
-                        self.view[other].set_active(active_band);
+                        self.view[ot].set_active(active_band);
                     }
                 }
             }
@@ -335,8 +325,9 @@ impl HPEqualiser {
             self.drag_start = Some(Instant::now());
         }
     }
-    fn handle_eq_moved(&mut self, state: &mut AudioState, channel: Channel, point: Point) {
+    fn handle_eq_moved(&mut self, state: &mut AudioState, ch: Channel, point: Point) {
         let is_linked = state.eq_headphones.linked;
+        let ot = ch.other();
         if self.drag_start.is_some_and(|t| t.elapsed() >= DRAG_DELAY) {
             // We're dragging the active band, so should be updating its state
             let Some(band) = self.active_band else {
@@ -344,33 +335,33 @@ impl HPEqualiser {
             };
 
             let mut messages = vec![];
-            let plot = self.view[channel].plot_rect();
+            let plot = self.view[ch].plot_rect();
 
             // Grab the Frequency..
             let frequency = EqGeometry::x_to_freq(point.x, plot);
             let frequency = frequency.clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
 
-            let msg = EQHeadphones::Frequency(channel, band, frequency.into());
+            let msg = EQHeadphones::Frequency(ch, band, frequency.into());
             let msg = Message::EQHeadphones(msg);
             messages.push(msg);
 
             if is_linked {
-                let msg = EQHeadphones::Frequency(channel.other(), band, frequency.into());
+                let msg = EQHeadphones::Frequency(ch.other(), band, frequency.into());
                 let msg = Message::EQHeadphones(msg);
                 messages.push(msg);
             }
 
             // Set the Gain..
-            if band_type_has_gain(self.temp[channel][band].band_type) {
+            if band_type_has_gain(state.eq_headphones.bands[ch][band].band_type) {
                 let gain = EqGeometry::y_to_db(point.y, plot).clamp(MIN_GAIN, MAX_GAIN);
                 let gain = (gain * 10.0).round() / 10.0;
 
-                let msg = EQHeadphones::Gain(channel, band, gain.into());
+                let msg = EQHeadphones::Gain(ch, band, gain.into());
                 let msg = Message::EQHeadphones(msg);
                 messages.push(msg);
 
                 if is_linked {
-                    let msg = EQHeadphones::Gain(channel.other(), band, gain.into());
+                    let msg = EQHeadphones::Gain(ch.other(), band, gain.into());
                     let msg = Message::EQHeadphones(msg);
                     messages.push(msg);
                 }
@@ -380,9 +371,9 @@ impl HPEqualiser {
                 let _ = state.handle_message(message);
             }
 
-            self.view[channel].set_band(band, self.temp[channel][band]);
+            self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
             if is_linked {
-                self.view[channel.other()].set_band(band, self.temp[channel.other()][band]);
+                self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
             }
         }
     }
@@ -391,24 +382,25 @@ impl HPEqualiser {
         self.drag_start = None;
     }
     fn handle_eq_scrolled(&mut self, state: &mut AudioState, c: Channel, p: Point, d: ScrollDelta) {
-        let (channel, point, delta) = (c, p, d);
+        let (ch, point, delta) = (c, p, d);
         let is_linked = state.eq_headphones.linked;
+        let ot = ch.other();
 
-        if let Some(band) = self.check_band_hit(channel, state, point) {
+        if let Some(band) = self.check_band_hit(ch, state, point) {
             let delta = get_q_delta(delta);
 
             let mut messages = vec![];
 
-            let q = self.temp[channel][band].q;
+            let q = state.eq_headphones.bands[ch][band].q;
             let adjusted = (q + delta).clamp(0.1, 10.0);
             let adjusted = (adjusted * 10.0).round() / 10.0;
 
-            let msg = EQHeadphones::Q(channel, band, adjusted.into());
+            let msg = EQHeadphones::Q(ch, band, adjusted.into());
             let msg = Message::EQHeadphones(msg);
             messages.push(msg);
 
             if is_linked {
-                let msg = EQHeadphones::Q(channel.other(), band, adjusted.into());
+                let msg = EQHeadphones::Q(ch.other(), band, adjusted.into());
                 let msg = Message::EQHeadphones(msg);
                 messages.push(msg);
             }
@@ -417,9 +409,9 @@ impl HPEqualiser {
                 let _ = state.handle_message(message);
             }
 
-            self.view[channel].set_band(band, self.temp[channel][band]);
+            self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
             if is_linked {
-                self.view[channel.other()].set_band(band, self.temp[channel.other()][band]);
+                self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
             }
         }
     }
@@ -431,8 +423,8 @@ impl HPEqualiser {
         let bands = &state.eq_headphones.bands[channel];
 
         let rect = self.view[c].plot_rect();
-        if let Some(selected_band) = EqGeometry::hit_test(rect, p, bands) {
-            self.switch_active_channel(c, is_linked);
+        if let Some(selected_band) = EqGeometry::hit_test(rect, point, bands) {
+            self.switch_active_channel(c, state);
 
             self.active_band = Some(selected_band);
             self.view[c].set_active(Some(selected_band));
@@ -465,16 +457,18 @@ impl HPEqualiser {
         }
     }
 
-    fn switch_active_channel(&mut self, channel: Channel, is_linked: bool) {
-        self.switch_active_channel_force(channel, is_linked, false);
+    fn switch_active_channel(&mut self, channel: Channel, state: &AudioState) {
+        self.switch_active_channel_force(channel, state, false);
     }
 
     // The force param will result in the border being cleared then reloaded, along with the
     // active band.
-    fn switch_active_channel_force(&mut self, channel: Channel, is_linked: bool, force: bool) {
-        if self.active_channel == channel && !force {
+    fn switch_active_channel_force(&mut self, ch: Channel, state: &AudioState, force: bool) {
+        if self.active_channel == ch && !force {
             return;
         }
+
+        let is_linked = state.eq_headphones.linked;
 
         // Clear the Active Band and the Border Colour from the existing channel
         self.view[self.active_channel].set_active(None);
@@ -488,23 +482,23 @@ impl HPEqualiser {
 
         // Check whether the current active band is available on the new channel
         let find_new_band = match self.active_band {
-            Some(band) => self.temp[channel][band].enabled,
+            Some(band) => state.eq_headphones.bands[ch][band].enabled,
             None => true,
         };
 
         // If it is, set the new active band, otherwise use the current active band
         let active_band = match find_new_band {
-            true => EQBand::iter().find(|&b| self.temp[channel][b].enabled),
+            true => EQBand::iter().find(|&b| state.eq_headphones.bands[ch][b].enabled),
             false => self.active_band,
         };
 
-        self.active_channel = channel;
+        self.active_channel = ch;
         self.active_band = active_band;
-        self.view[channel].set_active(active_band);
+        self.view[ch].set_active(active_band);
 
         // Only update the border if we're not linked
         if !is_linked {
-            self.view[channel].set_border_colour(Some(Color::from_rgb8(0, 255, 0)));
+            self.view[ch].set_border_colour(Some(Color::from_rgb8(0, 255, 0)));
         }
     }
 
@@ -620,8 +614,10 @@ impl HPEqualiser {
     }
 
     fn balance_sub_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
-        let balance_at_zero = self.balance == 0;
-        let balance_slider = themed_slider(-100..=100, self.balance, Balance)
+        let balance = state.controls.balance;
+
+        let balance_at_zero = balance == 0;
+        let balance_slider = themed_slider(-100..=100, balance, Balance)
             .style(move |theme, status| {
                 let mut style = slider_theme(theme, status);
                 if balance_at_zero {
@@ -647,22 +643,22 @@ impl HPEqualiser {
         .into()
     }
 
-    fn mono_stereo_controls(&self, _state: &AudioState) -> Element<'_, HPEQMessage> {
+    fn mono_stereo_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
         // TODO: Need a Stereo / Mono Icon!
 
         column![
             text("Stereo"),
             Space::new().height(14),
-            checkbox(self.is_stereo).on_toggle(Stereo),
+            checkbox(!state.controls.mono).on_toggle(Stereo),
         ]
         .align_x(Alignment::Center)
         .width(Length::Fixed(80.0))
         .into()
     }
 
-    fn equaliser_controls(&self, _state: &AudioState) -> Element<'_, HPEQMessage> {
+    fn equaliser_controls(&self, state: &AudioState) -> Element<'_, HPEQMessage> {
         let channel = self.active_channel;
-        let bands = &self.temp[channel];
+        let bands = &state.eq_headphones.bands[channel];
 
         let add_band = bands.values().any(|b| !b.enabled).then_some(AddBand);
         let remove_band = self.active_band.map(|_| RemoveBand);
@@ -682,8 +678,8 @@ impl HPEqualiser {
         ]
         .align_x(Alignment::Center);
 
-        let type_grid = self.eq_type_grid().map(EqualiserValue);
-        let values = self.eq_values().map(EqualiserValue);
+        let type_grid = self.eq_type_grid(state).map(EqualiserValue);
+        let values = self.eq_values(state).map(EqualiserValue);
 
         row![buttons, type_grid, values]
             .spacing(10.0)
@@ -691,12 +687,12 @@ impl HPEqualiser {
             .into()
     }
 
-    fn eq_type_grid(&self) -> Element<'_, HPEQValue> {
+    fn eq_type_grid(&self, state: &AudioState) -> Element<'_, HPEQValue> {
         let Some(active) = self.active_band else {
             return row![].into();
         };
 
-        let current_type = self.temp[self.active_channel][active].band_type;
+        let current_type = state.eq_headphones.bands[self.active_channel][active].band_type;
         let types: [(&'static str, EQBandType); 6] = [
             ("eq_low_pass", EQBandType::LowPassFilter),
             ("eq_high_pass", EQBandType::HighPassFilter),
@@ -739,13 +735,13 @@ impl HPEqualiser {
         column![top, bottom].spacing(1.0).into()
     }
 
-    fn eq_values(&self) -> Element<'_, HPEQValue> {
+    fn eq_values(&self, state: &AudioState) -> Element<'_, HPEQValue> {
         let Some(active) = self.active_band else {
             return row![].into();
         };
 
         // Clone the band so we can extract values
-        let band = self.temp[self.active_channel][active];
+        let band = state.eq_headphones.bands[self.active_channel][active];
 
         let freq_r = EQFrequency::range();
         let freq_r: RangeInclusive<u32> = (*freq_r.start() as u32)..=(*freq_r.end() as u32);
