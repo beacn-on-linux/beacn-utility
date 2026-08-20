@@ -22,7 +22,16 @@ impl ErrorPage {
 
 impl Page for ErrorPage {
     fn should_show_fn(&self, device: &DeviceState) -> bool {
-        matches!(device.definition().state, DefinitionState::Error(_))
+        // We should always show if the device is directly in error..
+        if matches!(device.definition().state, DefinitionState::Error(_)) {
+            return true;
+        }
+
+        // Check the State state..
+        match device {
+            DeviceState::Audio(state) => state.device_state.state == LoadState::Error,
+            DeviceState::Control(state) => state.device_state.state == LoadState::Error,
+        }
     }
 
     fn update_fn(&mut self, _: &mut DeviceState, message: PageMessage) -> Task<PageMessage> {
@@ -156,10 +165,10 @@ fn error_details(errors: &[ErrorMessage]) -> Column<'static, PageMessage> {
     let mut list = column![].spacing(15);
 
     for message in errors {
-        let mut entry = column![].spacing(4);
+        let mut entry = column![].spacing(3);
 
         if let Some(error) = &message.error_text {
-            entry = entry.push(text(format!("Error: {error:?}")));
+            entry = entry.push(text(format!("Error: {error}")));
         }
 
         if let Some(failed_message) = &message.failed_message {
@@ -174,7 +183,7 @@ fn error_details(errors: &[ErrorMessage]) -> Column<'static, PageMessage> {
             .size(18)
             .font(subheading_font()),
         Space::new().height(10),
-        scrollable(list).height(Length::Shrink),
+        scrollable(list).width(Length::Fill).height(Length::Shrink),
     ]
     .spacing(0)
 }
