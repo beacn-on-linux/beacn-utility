@@ -155,6 +155,9 @@ impl ControlState {
             }
         }
 
+        if state.device_state.state == LoadState::Loading {
+            state.device_state.state = LoadState::Running;
+        }
         state
     }
 
