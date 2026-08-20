@@ -12,7 +12,7 @@ use beacn_lib::audio::messages::lighting::{
 };
 use beacn_lib::audio::messages::suppressor::SuppressorStyle;
 use beacn_lib::types::ToInner;
-use enum_map::{EnumMap};
+use enum_map::EnumMap;
 
 use crate::devices::manager::{
     AudioMessage, DefinitionState, DeviceDefinition, ErrorType, LinkedCommands,
@@ -60,6 +60,7 @@ pub(crate) struct AudioState {
     pub suppressor: Suppressor,
     pub mic_setup: MicSetup,
     pub subwoofer: Subwoofer,
+    pub controls: Controls,
 
     pub linked: Option<Vec<LinkedApp>>,
 }
@@ -160,6 +161,7 @@ pub struct CompressorValue {
     pub makeup: f32,   // [0.0..=12.0]dB
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct Controls {
     pub balance: i8,
     pub mono: bool,
@@ -618,8 +620,8 @@ impl AudioState {
                 _ => unreachable!(),
             },
             Message::Controls(c) => match c {
-                DControls::Mono(_) => {}
-                DControls::Balance(_) => {}
+                DControls::Mono(bool) => self.controls.mono = bool,
+                DControls::Balance(b) => self.controls.balance = b.to_inner() as i8,
                 _ => unreachable!(),
             },
         }
