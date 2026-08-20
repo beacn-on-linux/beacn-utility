@@ -282,8 +282,10 @@ impl HPEqualiser {
             }
 
             SubWoofer(amount) => {
+                let version = state.device_definition.device_info.version;
+
                 // Subwoofer is fun, get various messages based on amount
-                let messages = Subwoofer::get_amount_messages(amount);
+                let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
                     let _ = state.handle_message(message);
                 }

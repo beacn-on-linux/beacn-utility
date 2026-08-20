@@ -52,7 +52,8 @@ impl ConfigPage for HeadphonesPage {
             }
 
             HeadphonesMessage::SubwooferAmount(amount) => {
-                let messages = Subwoofer::get_amount_messages(amount);
+                let version = state.device_definition.device_info.version;
+                let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
                     let _ = state.handle_message(message);
                 }
@@ -69,7 +70,7 @@ impl ConfigPage for HeadphonesPage {
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
         let device_version = state.device_definition.device_info.version;
-        
+
         let device_type = state.device_definition.device_type;
         let value = state.headphones.mic_monitor;
         let range = HPMicMonitorLevel::range();

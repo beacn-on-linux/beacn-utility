@@ -324,6 +324,8 @@ impl BeacnUtility {
                 return task.map(move |_| Message::WindowOpened(id));
             }
             Message::WindowOpened(_id) => {}
+            
+            #[allow(unused)]
             Message::WindowCloseRequested(id) => {
                 self.active_id = None;
 
