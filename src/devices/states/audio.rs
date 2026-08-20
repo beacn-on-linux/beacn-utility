@@ -369,7 +369,7 @@ impl AudioState {
                 // fetch_value didn't panic, but it did error
                 state.device_state.state = LoadState::Error;
                 state.device_state.errors.push(ErrorMessage {
-                    error_text: Some(format!("{e:?}")),
+                    error_text: Some(format!("{e}")),
                     failed_message: Some(message),
                 })
             }
@@ -435,7 +435,7 @@ impl AudioState {
             if let Err(e) = state.handle_message_async(message).await {
                 state.device_state.state = LoadState::Error;
                 state.device_state.errors.push(ErrorMessage {
-                    error_text: Some(format!("{e:?}")),
+                    error_text: Some(format!("{e}")),
                     failed_message: Some(message),
                 })
             }
