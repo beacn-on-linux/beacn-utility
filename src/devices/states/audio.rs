@@ -34,7 +34,6 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use log::debug;
 
 type Rgb = [u8; 3];
 
@@ -512,25 +511,19 @@ impl AudioState {
             Message::EQHeadphones(h) => match h {
                 DEQHeadphones::Linked(linked) => self.eq_headphones.linked = linked,
                 DEQHeadphones::Type(channel, band, value) => {
-                    debug!("Loading  {:?} - {:?} - {:?}", channel, band, value);
                     self.eq_headphones.bands[channel][band.into()].band_type = value.into()
                 }
                 DEQHeadphones::Gain(channel, band, value) => {
-                    debug!("Loading  {:?} - {:?} - {:?}", channel, band, value);
                     self.eq_headphones.bands[channel][band.into()].gain = value.to_inner()
                 }
                 DEQHeadphones::Frequency(channel, band, value) => {
-                    debug!("Loading  {:?} - {:?} - {:?}", channel, band, value);
-
                     let value = value.to_inner() as u32;
                     self.eq_headphones.bands[channel][band.into()].frequency = value
                 }
                 DEQHeadphones::Q(channel, band, value) => {
-                    debug!("Loading {:?} - {:?} - {:?}", channel, band, value);
                     self.eq_headphones.bands[channel][band.into()].q = value.to_inner()
                 }
                 DEQHeadphones::Enabled(channel, band, value) => {
-                    debug!("Loading  {:?} - {:?} - {:?}", channel, band, value);
                     self.eq_headphones.bands[channel][band.into()].enabled = value
                 }
                 _ => unreachable!(),
