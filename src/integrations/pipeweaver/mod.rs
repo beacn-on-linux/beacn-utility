@@ -518,8 +518,8 @@ impl PipeweaverHandler {
                                         let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
 
                                         let update = match self.channel_type {
-                                            ChannelType::Source => render.update_from_source_device_value(dev),
-                                            ChannelType::Target => render.update_from_target_device_value(dev),
+                                            ChannelType::Source => render.update_from_source_device_value(dev)?,
+                                            ChannelType::Target => render.update_from_target_device_value(dev)?,
                                         };
 
                                         for part in update {
@@ -922,8 +922,8 @@ impl PipeweaverHandler {
             .ok_or_else(|| anyhow::anyhow!("Failed to locate device by ID: {}", device))?;
 
         let mut renderer = match self.channel_type {
-            ChannelType::Source => ChannelRenderer::from_source_device_value(dev),
-            ChannelType::Target => ChannelRenderer::from_target_device_value(dev),
+            ChannelType::Source => ChannelRenderer::from_source_device_value(dev)?,
+            ChannelType::Target => ChannelRenderer::from_target_device_value(dev)?,
         };
 
         renderer.set_beacn_device(self.device_type);

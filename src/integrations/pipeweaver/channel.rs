@@ -54,73 +54,138 @@ pub(crate) struct RawImage {
     pub(crate) image: Vec<u8>,
 }
 
+// Some JSON reading Helpers..
+fn get_str<'a>(value: &'a Value, pointer: &str) -> Result<&'a str> {
+    value
+        .pointer(pointer)
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing or invalid string field at '{pointer}'"))
+}
+
+fn get_u8(value: &Value, pointer: &str) -> Result<u8> {
+    value
+        .pointer(pointer)
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u8)
+        .ok_or_else(|| anyhow!("Missing or invalid u8 field at '{pointer}'"))
+}
+
+fn get_array<'a>(value: &'a Value, pointer: &str) -> Result<&'a Vec<Value>> {
+    value
+        .pointer(pointer)
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow!("Missing or invalid array field at '{pointer}'"))
+}
+
+fn parse_colour(device: &Value) -> Result<Rgba<u8>> {
+    let r = get_u8(device, "/description/colour/red")?;
+    let g = get_u8(device, "/description/colour/green")?;
+    let b = get_u8(device, "/description/colour/blue")?;
+    Ok(Rgba([r, g, b, 255]))
+}
+
+struct ParsedSourceDevice {
+    name: String,
+    colour: Rgba<u8>,
+    volume_a: u8,
+    volume_b: u8,
+    mute_a: bool,
+    mute_b: bool,
+    mute_a_to_all: bool,
+    mute_b_to_all: bool,
+}
+
+impl ParsedSourceDevice {
+    fn parse(device: &Value) -> Result<Self> {
+        let name = get_str(device, "/description/name")?.to_owned();
+        let colour = parse_colour(device)?;
+
+        let volume_a = get_u8(device, "/volumes/volume/A")?;
+        let volume_b = get_u8(device, "/volumes/volume/B")?;
+
+        let mute_state = get_array(device, "/mute_states/mute_state")?;
+        let mute_a = mute_state.iter().any(|v| v == "TargetA");
+        let mute_b = mute_state.iter().any(|v| v == "TargetB");
+
+        let mute_a_to_all = get_array(device, "/mute_states/mute_targets/TargetA")?.is_empty();
+        let mute_b_to_all = get_array(device, "/mute_states/mute_targets/TargetB")?.is_empty();
+
+        Ok(Self {
+            name,
+            colour,
+            volume_a,
+            volume_b,
+            mute_a,
+            mute_b,
+            mute_a_to_all,
+            mute_b_to_all,
+        })
+    }
+}
+
+struct ParsedTargetDevice {
+    name: String,
+    colour: Rgba<u8>,
+    volume: u8,
+    is_muted: bool,
+}
+
+impl ParsedTargetDevice {
+    fn parse(device: &Value) -> Result<Self> {
+        let name = get_str(device, "/description/name")?.to_owned();
+        let colour = parse_colour(device)?;
+
+        let volume = get_u8(device, "/volume")?;
+        let is_muted = get_str(device, "/mute_state")? == "Muted";
+
+        Ok(Self {
+            name,
+            colour,
+            volume,
+            is_muted,
+        })
+    }
+}
+
 impl ChannelRenderer {
-    pub fn from_source_device_value(device: &Value) -> Self {
-        // Description Reading
-        //let id = device["description"]["id"].as_str().unwrap();
-        let name = device["description"]["name"].as_str().unwrap();
-        let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
-        let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
-        let colour_b = device["description"]["colour"]["blue"].as_u64().unwrap() as u8;
+    pub fn from_source_device_value(device: &Value) -> Result<Self> {
+        let data = ParsedSourceDevice::parse(device)?;
 
-        // Volume Reading
-        let volume_mix_a = device["volumes"]["volume"]["A"].as_u64().unwrap() as u8;
-        let volume_mix_b = device["volumes"]["volume"]["B"].as_u64().unwrap() as u8;
-
-        // Mute States
-        let mute = &device["mute_states"];
-        let mute_state = mute["mute_state"].as_array().unwrap();
-        let target_a = mute_state.iter().any(|v| v == "TargetA");
-        let target_b = mute_state.iter().any(|v| v == "TargetB");
-
-        let mute_targets = &mute["mute_targets"];
-        let target_a_to_all = mute_targets["TargetA"].as_array().unwrap().is_empty();
-        let target_b_to_all = mute_targets["TargetB"].as_array().unwrap().is_empty();
-
-        Self {
+        Ok(Self {
             beacn_type: DeviceType::BeacnMixCreate,
-            title: name.to_owned(),
-            colour: Rgba([colour_r, colour_g, colour_b, 255]),
-            volumes: enum_map! { Mix::A => volume_mix_a, Mix::B => volume_mix_b },
+            title: data.name,
+            colour: data.colour,
+            volumes: enum_map! { Mix::A => data.volume_a, Mix::B => data.volume_b },
             meter: 0,
             meter_target: 0.0,
             channel_type: ChannelType::Source,
             mute_states: enum_map! {
                 MuteTarget::TargetA => MuteState {
-                    is_active: target_a,
-                    is_mute_to_all: target_a_to_all,
+                    is_active: data.mute_a,
+                    is_mute_to_all: data.mute_a_to_all,
                 },
                 MuteTarget::TargetB => MuteState {
-                    is_active: target_b,
-                    is_mute_to_all: target_b_to_all,
+                    is_active: data.mute_b,
+                    is_mute_to_all: data.mute_b_to_all,
                 }
             },
-        }
+        })
     }
 
-    pub fn from_target_device_value(device: &Value) -> Self {
-        // Description Reading
-        //let id = device["description"]["id"].as_str().unwrap();
-        let name = device["description"]["name"].as_str().unwrap();
-        let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
-        let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
-        let colour_b = device["description"]["colour"]["blue"].as_u64().unwrap() as u8;
+    pub fn from_target_device_value(device: &Value) -> Result<Self> {
+        let data = ParsedTargetDevice::parse(device)?;
 
-        // Volume Reading
-        let volume = device["volume"].as_u64().unwrap() as u8;
-        let is_muted = device["mute_state"].as_str().unwrap() == "Muted";
-
-        Self {
+        Ok(Self {
             beacn_type: DeviceType::BeacnMixCreate,
-            title: name.to_owned(),
-            colour: Rgba([colour_r, colour_g, colour_b, 255]),
-            volumes: enum_map! { Mix::A => volume, Mix::B => 0 },
+            title: data.name,
+            colour: data.colour,
+            volumes: enum_map! { Mix::A => data.volume, Mix::B => 0 },
             meter: 0,
             meter_target: 0.0,
             channel_type: ChannelType::Target,
             mute_states: enum_map! {
                 MuteTarget::TargetA => MuteState {
-                    is_active: is_muted,
+                    is_active: data.is_muted,
                     is_mute_to_all: true,
                 },
                 MuteTarget::TargetB => MuteState {
@@ -128,7 +193,7 @@ impl ChannelRenderer {
                     is_mute_to_all: false,
                 }
             },
-        }
+        })
     }
 
     pub fn set_beacn_device(&mut self, device_type: DeviceType) {
@@ -138,113 +203,98 @@ impl ChannelRenderer {
     pub fn update_from_source_device_value(
         &mut self,
         device: &Value,
-    ) -> Vec<ChannelChangedProperty> {
-        // Description Reading
-        //let id = device["description"]["id"].as_str().unwrap();
-        let name = device["description"]["name"].as_str().unwrap();
-        let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
-        let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
-        let colour_b = device["description"]["colour"]["blue"].as_u64().unwrap() as u8;
-
-        // Volume Reading
-        let volume_mix_a = device["volumes"]["volume"]["A"].as_u64().unwrap() as u8;
-        let volume_mix_b = device["volumes"]["volume"]["B"].as_u64().unwrap() as u8;
-
-        // Mute States
-        let mute = &device["mute_states"];
-        let mute_state = mute["mute_state"].as_array().unwrap();
-        let target_a = mute_state.iter().any(|v| v == "TargetA");
-        let target_b = mute_state.iter().any(|v| v == "TargetB");
-
-        let mute_targets = &mute["mute_targets"];
-        let target_a_to_all = mute_targets["TargetA"].as_array().unwrap().is_empty();
-        let target_b_to_all = mute_targets["TargetB"].as_array().unwrap().is_empty();
-
+    ) -> Result<Vec<ChannelChangedProperty>> {
+        let data = ParsedSourceDevice::parse(device)?;
         let mut updates = vec![];
-        if name != self.title {
-            self.title = name.to_owned();
+
+        if data.name != self.title {
+            self.title = data.name;
             updates.push(ChannelChangedProperty::Title);
         }
 
-        let colour = Rgba([colour_r, colour_g, colour_b, 255]);
-        if self.colour != colour {
-            self.colour = colour;
+        if self.colour != data.colour {
+            self.colour = data.colour;
             updates.push(ChannelChangedProperty::Colour);
         }
 
-        if volume_mix_a != self.volumes[Mix::A] {
-            self.volumes[Mix::A] = volume_mix_a;
+        if data.volume_a != self.volumes[Mix::A] {
+            self.volumes[Mix::A] = data.volume_a;
             updates.push(ChannelChangedProperty::Volumes(Mix::A));
         }
-        if volume_mix_b != self.volumes[Mix::B] {
-            self.volumes[Mix::B] = volume_mix_b;
+        if data.volume_b != self.volumes[Mix::B] {
+            self.volumes[Mix::B] = data.volume_b;
             updates.push(ChannelChangedProperty::Volumes(Mix::B));
         }
 
-        if target_a != self.mute_states[MuteTarget::TargetA].is_active {
-            self.mute_states[MuteTarget::TargetA].is_active = target_a;
-            updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetA));
-        }
-        if target_b != self.mute_states[MuteTarget::TargetB].is_active {
-            self.mute_states[MuteTarget::TargetB].is_active = target_b;
-            updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetB));
-        }
+        self.diff_mute_state(
+            MuteTarget::TargetA,
+            data.mute_a,
+            data.mute_a_to_all,
+            &mut updates,
+        );
+        self.diff_mute_state(
+            MuteTarget::TargetB,
+            data.mute_b,
+            data.mute_b_to_all,
+            &mut updates,
+        );
 
-        if target_a_to_all != self.mute_states[MuteTarget::TargetA].is_mute_to_all {
-            self.mute_states[MuteTarget::TargetA].is_mute_to_all = target_a_to_all;
-            if !updates.contains(&ChannelChangedProperty::MuteState(MuteTarget::TargetA)) {
-                updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetA));
-            }
-        }
-        if target_b_to_all != self.mute_states[MuteTarget::TargetB].is_mute_to_all {
-            self.mute_states[MuteTarget::TargetB].is_mute_to_all = target_b_to_all;
-            if !updates.contains(&ChannelChangedProperty::MuteState(MuteTarget::TargetB)) {
-                updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetB));
-            }
-        }
-
-        updates
+        Ok(updates)
     }
 
     pub fn update_from_target_device_value(
         &mut self,
         device: &Value,
-    ) -> Vec<ChannelChangedProperty> {
-        // Description Reading
-        //let id = device["description"]["id"].as_str().unwrap();
-        let name = device["description"]["name"].as_str().unwrap();
-        let colour_r = device["description"]["colour"]["red"].as_u64().unwrap() as u8;
-        let colour_g = device["description"]["colour"]["green"].as_u64().unwrap() as u8;
-        let colour_b = device["description"]["colour"]["blue"].as_u64().unwrap() as u8;
-
-        // Volume Reading
-        let volume = device["volume"].as_u64().unwrap() as u8;
-        let is_muted = device["mute_state"].as_str().unwrap() == "Muted";
-
+    ) -> Result<Vec<ChannelChangedProperty>> {
+        let data = ParsedTargetDevice::parse(device)?;
         let mut updates = vec![];
-        if name != self.title {
-            self.title = name.to_owned();
+
+        if data.name != self.title {
+            self.title = data.name;
             updates.push(ChannelChangedProperty::Title);
         }
 
-        let colour = Rgba([colour_r, colour_g, colour_b, 255]);
-        if self.colour != colour {
-            self.colour = colour;
+        if self.colour != data.colour {
+            self.colour = data.colour;
             updates.push(ChannelChangedProperty::Colour);
         }
 
         // For targets, we have a single volume
-        if self.volumes[Mix::A] != volume {
-            self.volumes[Mix::A] = volume;
+        if self.volumes[Mix::A] != data.volume {
+            self.volumes[Mix::A] = data.volume;
             updates.push(ChannelChangedProperty::Volumes(Mix::A));
         }
 
-        if self.mute_states[MuteTarget::TargetA].is_active != is_muted {
-            self.mute_states[MuteTarget::TargetA].is_active = is_muted;
-            updates.push(ChannelChangedProperty::MuteState(MuteTarget::TargetA));
+        self.diff_mute_state(MuteTarget::TargetA, data.is_muted, true, &mut updates);
+
+        Ok(updates)
+    }
+
+    /// Updates a single mute target's state in place, pushing at most one
+    /// `MuteState` update even if both `is_active` and `is_mute_to_all`
+    /// changed at once.
+    fn diff_mute_state(
+        &mut self,
+        target: MuteTarget,
+        is_active: bool,
+        is_mute_to_all: bool,
+        updates: &mut Vec<ChannelChangedProperty>,
+    ) {
+        let state = &mut self.mute_states[target];
+        let mut changed = false;
+
+        if state.is_active != is_active {
+            state.is_active = is_active;
+            changed = true;
+        }
+        if state.is_mute_to_all != is_mute_to_all {
+            state.is_mute_to_all = is_mute_to_all;
+            changed = true;
         }
 
-        updates
+        if changed {
+            updates.push(ChannelChangedProperty::MuteState(target));
+        }
     }
 
     pub fn full_render(&self, active_mix: Mix) -> BeacnImage {
