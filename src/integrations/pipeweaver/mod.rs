@@ -409,7 +409,7 @@ impl PipeweaverHandler {
     }
 
     async fn load_initial_state(&mut self) -> Result<()> {
-        let devices_shown = self.get_channels_on_page();
+        let devices_shown = self.get_channels_on_page()?;
         self.devices_shown = devices_shown;
 
         // Update the Rendering Nodes
@@ -475,7 +475,7 @@ impl PipeweaverHandler {
 
                                 // Count all channels that aren't hidden
                                 let count = {
-                                    let order = self.get_channel_order();
+                                    let order = self.get_channel_order()?;
                                         order
                                         .iter()
                                         .filter(|(group, _)| *group != OrderGroup::Hidden)
@@ -488,7 +488,7 @@ impl PipeweaverHandler {
                                     self.load_page_button().await?;
                                 }
 
-                                let devices = self.get_channels_on_page();
+                                let devices = self.get_channels_on_page()?;
                                 if devices != self.devices_shown {
                                     self.devices_shown = devices.clone();
 
@@ -831,7 +831,7 @@ impl PipeweaverHandler {
     }
 
     async fn load_page_button(&mut self) -> Result<()> {
-        let pages = self.get_page_count();
+        let pages = self.get_page_count()?;
         if self.active_page >= pages {
             self.active_page = pages - 1;
         }
@@ -842,7 +842,7 @@ impl PipeweaverHandler {
         };
 
         // Map the Previous / Next Button colours
-        let right_colour = match self.get_page_count() {
+        let right_colour = match self.get_page_count()? {
             1 => COLOUR_BLACK,
             c => match self.active_page == c - 1 {
                 true => COLOUR_BLACK,
@@ -931,7 +931,7 @@ impl PipeweaverHandler {
     }
 
     async fn refresh_page(&mut self) -> Result<()> {
-        self.devices_shown = self.get_channels_on_page();
+        self.devices_shown = self.get_channels_on_page()?;
         self.update_renderers()?;
         self.perform_full_refresh().await?;
         Ok(())
@@ -946,21 +946,21 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    fn get_page_count(&self) -> u8 {
-        let order = self.get_channel_order();
+    fn get_page_count(&self) -> Result<u8> {
+        let order = self.get_channel_order()?;
 
         // If we can't display any other channels because we're populated with pins, send 1 page.
         if order[OrderGroup::Pinned].len() >= 4 || order[OrderGroup::Default].is_empty() {
-            return 1;
+            return Ok(1);
         }
 
         let channels_per_page = 4 - order[OrderGroup::Pinned].len() as u8;
         let channel_count = order[OrderGroup::Default].len() as u8;
-        (channels_per_page + channel_count - 1) / channels_per_page
+        Ok((channels_per_page + channel_count - 1) / channels_per_page)
     }
 
-    fn get_channels_on_page(&self) -> Vec<String> {
-        let order = self.get_channel_order();
+    fn get_channels_on_page(&self) -> Result<Vec<String>> {
+        let order = self.get_channel_order()?;
         let mut channels = Vec::with_capacity(4);
 
         // This is a little complicated, we need to check the pinned channels and add them first
@@ -969,7 +969,7 @@ impl PipeweaverHandler {
 
         if pinned.is_empty() && others.is_empty() {
             warn!("No channels are defined!");
-            return channels;
+            return Ok(channels);
         }
 
         // The pinned options should appear on all the pages
@@ -979,7 +979,7 @@ impl PipeweaverHandler {
 
         // If the user has 4 pinned channels, we really can't do paging
         if channels.len() == channels.capacity() {
-            return channels;
+            return Ok(channels);
         }
 
         // Ok, now we need to work out how many non-pinned channels per page we can have
@@ -989,7 +989,7 @@ impl PipeweaverHandler {
             for other in others {
                 channels.push(other.clone());
             }
-            return channels;
+            return Ok(channels);
         }
 
         let channel_start = (channels_per_page * self.active_page) + channels_per_page;
@@ -1006,10 +1006,10 @@ impl PipeweaverHandler {
             }
         }
 
-        channels
+        Ok(channels)
     }
 
-    fn get_channel_order(&self) -> EnumMap<OrderGroup, Vec<String>> {
+    fn get_channel_order(&self) -> Result<EnumMap<OrderGroup, Vec<String>>> {
         let base = &self.raw_status["audio"]["profile"]["devices"];
 
         let order = match self.channel_type {
@@ -1017,20 +1017,28 @@ impl PipeweaverHandler {
             ChannelType::Target => &base["targets"]["device_order"],
         };
 
-        let parse = |group| {
-            order[group]
-                .as_array()
-                .unwrap()
+        let parse = |group: &str| -> Result<Vec<String>> {
+            let values = match order[group].as_array() {
+                Some(values) => values,
+                None => bail!("missing or invalid {group} device_order"),
+            };
+
+            values
                 .iter()
-                .map(|value| value.as_str().unwrap().to_owned())
+                .map(|value| {
+                    value
+                        .as_str()
+                        .map(str::to_owned)
+                        .ok_or_else(|| anyhow::anyhow!("expected string in {group} device_order"))
+                })
                 .collect()
         };
 
-        enum_map! {
-            OrderGroup::Pinned => parse("Pinned"),
-            OrderGroup::Default => parse("Default"),
-            OrderGroup::Hidden => parse("Hidden"),
-        }
+        Ok(enum_map! {
+            OrderGroup::Pinned => parse("Pinned")?,
+            OrderGroup::Default => parse("Default")?,
+            OrderGroup::Hidden => parse("Hidden")?,
+        })
     }
 
     async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
@@ -1163,7 +1171,7 @@ impl PipeweaverHandler {
                 if self.active_page == 0 && change == -1 {
                     return Ok(());
                 }
-                if self.active_page == self.get_page_count() - 1 && change == 1 {
+                if self.active_page == self.get_page_count()? - 1 && change == 1 {
                     return Ok(());
                 }
 
