@@ -83,7 +83,7 @@ pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireN
 #[allow(unused_variables)]
 pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
     #[cfg(target_os = "linux")]
-    spectrum::start_spectrum_analyser(ports, sample_rate);
+    return spectrum::start_spectrum_analyser(ports, sample_rate);
 
     #[cfg(not(target_os = "linux"))]
     {

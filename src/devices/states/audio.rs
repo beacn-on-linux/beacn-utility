@@ -3,7 +3,7 @@ use beacn_lib::audio::LinkedApp;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
-use beacn_lib::audio::messages::equaliser::{EQBand, EQBandType, EQMode};
+use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType, EQMode};
 use beacn_lib::audio::messages::expander::ExpanderMode;
 use beacn_lib::audio::messages::headphone_eq::HPEQType;
 use beacn_lib::audio::messages::headphones::HeadphoneTypes;
@@ -21,7 +21,7 @@ use crate::devices::states::{DeviceLoadState, ErrorMessage, LoadState, State};
 use beacn_lib::audio::messages::bass_enhancement::BassEnhancement as MicBaseEnhancement;
 use beacn_lib::audio::messages::compressor::Compressor as MicCompressor;
 use beacn_lib::audio::messages::deesser::DeEsser as MicDeEsser;
-use beacn_lib::audio::messages::equaliser::Equaliser as MicEqualiser;
+use beacn_lib::audio::messages::eq_microphone::EQMicrophone as MicEqualiser;
 use beacn_lib::audio::messages::exciter::Exciter as MicExciter;
 use beacn_lib::audio::messages::expander::Expander as MicExpander;
 use beacn_lib::audio::messages::headphone_eq::HeadphoneEQ as MicHeadphoneEQ;
@@ -298,6 +298,7 @@ impl AudioState {
     #[allow(unused)]
     pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
         let device_type = definition.device_type;
+        let device_version = definition.device_info.version;
 
         let mut state = AudioState {
             device_definition: definition,
@@ -340,7 +341,7 @@ impl AudioState {
         }
 
         // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type);
+        let messages = Message::generate_fetch_message(device_type, device_version);
         for message in messages {
             // Skip this message if it's not valid for this version
             if message.get_message_minimum_version() > state.device_definition.device_info.version {
@@ -370,6 +371,7 @@ impl AudioState {
         sender: Sender<AudioMessage>,
     ) -> Self {
         let device_type = definition.device_type;
+        let device_version = definition.device_info.version;
 
         let mut state = AudioState {
             device_definition: definition,
@@ -407,7 +409,7 @@ impl AudioState {
         }
 
         // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type);
+        let messages = Message::generate_fetch_message(device_type, device_version);
         for message in messages {
             // Skip this message if it's not valid for this version
             if message.get_message_minimum_version() > state.device_definition.device_info.version {
@@ -468,7 +470,7 @@ impl AudioState {
                 MicDeEsser::Enabled(value) => self.de_esser.enabled = value,
                 _ => {}
             },
-            Message::Equaliser(e) => match e {
+            Message::EQMicrophone(e) => match e {
                 MicEqualiser::Mode(mode) => self.equaliser.mode = mode,
                 MicEqualiser::Type(mode, band, value) => {
                     self.equaliser.bands[mode][band.into()].band_type = value.into()
