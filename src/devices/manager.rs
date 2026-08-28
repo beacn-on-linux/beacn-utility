@@ -17,6 +17,7 @@ use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::spawn_pipeweaver_handler;
 use crate::managers::LoginEventTriggers;
 use anyhow::anyhow;
+use beacn_lib::audio::data::BulkMessage as BMessage;
 use beacn_lib::audio::messages::Message as AMessage;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::messages::Message as CMessage;
@@ -184,6 +185,20 @@ pub(crate) async fn spawn_device_manager(
                                 AudioMessage::Handle(msg, resp) => {
                                     let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
 
+                                    match response {
+                                        Ok(result) => {
+                                            let _ = resp.send(result);
+                                        }
+
+                                        Err(panic) => {
+                                            let error = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
+                                            let _ = resp.send(Err(anyhow!(error).into()));
+                                        }
+                                    }
+                                }
+
+                                AudioMessage::Bulk(msg, resp) => {
+                                    let response = AssertUnwindSafe(dev.handle_bulk_message(msg)).catch_unwind().await;
                                     match response {
                                         Ok(result) => {
                                             let _ = resp.send(result);
@@ -488,6 +503,7 @@ pub(crate) enum DeviceArriveMessage {
 #[derive(Debug)]
 pub enum AudioMessage {
     Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
+    Bulk(BMessage, oneshot::Sender<Result<BMessage, BeacnError>>),
     Linked(LinkedCommands),
 }
 

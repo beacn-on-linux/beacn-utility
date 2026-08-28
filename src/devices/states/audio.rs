@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use beacn_lib::audio::LinkedApp;
+use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
@@ -213,6 +214,24 @@ impl AudioState {
                 if let Ok(message) = message {
                     self.set_local_value(message);
                 }
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn handle_bulk_message(&mut self, message: BulkMessage) -> Result<BulkMessage> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Bulk(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                // Quickly intercept the message, and set our local value
                 Ok(message?)
             }
             None => bail!("Device Sender not Ready"),
