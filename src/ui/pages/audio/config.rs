@@ -501,7 +501,7 @@ impl<Message> canvas::Program<Message> for MicMeter {
             a: 0.4,
             ..palette.warning.weak.color
         };
-        let peak_bottom = self.y_for_db(-5.0, 0.0, bounds.size().height);
+        let peak_bottom = self.y_for_db(-5.0, 0.0, bounds.size().height) - 2.0;
         frame.fill_rectangle(
             Point::new(0.0, 0.0),
             Size::new(bounds.size().width, peak_bottom),
@@ -515,7 +515,7 @@ impl<Message> canvas::Program<Message> for MicMeter {
         };
         let good_bottom = self.y_for_db(-15.0, 0.0, bounds.size().height);
         frame.fill_rectangle(
-            Point::new(0.0, peak_bottom),
+            Point::new(0.0, peak_bottom + 2.0),
             Size::new(bounds.size().width, good_bottom - peak_bottom),
             good,
         );
