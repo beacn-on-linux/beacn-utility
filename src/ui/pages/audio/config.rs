@@ -19,14 +19,20 @@ use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
 use iced::widget::canvas::{Frame, Geometry};
-use iced::widget::{Canvas, button, canvas, column, container, row, rule, text};
+use iced::widget::{
+    Canvas, Float, Space, button, canvas, column, container, responsive, row, rule, stack, text,
+};
 use iced::{
     Alignment, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task, Theme,
-    mouse,
+    Vector, mouse,
 };
 use log::debug;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+/// The meter's dB span, shared by the label overlay and the `MicMeter`
+/// canvas so the two can never drift out of sync with each other.
+const METER_RANGE_DB: (f32, f32) = (-70.0, 0.0);
 
 #[derive(Debug, Clone)]
 pub(crate) enum ConfigMessage {
@@ -55,7 +61,7 @@ impl Configuration {
             spectrum_handler: None,
             spectrum_data: None,
 
-            meter_ballistics: MeterBallistics::new(-70.0),
+            meter_ballistics: MeterBallistics::new(METER_RANGE_DB.0),
 
             selected_tab: 0,
             tab_pages: vec![
@@ -110,27 +116,78 @@ impl Configuration {
             ConfigMessage::OutputGainChanged,
         );
 
+        let title = text("Mic Output");
+        let title_spacer = Space::new().height(8.0);
+
+        let output_labels = responsive(|size| {
+            let (min_db, max_db) = METER_RANGE_DB;
+            let y_for_db = |db: f32| ((max_db - db) / (max_db - min_db)) * size.height;
+            let label = |value: &'static str, db: f32| {
+                let target_y = y_for_db(db);
+
+                Float::new(
+                    container(text(value).size(10))
+                        .width(Length::Fixed(30.0))
+                        .align_x(Alignment::End),
+                )
+                .translate(move |bounds, _viewport| {
+                    Vector::new(-22.0, target_y - bounds.height / 2.0)
+                })
+            };
+
+            stack![
+                // Base layer establishes the exact 30px × full-height label area.
+                container(Space::new())
+                    .width(Length::Fixed(20.0))
+                    .height(Length::Fill),
+                label("0", 0.0),
+                label("-5", -5.0),
+                label("-10", -10.0),
+                label("-20", -20.0),
+                label("-30", -30.0),
+                label("-40", -40.0),
+                label("-50", -50.0),
+                label("-60", -60.0),
+                label("-70", -70.0),
+            ]
+            .width(Length::Fixed(20.0))
+            .height(Length::Fill)
+            .into()
+        })
+        .width(Length::Fixed(30.0))
+        .height(Length::Fill);
+
         let meter = MicMeter {
             db: self.meter_ballistics.db,
             peak_db: self.meter_ballistics.peak_db,
-            range_db: (-70.0, 0.0),
+            range_db: METER_RANGE_DB,
         };
         let canvas = Canvas::new(meter).height(Length::Fill).width(Length::Fill);
+        let canvas = stack![canvas, output_labels]
+            .width(Length::Fixed(40.0))
+            .height(Length::Fill);
+
+        let canvas = column![title, title_spacer, canvas]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(Alignment::Center);
 
         let canvas_container = container(canvas)
-            .width(Length::Fixed(40.0))
-            .height(Length::FillPortion(60))
+            .width(Length::Fill)
+            .height(Length::FillPortion(65))
             .align_x(Alignment::Center)
             .padding(8);
 
         let gain = container(gain)
-            .width(Length::Fixed(95.0))
-            .height(Length::FillPortion(40))
+            .width(Length::Fill)
+            .height(Length::FillPortion(35))
             .align_x(Alignment::Center)
             .padding(8);
 
-        column![canvas_container, gain]
+        column![canvas_container, rule::horizontal(2), gain]
+            .width(Length::Fixed(95.0))
             .align_x(Alignment::Center)
+            .spacing(5.0)
             .into()
     }
 }
