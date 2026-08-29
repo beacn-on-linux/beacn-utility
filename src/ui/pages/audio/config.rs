@@ -91,6 +91,10 @@ impl Configuration {
             .width(Length::Fill)
             .height(Length::Fill);
 
+        tab_layout.into()
+    }
+
+    fn gain_view(&self, state: &AudioState) -> Element<'_, ConfigMessage> {
         let value = state.headphones.output_gain;
         let range = HPMicOutputGain::range();
         let gain = draw_range(
@@ -101,16 +105,12 @@ impl Configuration {
             ConfigMessage::OutputGainChanged,
         );
 
-        row![
-            tab_layout,
-            rule::vertical(1),
-            container(gain)
-                .width(Length::Fixed(100.0))
-                .height(Length::Fill)
-                .align_x(Alignment::Center)
-                .padding(8)
-        ]
-        .into()
+        container(gain)
+            .width(Length::Fixed(95.0))
+            .height(Length::Fill)
+            .align_x(Alignment::Center)
+            .padding(8)
+            .into()
     }
 }
 
@@ -277,25 +277,33 @@ impl AudioPage for Configuration {
             .map(PageMessage::AudioConfig);
 
         let bottom = self.bottom_view(state).map(PageMessage::AudioConfig);
-        column![
-            // Remaining space
-            container(equaliser)
-                .width(Length::Fill)
-                .height(Length::Fill),
-            container(controls)
-                .width(Length::Fill)
-                .height(Length::Fixed(33.0))
-                .padding(Padding {
-                    top: 0.0,
-                    right: 0.0,
-                    bottom: 5.0,
-                    left: 0.0,
-                }),
-            rule::horizontal(5),
-            // Fixed bottom section
-            container(bottom)
-                .width(Length::Fill)
-                .height(Length::Fixed(240.0)),
+        row![
+            column![
+                // Remaining space
+                container(equaliser)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .padding(Padding {
+                        right: 6.0,
+                        ..Default::default()
+                    }),
+                container(controls)
+                    .width(Length::Fill)
+                    .height(Length::Fixed(33.0))
+                    .padding(Padding {
+                        top: 0.0,
+                        right: 0.0,
+                        bottom: 5.0,
+                        left: 0.0,
+                    }),
+                rule::horizontal(5),
+                // Fixed bottom section
+                container(bottom)
+                    .width(Length::Fill)
+                    .height(Length::Fixed(240.0)),
+            ],
+            rule::vertical(2),
+            self.gain_view(state).map(PageMessage::AudioConfig)
         ]
         .into()
     }

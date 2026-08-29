@@ -217,8 +217,8 @@ fn spawn_iced_window(
     let mut window_settings = window::Settings {
         exit_on_close_request: false,
         icon: Some(load_icon_iced(ICON)),
-        size: Size::new(1024., 500.),
-        min_size: Some(Size::new(1024., 500.)),
+        size: Size::new(1124., 500.),
+        min_size: Some(Size::new(1124., 500.)),
         ..Default::default()
     };
 
