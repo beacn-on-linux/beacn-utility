@@ -18,10 +18,14 @@ use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
-use iced::widget::{button, column, container, row, rule, text};
-use iced::{Alignment, Element, Length, Padding, Task};
+use iced::widget::canvas::{Frame, Geometry};
+use iced::widget::{Canvas, button, canvas, column, container, row, rule, text};
+use iced::{
+    Alignment, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task, Theme, mouse,
+};
 use log::debug;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ConfigMessage {
@@ -37,7 +41,8 @@ pub struct Configuration {
     spectrum_handler: Option<SpectrumHandle>,
     spectrum_data: Option<Arc<Mutex<Vec<f32>>>>,
 
-    //
+    meter_ballistics: MeterBallistics,
+
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
 }
@@ -49,10 +54,9 @@ impl Configuration {
             spectrum_handler: None,
             spectrum_data: None,
 
-            selected_tab: 0,
+            meter_ballistics: MeterBallistics::new(-70.0),
 
-            // WARNING, THINGS MAY DEPEND ON THE ORDER OF THIS LIST!
-            // COMPRESSOR PAGE MUST BE 4
+            selected_tab: 0,
             tab_pages: vec![
                 Box::new(MicrophoneSetup),
                 Box::new(SuppressorPage),
@@ -105,11 +109,27 @@ impl Configuration {
             ConfigMessage::OutputGainChanged,
         );
 
-        container(gain)
-            .width(Length::Fixed(95.0))
-            .height(Length::Fill)
+        let meter = MicMeter {
+            db: self.meter_ballistics.db,
+            peak_db: self.meter_ballistics.peak_db,
+            range_db: (-70.0, 0.0),
+        };
+        let canvas = Canvas::new(meter).height(Length::Fill).width(Length::Fill);
+
+        let canvas_container = container(canvas)
+            .width(Length::Fixed(40.0))
+            .height(Length::FillPortion(60))
             .align_x(Alignment::Center)
-            .padding(8)
+            .padding(8);
+
+        let gain = container(gain)
+            .width(Length::Fixed(95.0))
+            .height(Length::FillPortion(40))
+            .align_x(Alignment::Center)
+            .padding(8);
+
+        column![canvas_container, gain]
+            .align_x(Alignment::Center)
             .into()
     }
 }
@@ -186,6 +206,10 @@ impl AudioPage for Configuration {
             // meter data. Not all pages use this, but we do, so we always need it.
             let msg = ChildMessage::Meters(response);
             let _ = self.tab_pages[self.selected_tab].update(state, msg);
+
+            // Push the fresh raw level into the ballistics; it tracks its own timing
+            // internally and produces a smoothed value + decaying peak line.
+            self.meter_ballistics.advance(response.processed_mic);
         }
 
         // Send a frame tick to the child, in case it needs anything.
@@ -315,5 +339,129 @@ impl Drop for Configuration {
         if let Some(handler) = self.spectrum_handler.take() {
             handler.stop();
         }
+    }
+}
+
+/// Owns the meter's attack/release/peak-hold state and timing, entirely
+/// self-contained. Feed it raw dB readings via `advance()` whenever they
+/// arrive; it tracks real elapsed time internally and produces a smoothed
+/// `db` value plus an independently-decaying `peak_db` value, suitable for
+/// driving a VU-style meter draw without any "stabby" jumpiness.
+struct MeterBallistics {
+    db: f32,
+    peak_db: f32,
+    peak_hold_timer: f32,
+    last_update: Instant,
+
+    attack_tau: f32,
+    release_rate: f32,
+    peak_hold_time: f32,
+    peak_release_rate: f32,
+}
+
+impl MeterBallistics {
+    fn new(floor_db: f32) -> Self {
+        Self {
+            db: floor_db,
+            peak_db: floor_db,
+            peak_hold_timer: 0.0,
+            last_update: Instant::now(),
+
+            attack_tau: 0.03,
+            release_rate: 90.0,      // dB/s fall rate
+            peak_hold_time: 0.2,     // Seconds until the peak starts to fall
+            peak_release_rate: 90.0, // dB/sec peak fall rate
+        }
+    }
+
+    fn advance(&mut self, target_db: f32) {
+        let now = Instant::now();
+        let dt = now.duration_since(self.last_update).as_secs_f32().min(0.1);
+        self.last_update = now;
+
+        if target_db > self.db {
+            let alpha = 1.0 - (-dt / self.attack_tau).exp();
+            self.db += (target_db - self.db) * alpha;
+        } else {
+            self.db = (self.db - self.release_rate * dt).max(target_db);
+        }
+
+        if target_db >= self.peak_db {
+            self.peak_db = target_db;
+            self.peak_hold_timer = self.peak_hold_time;
+        } else if self.peak_hold_timer > 0.0 {
+            self.peak_hold_timer -= dt;
+        } else {
+            self.peak_db = (self.peak_db - self.peak_release_rate * dt).max(target_db);
+        }
+    }
+}
+
+struct MicMeter {
+    db: f32,
+    peak_db: f32,
+    range_db: (f32, f32),
+}
+
+impl MicMeter {
+    /// Fraction in [0,1] of the track height that a dB value covers.
+    fn magnitude_fraction(&self, db: f32) -> f32 {
+        let (min_db, max_db) = self.range_db;
+        let span = (max_db - min_db).abs().max(f32::EPSILON);
+        ((db - min_db) / span).clamp(0.0, 1.0)
+    }
+
+    /// Vertical pixel position for a specific DB value
+    fn y_for_db(&self, db: f32, track_top: f32, track_height: f32) -> f32 {
+        track_top + track_height * (1.0 - self.magnitude_fraction(db))
+    }
+}
+
+impl<Message> canvas::Program<Message> for MicMeter {
+    type State = ();
+
+    fn draw(
+        &self,
+        _: &Self::State,
+        renderer: &Renderer,
+        theme: &Theme,
+        bounds: Rectangle,
+        _: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+        let palette = theme.extended_palette();
+
+        // Track background
+        frame.fill_rectangle(
+            Point::new(0.0, 0.0),
+            Size::new(bounds.size().width, bounds.size().height),
+            palette.background.strong.color,
+        );
+
+        let anchor_y = bounds.size().height;
+        let value_y = self.y_for_db(self.db, 0.0, bounds.size().height);
+        let (fill_y, fill_height) = if value_y <= anchor_y {
+            (value_y, anchor_y - value_y)
+        } else {
+            (anchor_y, value_y - anchor_y)
+        };
+        frame.fill_rectangle(
+            Point::new(0.0, fill_y),
+            Size::new(bounds.size().width, fill_height),
+            palette.primary.weak.color,
+        );
+
+        // Peak-hold indicator line
+        const PEAK_LINE_HEIGHT: f32 = 2.0;
+        if self.peak_db > self.range_db.0 {
+            let peak_y = self.y_for_db(self.peak_db, 0.0, bounds.size().height);
+            frame.fill_rectangle(
+                Point::new(0.0, (peak_y - PEAK_LINE_HEIGHT).max(0.0)),
+                Size::new(bounds.size().width, PEAK_LINE_HEIGHT),
+                palette.primary.strong.color,
+            );
+        }
+
+        vec![frame.into_geometry()]
     }
 }
