@@ -13,6 +13,7 @@ use crate::ui::utility::pipewire::{
 };
 use crate::ui::widgets::helpers::composite::draw_range;
 use crate::ui::widgets::helpers::tabs::render_tab;
+use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::manager::DeviceType;
@@ -49,11 +50,14 @@ impl Configuration {
             spectrum_data: None,
 
             selected_tab: 0,
+
+            // WARNING, THINGS MAY DEPEND ON THE ORDER OF THIS LIST!
+            // COMPRESSOR PAGE MUST BE 4
             tab_pages: vec![
                 Box::new(MicrophoneSetup),
                 Box::new(SuppressorPage),
                 Box::new(ExpanderPage),
-                Box::new(CompressorPage),
+                Box::new(CompressorPage::new()),
                 Box::new(HeadphonesPage),
             ],
         }
@@ -172,7 +176,18 @@ impl AudioPage for Configuration {
         self.equaliser.clear();
     }
 
-    fn on_tick(&mut self, _state: &mut AudioState) -> Task<PageMessage> {
+    fn on_tick(&mut self, state: &mut AudioState) -> Task<PageMessage> {
+        // Ok, let's try and feed compressor data :D
+        let message = BulkMessage::GetMeters;
+        if let Ok(meters) = state.handle_bulk_message(message)
+            && let BulkMessage::Meters(response) = meters
+        {
+            // Send a message to the active config page, notifying it that we have some new
+            // meter data. Not all pages use this, but we do, so we always need it.
+            let msg = ChildMessage::Meters(response);
+            let _ = self.tab_pages[self.selected_tab].update(state, msg);
+        }
+
         let Some(handler) = self.spectrum_handler.as_mut() else {
             return Task::none();
         };
