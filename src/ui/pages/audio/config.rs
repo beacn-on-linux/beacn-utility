@@ -21,7 +21,8 @@ use beacn_lib::types::HasRange;
 use iced::widget::canvas::{Frame, Geometry};
 use iced::widget::{Canvas, button, canvas, column, container, row, rule, text};
 use iced::{
-    Alignment, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task, Theme, mouse,
+    Alignment, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task, Theme,
+    mouse,
 };
 use log::debug;
 use std::sync::{Arc, Mutex};
@@ -436,6 +437,30 @@ impl<Message> canvas::Program<Message> for MicMeter {
             Point::new(0.0, 0.0),
             Size::new(bounds.size().width, bounds.size().height),
             palette.background.strong.color,
+        );
+
+        // 'Peak' Area
+        let peak = Color {
+            a: 0.4,
+            ..palette.warning.weak.color
+        };
+        let peak_bottom = self.y_for_db(-5.0, 0.0, bounds.size().height);
+        frame.fill_rectangle(
+            Point::new(0.0, 0.0),
+            Size::new(bounds.size().width, peak_bottom),
+            peak,
+        );
+
+        // 'Good' Area
+        let good = Color {
+            a: 0.4,
+            ..palette.success.weak.color
+        };
+        let good_bottom = self.y_for_db(-15.0, 0.0, bounds.size().height);
+        frame.fill_rectangle(
+            Point::new(0.0, peak_bottom),
+            Size::new(bounds.size().width, good_bottom - peak_bottom),
+            good,
         );
 
         let anchor_y = bounds.size().height;
