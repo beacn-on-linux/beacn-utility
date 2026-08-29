@@ -16,6 +16,7 @@ use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum ChildMessage {
+    OnTick,
     State(Message),
     Meters(MetersResponse),
     Expander(ExpanderMessage),

@@ -188,6 +188,10 @@ impl AudioPage for Configuration {
             let _ = self.tab_pages[self.selected_tab].update(state, msg);
         }
 
+        // Send a frame tick to the child, in case it needs anything.
+        let msg = ChildMessage::OnTick;
+        let _ = self.tab_pages[self.selected_tab].update(state, msg);
+
         let Some(handler) = self.spectrum_handler.as_mut() else {
             return Task::none();
         };
