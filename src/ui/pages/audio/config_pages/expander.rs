@@ -390,6 +390,29 @@ impl<Message> canvas::Program<Message> for DbGraph {
 
                 let start_hue = hues[i];
                 let end_hue = hues[i + 1];
+
+                // Most segments don't cross a colour state at all - the input either stays above
+                // threshold, or stays fully attenuated below it. Use one stroke for those.
+                if (start_hue - end_hue).abs() < 0.01 {
+                    let flat_path = Path::new(|builder| {
+                        builder.move_to(start);
+                        builder.bezier_curve_to(control_1, control_2, end);
+                    });
+
+                    frame.stroke(
+                        &flat_path,
+                        Stroke {
+                            style: Style::Solid(hsl_to_rgb(start_hue, 1.0, 0.45)),
+                            width: LINE_WIDTH,
+                            line_cap: LineCap::Round,
+                            line_join: LineJoin::Round,
+                            ..Stroke::default()
+                        },
+                    );
+
+                    continue;
+                }
+
                 let mut previous_point = start;
                 for step in 1..=GRADIENT_STEPS {
                     let t = step as f32 / GRADIENT_STEPS as f32;
