@@ -67,7 +67,7 @@ impl Configuration {
             tab_pages: vec![
                 Box::new(MicrophoneSetup),
                 Box::new(SuppressorPage::new()),
-                Box::new(ExpanderPage),
+                Box::new(ExpanderPage::new()),
                 Box::new(CompressorPage::new()),
                 Box::new(HeadphonesPage),
             ],
