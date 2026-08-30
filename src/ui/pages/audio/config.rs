@@ -312,6 +312,8 @@ impl AudioPage for Configuration {
 
                 ConfigMessage::SelectTab(tab_index) => {
                     self.selected_tab = tab_index;
+                    self.tab_pages[self.selected_tab].on_open(state);
+
                     Task::none()
                 }
 

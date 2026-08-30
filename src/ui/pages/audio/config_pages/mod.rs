@@ -31,6 +31,8 @@ pub trait ConfigPage {
         Task::none()
     }
 
+    fn on_open(&mut self, _state: &mut AudioState) {}
+
     fn view(&self, device: &AudioState) -> Element<'_, ChildMessage>;
 }
 
