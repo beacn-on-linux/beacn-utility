@@ -10,7 +10,7 @@ use beacn_lib::types::{HasRange, TimeFrame};
 use iced::advanced::mouse;
 use iced::widget::canvas::{Cache, LineCap, LineJoin, Path, Stroke, Style};
 use iced::widget::{Space, canvas, checkbox, column, row, rule};
-use iced::{Color, Element, Length, Point, Rectangle, Renderer, Task, Theme};
+use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
@@ -30,6 +30,7 @@ pub struct ExpanderPage {
 #[derive(Debug, Clone)]
 pub(crate) enum ExpanderMessage {
     SetEnabled(bool),
+    SetThreshold(i8),
 }
 
 impl ConfigPage for ExpanderPage {
@@ -74,9 +75,23 @@ impl ConfigPage for ExpanderPage {
                     state.handle_message(message).expect("Failed");
                 }
             }
+            ExpanderMessage::SetThreshold(value) => {
+                let expander_mode = state.expander.mode;
+                let msg = Expander::Threshold(expander_mode, value.into());
+                let msg = Message::Expander(msg);
+
+                state.handle_message(msg).expect("Failed");
+                self.graph.set_threshold(value.into());
+            }
         }
 
         Task::none()
+    }
+
+    fn on_open(&mut self, state: &mut AudioState) {
+        let mode = state.expander.mode;
+        let values = &state.expander.values[mode];
+        self.graph.set_threshold(values.threshold as f32)
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
@@ -112,9 +127,7 @@ impl ConfigPage for ExpanderPage {
         let range = ExpanderThreshold::range();
         let range = (*range.start() as i8)..=(*range.end() as i8);
         let threshold = draw_horizontal_range("Threshold", value, range, "dB", move |v| {
-            let msg = Expander::Threshold(expander_mode, ExpanderThreshold(v as f32));
-            let msg = Message::Expander(msg);
-            ChildMessage::State(msg)
+            ChildMessage::Expander(ExpanderMessage::SetThreshold(v))
         });
 
         // In simple mode, we just have an 'amount', but that internally maps to the Ratio
@@ -403,6 +416,18 @@ impl<Message> canvas::Program<Message> for DbGraph {
                     previous_point = current_point;
                 }
             }
+
+            // Draw the threshold line
+            let t = ((self.threshold - db_min) / range).clamp(0.0, 1.0);
+            let start = Point::new(0.0, bounds.height - t * bounds.height);
+            frame.fill_rectangle(
+                start,
+                Size {
+                    width: bounds.width,
+                    height: 2.0,
+                },
+                Color::WHITE,
+            );
         });
 
         vec![geometry]
