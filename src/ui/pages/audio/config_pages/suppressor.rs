@@ -107,7 +107,7 @@ impl ConfigPage for SuppressorPage {
         let canvas = Canvas::new(Suppression {
             base: self.baseline,
             live: self.current,
-            range_db: (-160.0, 0.0),
+            range_db: (-200.0, 100.0),
         })
         .width(Length::Fill)
         .height(Length::Fill);
