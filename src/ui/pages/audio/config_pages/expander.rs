@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 
 // Run this data sender at 20pps
-const POINTS_PER_SECOND: u64 = 5;
+const POINTS_PER_SECOND: u64 = 10;
 const POINT_FREQUENCY_MILLIS: Duration = Duration::from_millis(1000 / POINTS_PER_SECOND);
 const TOTAL_POINTS: u64 = POINTS_PER_SECOND * 3;
 
