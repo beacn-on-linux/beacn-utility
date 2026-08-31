@@ -25,11 +25,23 @@ const TO_U32: fn(&String) -> Option<u32> = |s: &String| s.parse::<u32>().ok();
 #[cfg(target_os = "linux")]
 const TO_BOOL: fn(&String) -> Option<bool> = |s: &String| s.parse::<bool>().ok();
 
-pub type Process = Box<dyn FnMut(&[f32]) + Send + Sync>;
+pub type InputProcess = Box<dyn FnMut(&[f32]) + Send + Sync>;
 #[allow(unused)]
-pub struct ChannelStream {
+pub struct InputStream {
     pub channel_id: u32,
-    pub process: Process,
+    pub process: InputProcess,
+}
+
+pub type OutputProcess = Box<dyn FnMut(&mut [f32]) + Send + Sync>;
+#[allow(unused)]
+pub struct OutputStream {
+    pub channel_id: u32,
+    pub process: OutputProcess,
+}
+
+pub enum PipewireStream {
+    Input(Vec<InputStream>),
+    Output(Vec<OutputStream>),
 }
 
 #[derive(Debug, Clone)]
