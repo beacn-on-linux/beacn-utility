@@ -8,12 +8,12 @@
 // than having to infer it from the outside.
 
 use crate::ui::utility::pipewire::ffi::{
-    PW_DIRECTION_INPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK, PW_TYPE_INTERFACE_NODE,
-    PW_TYPE_INTERFACE_PORT, PipeWire, PortInfo, PwCore, PwNodeProxy, PwPortProxy, PwProperties,
-    PwProxy, PwStream, StreamBuffer, StreamCallbacks, stream_flags,
+    PW_DIRECTION_INPUT, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK,
+    PW_TYPE_INTERFACE_NODE, PW_TYPE_INTERFACE_PORT, PipeWire, PortInfo, PwCore, PwNodeProxy,
+    PwPortProxy, PwProperties, PwProxy, PwStream, StreamBuffer, StreamCallbacks, stream_flags,
 };
 use crate::ui::utility::pipewire::pod::build_audio_pod;
-use crate::ui::utility::pipewire::{InputStream, TO_U32};
+use crate::ui::utility::pipewire::{InputStream, PipewireStream, TO_U32};
 use anyhow::Result;
 use log::debug;
 use std::cell::{Cell, Ref, RefCell, RefMut};
@@ -31,10 +31,15 @@ fn next_instance_id() -> u64 {
     COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
-pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
+pub fn get_audio(link: PipewireStream, stop: Arc<AtomicBool>) -> Result<()> {
     debug!("Initialising Pipewire..");
     let pw = PipeWire::load()?;
     pw.init();
+
+    let is_input = match link {
+        PipewireStream::Input(_) => true,
+        PipewireStream::Output(_) => false,
+    };
 
     // OK, we have everything we need from the source side, so we need to connect to pipewire,
     // sync everything, then wait for our stream ports to appear.
@@ -182,10 +187,13 @@ pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
                     };
                     let mut port_proxy = PwPortProxy::from_proxy(proxy);
                     let _ = port_proxy.add_info_listener(move |info| {
+                        // Only pull ports which are the direction we need
+                        let is_needed = info.direction_is_output == is_input;
+
                         let Some(parent_id) = stream_node_id.borrow().as_ref().copied() else {
                             // We have no way of pre-emptively knowing if this port is bound to our
                             // stream node or not, so we'll store it for now and parse it later.
-                            if !info.direction_is_output {
+                            if is_needed {
                                 port_initial_cache.borrow_mut().push(info);
                             }
                             return;
@@ -195,8 +203,7 @@ pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
                             return;
                         }
 
-                        // We are *ONLY* interested in input ports for our device
-                        if info.direction_is_output {
+                        if is_needed {
                             return;
                         }
                         handle_port(parent_id, &mut stream_known_ports.borrow_mut(), &info);
@@ -255,13 +262,26 @@ pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
 
     let stream_wanted_ports_inner = stream_wanted_ports.clone();
     stream.borrow_mut().add_listener(StreamCallbacks {
-        process: Some(Box::new(move |buf: StreamBuffer| {
+        process: Some(Box::new(move |mut buf: StreamBuffer| {
             for ch in 0..buf.channel_count() {
-                let samples = buf.channel_samples(ch);
-                if !samples.is_empty() {
-                    // Ok, send this across to the processor..
-                    let process = &mut stream_wanted_ports_inner.borrow_mut()[ch].process;
-                    process(samples);
+                match &mut *stream_wanted_ports_inner.borrow_mut() {
+                    // For input, we send the samples out immutably to be processed
+                    PipewireStream::Input(stream) => {
+                        let samples = buf.channel_samples(ch);
+                        if !samples.is_empty() {
+                            let process = &mut stream[ch].process;
+                            process(samples);
+                        }
+                    }
+
+                    // For output, we send the buffer out to be filled
+                    PipewireStream::Output(stream) => {
+                        let samples = buf.channel_samples_mut(ch);
+                        if !samples.is_empty() {
+                            let process = &mut stream[ch].process;
+                            process(samples);
+                        }
+                    }
                 }
             }
         })),
@@ -269,8 +289,13 @@ pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
     })?;
 
     let pod_bytes = build_audio_pod(48000, &channels);
+    let direction = match &*stream_wanted_ports.borrow() {
+        PipewireStream::Input(_) => PW_DIRECTION_INPUT,
+        PipewireStream::Output(_) => PW_DIRECTION_OUTPUT,
+    };
+
     stream.borrow().connect(
-        PW_DIRECTION_INPUT,
+        direction,
         PW_ID_ANY,
         stream_flags::MAP_BUFFERS,
         &[&pod_bytes],
@@ -336,7 +361,7 @@ fn handle_port(find_node: u32, known: &mut RefMut<ChannelMap>, info: &PortInfo) 
 
 fn do_links(
     mut proxies: RefMut<Vec<PwProxy>>,
-    wanted: Ref<Vec<InputStream>>,
+    wanted: Ref<PipewireStream>,
     received: Ref<ChannelMap>,
     pw: Ref<PipeWire>,
     core: RefMut<PwCore>,
@@ -344,21 +369,51 @@ fn do_links(
     // We need to make sure the received ports are correctly indexed to the wanted ports, so this
     // is gonna be a little hacky. We can probably solve this later by resolving AUX to the internal
     // ID, then referencing against that.. Until then..
-    for (index, src) in wanted.iter().enumerate() {
-        let find_port = format!("AUX{}", index);
-        if let Some(target) = received.get(&find_port) {
-            let Ok(mut props) = PwProperties::new(&pw) else {
-                continue;
-            };
-            let output = src.channel_id.to_string();
-            let input = target.to_string();
+    match &*wanted {
+        PipewireStream::Input(streams) => {
+            for (index, src) in streams.iter().enumerate() {
+                let find_port = format!("AUX{}", index);
+                if let Some(target) = received.get(&find_port) {
+                    let Ok(mut props) = PwProperties::new(&pw) else {
+                        continue;
+                    };
 
-            props.set("link.output.port", &output).unwrap();
-            props.set("link.input.port", &input).unwrap();
+                    // For input streams, we connect the output port of the node, to our input port
+                    let output = src.channel_id.to_string();
+                    let input = target.to_string();
 
-            let factory = "link-factory";
-            if let Ok(link) = core.create_object(factory, PW_TYPE_INTERFACE_LINK, 3, &props) {
-                proxies.push(link);
+                    props.set("link.output.port", &output).unwrap();
+                    props.set("link.input.port", &input).unwrap();
+
+                    let factory = "link-factory";
+                    if let Ok(link) = core.create_object(factory, PW_TYPE_INTERFACE_LINK, 3, &props)
+                    {
+                        proxies.push(link);
+                    }
+                }
+            }
+        }
+        PipewireStream::Output(streams) => {
+            for (index, target) in streams.iter().enumerate() {
+                let find_port = format!("AUX{}", index);
+                if let Some(source) = received.get(&find_port) {
+                    let Ok(mut props) = PwProperties::new(&pw) else {
+                        continue;
+                    };
+
+                    // For output streams, send connect our output to the target's input
+                    let output = source.to_string();
+                    let input = target.channel_id.to_string();
+
+                    props.set("link.output.port", &output).unwrap();
+                    props.set("link.input.port", &input).unwrap();
+
+                    let factory = "link-factory";
+                    if let Ok(link) = core.create_object(factory, PW_TYPE_INTERFACE_LINK, 3, &props)
+                    {
+                        proxies.push(link);
+                    }
+                }
             }
         }
     }

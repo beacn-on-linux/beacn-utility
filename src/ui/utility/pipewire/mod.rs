@@ -44,6 +44,15 @@ pub enum PipewireStream {
     Output(Vec<OutputStream>),
 }
 
+impl PipewireStream {
+    pub fn len(&self) -> usize {
+        match self {
+            PipewireStream::Input(v) => v.len(),
+            PipewireStream::Output(v) => v.len(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[allow(unused)]
 pub struct PipeWireNode {
