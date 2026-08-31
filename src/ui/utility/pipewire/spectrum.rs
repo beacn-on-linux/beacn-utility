@@ -1,5 +1,5 @@
 use crate::ui::utility::pipewire::audio::get_audio;
-use crate::ui::utility::pipewire::{ChannelStream, SpectrumData, SpectrumHandle};
+use crate::ui::utility::pipewire::{InputStream, SpectrumData, SpectrumHandle};
 use log::debug;
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
@@ -51,7 +51,7 @@ fn analyser_inner2(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<Ato
 
         // Move everything into the handling closure.
         debug!("Creating stream for port: {:?} (inner)", port);
-        let stream = ChannelStream {
+        let stream = InputStream {
             channel_id: *port,
             process: Box::new(move |samples| {
                 handler.push_incoming_samples(samples);

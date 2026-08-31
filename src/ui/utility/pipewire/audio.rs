@@ -8,12 +8,12 @@
 // than having to infer it from the outside.
 
 use crate::ui::utility::pipewire::ffi::{
-    CaptureBuffer, PW_DIRECTION_INPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK, PW_TYPE_INTERFACE_NODE,
+    PW_DIRECTION_INPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK, PW_TYPE_INTERFACE_NODE,
     PW_TYPE_INTERFACE_PORT, PipeWire, PortInfo, PwCore, PwNodeProxy, PwPortProxy, PwProperties,
-    PwProxy, PwStream, StreamCallbacks, stream_flags,
+    PwProxy, PwStream, StreamBuffer, StreamCallbacks, stream_flags,
 };
 use crate::ui::utility::pipewire::pod::build_audio_pod;
-use crate::ui::utility::pipewire::{ChannelStream, TO_U32};
+use crate::ui::utility::pipewire::{InputStream, TO_U32};
 use anyhow::Result;
 use log::debug;
 use std::cell::{Cell, Ref, RefCell, RefMut};
@@ -31,7 +31,7 @@ fn next_instance_id() -> u64 {
     COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
-pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> {
+pub fn get_audio(link: Vec<InputStream>, stop: Arc<AtomicBool>) -> Result<()> {
     debug!("Initialising Pipewire..");
     let pw = PipeWire::load()?;
     pw.init();
@@ -255,7 +255,7 @@ pub fn get_audio(link: Vec<ChannelStream>, stop: Arc<AtomicBool>) -> Result<()> 
 
     let stream_wanted_ports_inner = stream_wanted_ports.clone();
     stream.borrow_mut().add_listener(StreamCallbacks {
-        process: Some(Box::new(move |buf: CaptureBuffer| {
+        process: Some(Box::new(move |buf: StreamBuffer| {
             for ch in 0..buf.channel_count() {
                 let samples = buf.channel_samples(ch);
                 if !samples.is_empty() {
@@ -336,7 +336,7 @@ fn handle_port(find_node: u32, known: &mut RefMut<ChannelMap>, info: &PortInfo) 
 
 fn do_links(
     mut proxies: RefMut<Vec<PwProxy>>,
-    wanted: Ref<Vec<ChannelStream>>,
+    wanted: Ref<Vec<InputStream>>,
     received: Ref<ChannelMap>,
     pw: Ref<PipeWire>,
     core: RefMut<PwCore>,
