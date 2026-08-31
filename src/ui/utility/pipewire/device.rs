@@ -3,7 +3,9 @@ use crate::ui::utility::pipewire::ffi::{
     PW_VERSION_DEVICE_EVENTS, PW_VERSION_NODE_EVENTS, PipeWire, PortInfo, PwDeviceProxy,
     PwNodeProxy, PwPortProxy,
 };
-use crate::ui::utility::pipewire::{PipeWireNode, PipeWireNodeType, TO_BOOL, TO_U32};
+use crate::ui::utility::pipewire::{
+    PipeWireNode, PipeWireNodeType, PipeWirePort, PipeWirePortType, TO_BOOL, TO_U32,
+};
 use anyhow::Result;
 use log::{debug, error};
 use std::cell::{Cell, RefCell};
@@ -276,21 +278,40 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
         .filter_map(|node| {
             // Ok, we need to locate the channels for this node, we know how many to expect.
             let mut channels = HashMap::new();
+            let mut ports = vec![];
             port_cache.borrow().iter().for_each(|port| {
                 let name = port.props.get("audio.channel").map(String::as_str);
                 let id = port.props.get("object.id").and_then(TO_U32);
                 let is_node = port.props.get("node.id").and_then(TO_U32) == Some(node.id);
+                let is_monitor = port.props.get("port.monitor").and_then(TO_BOOL);
 
                 // We only ever want outputs, this will pull in the monitor ports for Sinks which
                 // we can connect to.
                 let is_direction = port.direction_is_output;
 
                 if let Some(name) = name
+                    && let Some(id) = id
                     && is_node
                     && is_direction
-                    && id.is_some()
                 {
-                    channels.insert(name.to_string(), id.unwrap());
+                    channels.insert(name.to_string(), id);
+                }
+
+                if let Some(name) = name
+                    && let Some(id) = id
+                    && is_node
+                {
+                    let port_type = match is_monitor {
+                        Some(true) => PipeWirePortType::Monitor,
+                        Some(false) if is_direction => PipeWirePortType::Output,
+                        _ => PipeWirePortType::Input,
+                    };
+
+                    ports.push(PipeWirePort {
+                        name: name.to_string(),
+                        id,
+                        port_type,
+                    })
                 }
             });
 
@@ -310,6 +331,7 @@ fn find_pipewire_nodes_for_card(card: u32) -> Result<Vec<PipeWireNode>> {
                 is_split_child: node.is_split_child,
                 node_type: node.media_class,
                 channels,
+                ports,
             })
         })
         .collect();

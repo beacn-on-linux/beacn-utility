@@ -52,6 +52,7 @@ pub struct PipeWireNode {
     pub is_split_child: bool,
     pub node_type: PipeWireNodeType,
     pub channels: HashMap<String, u32>,
+    pub ports: Vec<PipeWirePort>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +60,22 @@ pub struct PipeWireNode {
 pub enum PipeWireNodeType {
     Source,
     Sink,
+}
+
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct PipeWirePort {
+    pub name: String,
+    pub id: u32,
+    pub port_type: PipeWirePortType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
+pub enum PipeWirePortType {
+    Input,
+    Output,
+    Monitor,
 }
 
 type SpectrumData = Vec<Arc<Mutex<Vec<f32>>>>;
