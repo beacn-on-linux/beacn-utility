@@ -1,4 +1,4 @@
-use crate::ui::utility::pipewire::audio::get_audio;
+use crate::ui::utility::pipewire::platform::audio::get_audio;
 use crate::ui::utility::pipewire::{InputStream, PipewireStream, SpectrumData, SpectrumHandle};
 use log::debug;
 use rustfft::{FftPlanner, num_complex::Complex};

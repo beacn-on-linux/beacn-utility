@@ -7,13 +7,14 @@
 // I might, in future, wrap this into a struct, so a clean drop will take care of shutdown, rather
 // than having to infer it from the outside.
 
-use crate::ui::utility::pipewire::ffi::{
+use crate::ui::utility::pipewire::PipewireStream;
+use crate::ui::utility::pipewire::platform::TO_U32;
+use crate::ui::utility::pipewire::platform::ffi::{
     PW_DIRECTION_INPUT, PW_DIRECTION_OUTPUT, PW_ID_ANY, PW_TYPE_INTERFACE_LINK,
     PW_TYPE_INTERFACE_NODE, PW_TYPE_INTERFACE_PORT, PipeWire, PortInfo, PwCore, PwNodeProxy,
     PwPortProxy, PwProperties, PwProxy, PwStream, StreamBuffer, StreamCallbacks, stream_flags,
 };
-use crate::ui::utility::pipewire::pod::build_audio_pod;
-use crate::ui::utility::pipewire::{InputStream, PipewireStream, TO_U32};
+use crate::ui::utility::pipewire::platform::pod::build_audio_pod;
 use anyhow::Result;
 use log::debug;
 use std::cell::{Cell, Ref, RefCell, RefMut};

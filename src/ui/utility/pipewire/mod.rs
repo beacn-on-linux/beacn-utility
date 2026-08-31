@@ -1,29 +1,7 @@
-use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-
-#[cfg(target_os = "linux")]
-pub mod device;
-
-#[cfg(target_os = "linux")]
-pub mod spectrum;
-
-#[cfg(target_os = "linux")]
-mod audio;
-
-#[cfg(target_os = "linux")]
-mod ffi;
-
-#[cfg(target_os = "linux")]
-mod pod;
-
-#[cfg(target_os = "linux")]
-const TO_U32: fn(&String) -> Option<u32> = |s: &String| s.parse::<u32>().ok();
-
-#[cfg(target_os = "linux")]
-const TO_BOOL: fn(&String) -> Option<bool> = |s: &String| s.parse::<bool>().ok();
 
 pub type InputProcess = Box<dyn FnMut(&[f32]) + Send + Sync>;
 #[allow(unused)]
@@ -105,29 +83,42 @@ impl SpectrumHandle {
     }
 }
 
-#[allow(unused_variables)]
-pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireNode>> {
-    #[cfg(target_os = "linux")]
-    {
+#[cfg(target_os = "linux")]
+pub mod platform {
+    mod audio;
+    mod ffi;
+    mod pod;
+
+    pub mod device;
+    pub mod spectrum;
+
+    use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
+    use anyhow::Result;
+
+    const TO_U32: fn(&String) -> Option<u32> = |s: &String| s.parse::<u32>().ok();
+    const TO_BOOL: fn(&String) -> Option<bool> = |s: &String| s.parse::<bool>().ok();
+
+    pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireNode>> {
         device::find_pipewire_nodes_for_usb(bus, address)
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(vec![])
+
+    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+        spectrum::start_spectrum_analyser(ports, sample_rate)
     }
 }
 
-// TODO: This should probably result :D
-#[allow(unused_variables)]
-pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
-    #[cfg(target_os = "linux")]
-    return spectrum::start_spectrum_analyser(ports, sample_rate);
+#[cfg(not(target_os = "linux"))]
+pub mod platform {
+    use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
+    use anyhow::Result;
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        // Reason it should result.. Should be noted that you can't call this without ports
-        // and you can't get ports without PipeWireNodes.. So this function should, in theory,
-        // NEVER be called on non-linux systems.
+    pub fn find_pipewire_nodes_for_usb(_: u8, _: u8) -> Result<Vec<PipeWireNode>> {
+        Ok(vec![])
+    }
+
+    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+        // This shouldn't be called on non-linux systems.
+
         let handle = thread::spawn(|| {});
         SpectrumHandle {
             task: handle,

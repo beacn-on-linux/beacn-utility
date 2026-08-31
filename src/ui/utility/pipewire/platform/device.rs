@@ -1,10 +1,11 @@
-use crate::ui::utility::pipewire::ffi::{
+use crate::ui::utility::pipewire::platform::ffi::{
     PW_TYPE_INTERFACE_DEVICE, PW_TYPE_INTERFACE_NODE, PW_TYPE_INTERFACE_PORT,
     PW_VERSION_DEVICE_EVENTS, PW_VERSION_NODE_EVENTS, PipeWire, PortInfo, PwDeviceProxy,
     PwNodeProxy, PwPortProxy,
 };
+use crate::ui::utility::pipewire::platform::{TO_BOOL, TO_U32};
 use crate::ui::utility::pipewire::{
-    PipeWireNode, PipeWireNodeType, PipeWirePort, PipeWirePortType, TO_BOOL, TO_U32,
+    PipeWireNode, PipeWireNodeType, PipeWirePort, PipeWirePortType,
 };
 use anyhow::Result;
 use log::{debug, error};
