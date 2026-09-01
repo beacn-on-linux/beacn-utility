@@ -563,39 +563,39 @@ impl AudioState {
             Message::EQMicrophone(e) => match e {
                 MicEqualiser::Mode(mode) => self.eq_microphone.mode = mode,
                 MicEqualiser::Type(mode, band, value) => {
-                    self.eq_microphone.bands[mode][band.into()].band_type = value.into()
+                    self.eq_microphone.bands[mode][band].band_type = value
                 }
                 MicEqualiser::Gain(mode, band, value) => {
-                    self.eq_microphone.bands[mode][band.into()].gain = value.to_inner()
+                    self.eq_microphone.bands[mode][band].gain = value.to_inner()
                 }
                 MicEqualiser::Frequency(mode, band, value) => {
-                    self.eq_microphone.bands[mode][band.into()].frequency = value.to_inner() as u32
+                    self.eq_microphone.bands[mode][band].frequency = value.to_inner() as u32
                 }
                 MicEqualiser::Q(mode, band, value) => {
-                    self.eq_microphone.bands[mode][band.into()].q = value.to_inner()
+                    self.eq_microphone.bands[mode][band].q = value.to_inner()
                 }
                 MicEqualiser::Enabled(mode, band, value) => {
-                    self.eq_microphone.bands[mode][band.into()].enabled = value
+                    self.eq_microphone.bands[mode][band].enabled = value
                 }
                 _ => unreachable!(),
             },
             Message::EQHeadphones(h) => match h {
                 DEQHeadphones::Linked(linked) => self.eq_headphones.linked = linked,
                 DEQHeadphones::Type(channel, band, value) => {
-                    self.eq_headphones.bands[channel][band.into()].band_type = value.into()
+                    self.eq_headphones.bands[channel][band].band_type = value
                 }
                 DEQHeadphones::Gain(channel, band, value) => {
-                    self.eq_headphones.bands[channel][band.into()].gain = value.to_inner()
+                    self.eq_headphones.bands[channel][band].gain = value.to_inner()
                 }
                 DEQHeadphones::Frequency(channel, band, value) => {
                     let value = value.to_inner() as u32;
-                    self.eq_headphones.bands[channel][band.into()].frequency = value
+                    self.eq_headphones.bands[channel][band].frequency = value
                 }
                 DEQHeadphones::Q(channel, band, value) => {
-                    self.eq_headphones.bands[channel][band.into()].q = value.to_inner()
+                    self.eq_headphones.bands[channel][band].q = value.to_inner()
                 }
                 DEQHeadphones::Enabled(channel, band, value) => {
-                    self.eq_headphones.bands[channel][band.into()].enabled = value
+                    self.eq_headphones.bands[channel][band].enabled = value
                 }
                 _ => unreachable!(),
             },

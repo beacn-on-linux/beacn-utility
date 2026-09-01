@@ -282,6 +282,7 @@ impl BeacnUtility {
                     .map(Message::Page);
 
                 // Before we proceed, should we still be allowed to be on this page?
+                #[allow(clippy::borrowed_box)]
                 let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
                 if !show(&device.pages[page_index]) {
                     // Firstly, find a page that CAN be shown..
@@ -340,7 +341,7 @@ impl BeacnUtility {
                 return task.map(move |_| Message::WindowOpened(id));
             }
             Message::WindowOpened(_id) => {}
-            
+
             #[allow(unused)]
             Message::WindowCloseRequested(id) => {
                 self.active_id = None;
