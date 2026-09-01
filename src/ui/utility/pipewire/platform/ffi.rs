@@ -1293,14 +1293,27 @@ impl StreamBuffer {
             if channel >= spa_buf.n_datas as usize {
                 return &mut [];
             }
-            let d = &*spa_buf.datas.add(channel);
-            if d.data.is_null() || d.chunk.is_null() {
+            let d = &mut *spa_buf.datas.add(channel);
+            if d.data.is_null() {
                 return &mut [];
             }
-            let chunk = &*d.chunk;
-            let n = (chunk.size as usize) / size_of::<f32>();
-            let ptr = (d.data as *const u8).add(chunk.offset as usize) as *mut f32;
-            std::slice::from_raw_parts_mut(ptr, n)
+
+            // Use the requested size as the expected buffer (if exists, else max)
+            let requested = (*self.raw).requested as usize;
+            let n = if requested > 0 {
+                requested.min(d.maxsize as usize / size_of::<f32>())
+            } else {
+                d.maxsize as usize / size_of::<f32>()
+            };
+
+            // Configure the chunk to send
+            if let Some(chunk) = d.chunk.as_mut() {
+                chunk.offset = 0;
+                chunk.stride = size_of::<f32>() as i32;
+                chunk.size = (n * size_of::<f32>()) as u32;
+            }
+
+            std::slice::from_raw_parts_mut(d.data as *mut f32, n)
         }
     }
 }
