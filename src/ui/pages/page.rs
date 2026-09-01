@@ -35,10 +35,10 @@ pub(crate) trait Page {
     }
 
     /// Called when the page is first opened, allows it to perform setup
-    fn on_open_fn(&mut self, _: &DeviceState) {}
+    fn on_open_fn(&mut self, _: &mut DeviceState) {}
 
     /// Called when the page is closed, allows it to perform cleanup
-    fn on_close_fn(&mut self, _: &DeviceState) {}
+    fn on_close_fn(&mut self, _: &mut DeviceState) {}
 
     /// Called at 30fps, allows periodic updates
     fn on_tick_fn(&mut self, _device: &mut DeviceState) -> Task<PageMessage> {
@@ -65,8 +65,8 @@ macro_rules! page_trait {
                 state.definition().state == DefinitionState::Running
             }
 
-            fn on_open(&mut self, _state: &$state_type) {}
-            fn on_close(&mut self, _state: &$state_type) {}
+            fn on_open(&mut self, _state: &mut $state_type) {}
+            fn on_close(&mut self, _state: &mut $state_type) {}
             fn on_tick(&mut self, _state: &mut $state_type) -> Task<PageMessage> {
                 Task::none()
             }
@@ -91,14 +91,14 @@ macro_rules! page_trait {
                 self.0.should_show(state)
             }
 
-            fn on_open_fn(&mut self, device: &DeviceState) {
+            fn on_open_fn(&mut self, device: &mut DeviceState) {
                 let DeviceState::$variant(state) = device else {
                     unreachable!()
                 };
                 self.0.on_open(state)
             }
 
-            fn on_close_fn(&mut self, device: &DeviceState) {
+            fn on_close_fn(&mut self, device: &mut DeviceState) {
                 let DeviceState::$variant(state) = device else {
                     unreachable!()
                 };

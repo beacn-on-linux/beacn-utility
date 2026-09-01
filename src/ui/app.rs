@@ -174,7 +174,7 @@ impl BeacnUtility {
 
                                 // Trigger the on_open callback for the first visible page
                                 if let Some(device) = self.devices.get_mut(&hash) {
-                                    device.pages[*page].on_open_fn(&device.state);
+                                    device.pages[*page].on_open_fn(&mut device.state);
                                 }
                             }
                         }
@@ -192,7 +192,7 @@ impl BeacnUtility {
                                     self.active_page = Some(*page);
 
                                     // Trigger the on_open callback for this page
-                                    device.pages[*page].on_open_fn(&device.state);
+                                    device.pages[*page].on_open_fn(&mut device.state);
 
                                     break;
                                 }
@@ -250,7 +250,7 @@ impl BeacnUtility {
                 {
                     // We need to try and pull this device from our devices
                     if let Some(device) = self.devices.get_mut(device) {
-                        device.pages[page].on_close_fn(&device.state);
+                        device.pages[page].on_close_fn(&mut device.state);
                     }
                 }
 
@@ -260,7 +260,7 @@ impl BeacnUtility {
                 {
                     self.active_device = Some(device_id.clone());
                     self.active_page = Some(page_id);
-                    device.pages[page_id].on_open_fn(&device.state);
+                    device.pages[page_id].on_open_fn(&mut device.state);
                 }
             }
 
@@ -313,7 +313,7 @@ impl BeacnUtility {
                     && let Some(page) = self.active_page
                     && let Some(device) = self.devices.get_mut(hash)
                 {
-                    device.pages[page].on_open_fn(&device.state);
+                    device.pages[page].on_open_fn(&mut device.state);
                 }
 
                 // Spawn up the window
@@ -332,7 +332,7 @@ impl BeacnUtility {
                     && let Some(page) = self.active_page
                     && let Some(device) = self.devices.get_mut(hash)
                 {
-                    device.pages[page].on_close_fn(&device.state);
+                    device.pages[page].on_close_fn(&mut device.state);
                 }
 
                 return window::close(id);

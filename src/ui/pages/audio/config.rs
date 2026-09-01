@@ -324,7 +324,7 @@ impl AudioPage for Configuration {
         "mic"
     }
 
-    fn on_open(&mut self, state: &AudioState) {
+    fn on_open(&mut self, state: &mut AudioState) {
         self.equaliser.load_device(state);
 
         if self.spectrum_handler.is_some() {
@@ -402,7 +402,7 @@ impl AudioPage for Configuration {
         }
     }
 
-    fn on_close(&mut self, _: &AudioState) {
+    fn on_close(&mut self, state: &mut AudioState) {
         if let Some(handler) = self.spectrum_handler.take() {
             handler.stop();
         }
