@@ -402,7 +402,7 @@ impl AudioPage for Configuration {
         }
     }
 
-    fn on_close(&mut self) {
+    fn on_close(&mut self, _: &AudioState) {
         if let Some(handler) = self.spectrum_handler.take() {
             handler.stop();
         }

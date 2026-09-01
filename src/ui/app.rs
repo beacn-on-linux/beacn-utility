@@ -250,7 +250,7 @@ impl BeacnUtility {
                 {
                     // We need to try and pull this device from our devices
                     if let Some(device) = self.devices.get_mut(device) {
-                        device.pages[page].on_close_fn();
+                        device.pages[page].on_close_fn(&device.state);
                     }
                 }
 
@@ -332,7 +332,7 @@ impl BeacnUtility {
                     && let Some(page) = self.active_page
                     && let Some(device) = self.devices.get_mut(hash)
                 {
-                    device.pages[page].on_close_fn();
+                    device.pages[page].on_close_fn(&device.state);
                 }
 
                 return window::close(id);

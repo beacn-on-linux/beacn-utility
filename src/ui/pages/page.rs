@@ -38,7 +38,7 @@ pub(crate) trait Page {
     fn on_open_fn(&mut self, _: &DeviceState) {}
 
     /// Called when the page is closed, allows it to perform cleanup
-    fn on_close_fn(&mut self) {}
+    fn on_close_fn(&mut self, _: &DeviceState) {}
 
     /// Called at 30fps, allows periodic updates
     fn on_tick_fn(&mut self, _device: &mut DeviceState) -> Task<PageMessage> {
@@ -66,7 +66,7 @@ macro_rules! page_trait {
             }
 
             fn on_open(&mut self, _state: &$state_type) {}
-            fn on_close(&mut self) {}
+            fn on_close(&mut self, _state: &$state_type) {}
             fn on_tick(&mut self, _state: &mut $state_type) -> Task<PageMessage> {
                 Task::none()
             }
@@ -98,8 +98,11 @@ macro_rules! page_trait {
                 self.0.on_open(state)
             }
 
-            fn on_close_fn(&mut self) {
-                self.0.on_close()
+            fn on_close_fn(&mut self, device: &DeviceState) {
+                let DeviceState::$variant(state) = device else {
+                    unreachable!()
+                };
+                self.0.on_close(state)
             }
 
             fn on_tick_fn(&mut self, device: &mut DeviceState) -> Task<PageMessage> {
