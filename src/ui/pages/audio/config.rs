@@ -410,6 +410,9 @@ impl AudioPage for Configuration {
         if let Some(mut handler) = self.loopback_handler.take() {
             handler.stop();
             handler.clear_buffer();
+
+            let msg = Message::Headphones(Headphones::MicFromLoopback(false));
+            let _ = state.handle_message(msg);
         }
 
         // Remove anything that may be cached, we should redraw later.
@@ -590,6 +593,10 @@ impl AudioPage for Configuration {
 impl Drop for Configuration {
     fn drop(&mut self) {
         if let Some(handler) = self.spectrum_handler.take() {
+            handler.stop();
+        }
+
+        if let Some(mut handler) = self.loopback_handler.take() {
             handler.stop();
         }
     }
