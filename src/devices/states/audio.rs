@@ -33,7 +33,6 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use log::warn;
 use strum_macros::EnumIter;
 
 type Rgb = [u8; 3];
@@ -203,6 +202,24 @@ pub struct Subwoofer {
 
 impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
+        let result = self.handle_message_inner(message);
+        if let Err(e) = &result {
+            self.device_state.state = LoadState::Error;
+            self.device_state.errors.push(ErrorMessage {
+                error_text: Some(e.to_string()),
+                failed_message: Some(message),
+            });
+
+            // Set the entire device as errored
+            let definition_error = "Message Send Error".to_owned();
+            let state = DefinitionState::Error(ErrorType::Other(definition_error));
+
+            self.device_definition.state = state;
+        }
+        result
+    }
+
+    fn handle_message_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
 
@@ -241,6 +258,24 @@ impl AudioState {
     }
 
     pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
+        let result = self.handle_message_async_inner(message).await;
+        if let Err(e) = &result {
+            self.device_state.state = LoadState::Error;
+            self.device_state.errors.push(ErrorMessage {
+                error_text: Some(format!("{e}")),
+                failed_message: Some(message),
+            });
+
+            // Set the entire device as errored
+            let definition_error = "Message Send Error".to_owned();
+            let state = DefinitionState::Error(ErrorType::Other(definition_error));
+
+            self.device_definition.state = state;
+        }
+        result
+    }
+
+    async fn handle_message_async_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
 
@@ -369,7 +404,7 @@ impl AudioState {
                 continue;
             }
 
-            let value = state.handle_message(message);
+            let value = state.handle_message_inner(message);
             if let Err(e) = value {
                 // fetch_value didn't panic, but it did error
                 state.device_state.state = LoadState::Error;
@@ -445,7 +480,7 @@ impl AudioState {
                 continue;
             }
 
-            if let Err(e) = state.handle_message_async(message).await {
+            if let Err(e) = state.handle_message_async_inner(message).await {
                 state.device_state.state = LoadState::Error;
                 state.device_state.errors.push(ErrorMessage {
                     error_text: Some(format!("{e:?}")),
