@@ -1,5 +1,9 @@
+mod ring_buffer;
+
+use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -83,6 +87,22 @@ impl SpectrumHandle {
     }
 }
 
+// SAFETY: The buffer is only ever accessed by a single thread at a single point in time.
+struct SampleBuffer(UnsafeCell<RingBuffer>);
+unsafe impl Send for SampleBuffer {}
+unsafe impl Sync for SampleBuffer {}
+
+pub struct LoopbackHandler {
+    task: Option<thread::JoinHandle<()>>,
+    stop_signal: Arc<AtomicBool>,
+
+    samples: Arc<SampleBuffer>,
+    samples_len: Arc<AtomicUsize>,
+
+    input_port: u32,
+    output_port: u32,
+}
+
 #[cfg(target_os = "linux")]
 pub mod platform {
     mod audio;
@@ -90,6 +110,7 @@ pub mod platform {
     mod pod;
 
     pub mod device;
+    pub mod loopback;
     pub mod spectrum;
 
     use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
