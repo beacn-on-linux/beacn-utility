@@ -33,6 +33,7 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
+use log::warn;
 use strum_macros::EnumIter;
 
 type Rgb = [u8; 3];
@@ -80,6 +81,7 @@ pub struct Headphones {
     pub fx_enabled: bool,
 
     // NOTE: The following values should *NOT* be persisted, or saved / loaded from profiles
+    pub mic_loopback_enabled: bool,
     pub studio_driverless: Option<bool>, // This is backwards at the moment, need to fix that
     pub mic_class_compliant: Option<bool>,
 }
@@ -381,6 +383,14 @@ impl AudioState {
         if state.device_definition.device_type == DeviceType::BeacnStudio {
             let _ = state.get_linked();
         }
+
+        // This honestly shouldn't be enabled on load, it implies something crashed while it
+        // was active, so we'll forcibly reset it.
+        if state.headphones.mic_loopback_enabled {
+            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = state.handle_message(message);
+        }
+
         state.device_state.state = LoadState::Running;
         state
     }
@@ -449,6 +459,12 @@ impl AudioState {
         {
             let _ = state.get_linked_async().await;
         }
+
+        if state.headphones.mic_loopback_enabled {
+            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = state.handle_message_async(message).await;
+        }
+
         state.device_state.state = LoadState::Running;
         state
     }
@@ -553,6 +569,7 @@ impl AudioState {
                 MicHeadphones::MicClassCompliant(t) => {
                     self.headphones.mic_class_compliant = Some(t)
                 }
+                MicHeadphones::MicFromLoopback(t) => self.headphones.mic_loopback_enabled = t,
                 _ => {}
             },
             Message::Lighting(l) => match l {
