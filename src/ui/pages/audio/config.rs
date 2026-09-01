@@ -11,25 +11,29 @@ use crate::ui::pages::page::{AudioPage, PageMessage};
 use crate::ui::utility::pipewire::platform::{
     find_pipewire_nodes_for_usb, start_spectrum_analyser,
 };
-use crate::ui::utility::pipewire::{PipeWireNodeType, SpectrumHandle};
+use crate::ui::utility::pipewire::{
+    LoopbackHandler, LoopbackHandlerState, PipeWireNodeType, PipeWirePortType, SpectrumHandle,
+};
 use crate::ui::widgets::helpers::composite::draw_range;
+use crate::ui::widgets::helpers::svg::{svg_button_style, svg_coloured_button_unstyled};
 use crate::ui::widgets::helpers::tabs::render_tab;
 use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::{HPMicOutputGain, Headphones};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::HasRange;
+use iced::widget::button::Status;
 use iced::widget::canvas::{Frame, Geometry};
 use iced::widget::{
     Canvas, Float, Space, button, canvas, column, container, responsive, row, rule, stack, text,
 };
 use iced::{
-    Alignment, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task, Theme,
-    Vector, mouse,
+    Alignment, Background, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task,
+    Theme, Vector, mouse,
 };
 use log::debug;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// The meter's dB span, shared by the label overlay and the `MicMeter`
 /// canvas so the two can never drift out of sync with each other.
@@ -42,12 +46,16 @@ pub(crate) enum ConfigMessage {
     SelectTab(usize),
 
     OutputGainChanged(f32),
+    HandleRecording,
+    HandlePlayback,
 }
 
 pub struct Configuration {
     equaliser: MicEqualiser,
     spectrum_handler: Option<SpectrumHandle>,
     spectrum_data: Option<Arc<Mutex<Vec<f32>>>>,
+
+    loopback_handler: Option<LoopbackHandler>,
 
     meter_ballistics: MeterBallistics,
 
@@ -61,6 +69,8 @@ impl Configuration {
             equaliser: MicEqualiser::new(),
             spectrum_handler: None,
             spectrum_data: None,
+
+            loopback_handler: None,
 
             meter_ballistics: MeterBallistics::new(METER_RANGE_DB.0),
 
@@ -185,7 +195,119 @@ impl Configuration {
             .align_x(Alignment::Center)
             .padding(8);
 
-        column![canvas_container, rule::horizontal(2), gain]
+        let buttons = if let Some(handler) = &self.loopback_handler {
+            let output = match handler.state() {
+                LoopbackHandlerState::Recording => {
+                    format!("{:.1} / 10.0", handler.current_len().as_secs_f32())
+                }
+                LoopbackHandlerState::Playing => {
+                    let current = handler.current_pos();
+                    let total = handler.current_len();
+                    format!("{:.1} / {:.1}", current.as_secs_f32(), total.as_secs_f32())
+                }
+                LoopbackHandlerState::Stopped => {
+                    let total = handler.current_len();
+                    if total.as_secs_f32() == 0.0 {
+                        "-".to_string()
+                    } else {
+                        format!("{:.1}", total.as_secs_f32())
+                    }
+                }
+            };
+
+            let record_icon = match handler.state() {
+                LoopbackHandlerState::Recording => "stop",
+                LoopbackHandlerState::Playing => "record",
+                LoopbackHandlerState::Stopped => "record",
+            };
+            let record_color = match handler.state() {
+                LoopbackHandlerState::Recording => Color::WHITE,
+                LoopbackHandlerState::Playing => Color::from_rgb8(138, 138, 138),
+                LoopbackHandlerState::Stopped => Color::WHITE,
+            };
+            let record_action = match handler.state() {
+                LoopbackHandlerState::Recording => Some(ConfigMessage::HandleRecording),
+                LoopbackHandlerState::Playing => None,
+                LoopbackHandlerState::Stopped => Some(ConfigMessage::HandleRecording),
+            };
+
+            let play_icon = match handler.state() {
+                LoopbackHandlerState::Recording => "play",
+                LoopbackHandlerState::Playing => "stop",
+                LoopbackHandlerState::Stopped => "play",
+            };
+
+            let play_color = match handler.state() {
+                LoopbackHandlerState::Recording => Color::from_rgb8(138, 138, 138),
+                LoopbackHandlerState::Playing => Color::WHITE,
+                LoopbackHandlerState::Stopped => {
+                    let total = handler.current_len();
+                    if total.as_secs_f32() == 0.0 {
+                        Color::from_rgb8(138, 138, 138)
+                    } else {
+                        Color::WHITE
+                    }
+                }
+            };
+
+            let play_action = match handler.state() {
+                LoopbackHandlerState::Recording => None,
+                LoopbackHandlerState::Playing => Some(ConfigMessage::HandlePlayback),
+                LoopbackHandlerState::Stopped => {
+                    let total = handler.current_len();
+                    if total.as_secs_f32() == 0.0 {
+                        None
+                    } else {
+                        Some(ConfigMessage::HandlePlayback)
+                    }
+                }
+            };
+
+            let t1 = text(output).size(10.0).width(Length::Fill);
+            let a = svg_coloured_button_unstyled(record_icon, record_color)
+                .style(move |t, s| {
+                    let mut base = svg_button_style(t, s, true);
+                    let mut button = t.extended_palette().danger.weak.color;
+                    if s == Status::Disabled {
+                        button.a = 0.5;
+                    };
+
+                    base.background = Some(Background::Color(button));
+                    base
+                })
+                .width(Length::Fixed(20.0))
+                .height(Length::Fixed(20.0))
+                .padding(2)
+                .on_press_maybe(record_action);
+
+            let b = svg_coloured_button_unstyled(play_icon, play_color)
+                .style(move |t, s| {
+                    let mut base = svg_button_style(t, s, true);
+                    let mut button = t.extended_palette().success.weak.color;
+                    if s == Status::Disabled {
+                        button.a = 0.5;
+                    };
+
+                    base.background = Some(Background::Color(button));
+                    base
+                })
+                .width(Length::Fixed(20.0))
+                .height(Length::Fixed(20.0))
+                .padding(2)
+                .on_press_maybe(play_action);
+
+            let row = row![t1, a, b]
+                .height(Length::Shrink)
+                .spacing(3.0)
+                .padding(2.0)
+                .align_y(Alignment::Center);
+
+            Element::new(column![rule::horizontal(2), row].spacing(2))
+        } else {
+            Element::new(Space::new())
+        };
+
+        column![canvas_container, rule::horizontal(2), gain, buttons]
             .width(Length::Fixed(95.0))
             .align_x(Alignment::Center)
             .spacing(5.0)
@@ -210,35 +332,65 @@ impl AudioPage for Configuration {
         let dev_addr = location.device_address;
         let nodes = find_pipewire_nodes_for_usb(bus_addr, dev_addr);
 
-        let expected_channels = match state.device_definition.device_type {
+        let expected_source_channels = match state.device_definition.device_type {
             DeviceType::BeacnMic => 4,
             DeviceType::BeacnStudio => 12,
             _ => unreachable!(),
         };
 
-        let mut use_port = None;
+        let expected_sink_channels = match state.device_definition.device_type {
+            DeviceType::BeacnMic => 3,
+            DeviceType::BeacnStudio => 11,
+            _ => unreachable!(),
+        };
+
+        let mut spectrum_port = None;
+        let mut dry_mix_port = None;
+        let mut loopback_port = None;
+
         if let Ok(nodes) = nodes {
             // We found something, we need to find the mic node
             for node in nodes {
                 // Immediately ignore UCM child nodes, they'll never contain what we need.
-                if node.is_split_child || node.node_type != PipeWireNodeType::Source {
+                if node.is_split_child {
                     continue;
                 }
 
-                debug!("Found node: {:?}", node);
-                // AUX3 is the Dry Mix for the Mic on the Mic / Studio. We can only get this
-                // in UCM mode if we find the internal 4-port source.
-                if node.channels.len() == expected_channels
-                    && let Some(port) = node.channels.get("AUX3")
-                {
-                    use_port.replace(vec![*port]);
+                // It should be noted that prior to pipewire 1.4 none of these ports are visible
+                // as it uses dsnoop in alsa to build the UCM profiles. Post 1.4 they're available
+                // on an internal node, which we can grab, so this won't work on older versions.
+                if node.node_type == PipeWireNodeType::Sink {
+                    if node.channels.len() == expected_sink_channels {
+                        for port in node.ports {
+                            if port.name == "AUX2" && port.port_type == PipeWirePortType::Input {
+                                loopback_port.replace(port.id);
+                            }
+                        }
+                    }
+                } else {
+                    // AUX2 is the Dry Mix, and AUX3 is the Post-Expander Dry Mix. These ports are not
+                    // available on a Beacn Mic in compliancy mode.
+                    if node.channels.len() == expected_source_channels {
+                        if let Some(port) = node.channels.get("AUX2") {
+                            dry_mix_port.replace(*port);
+                        }
+                        if let Some(port) = node.channels.get("AUX3") {
+                            spectrum_port.replace(vec![*port]);
+                        }
+                    }
                 }
             }
         }
 
-        if let Some(ports) = use_port {
+        if let Some(dry_mix_port) = dry_mix_port
+            && let Some(loopback_port) = loopback_port
+        {
+            self.loopback_handler = Some(LoopbackHandler::new(dry_mix_port, loopback_port));
+        }
+
+        if let Some(spectrum_ports) = spectrum_port {
             // Ok, we have a usable port list, let's fire up a listener..
-            let handler = start_spectrum_analyser(ports, 48000);
+            let handler = start_spectrum_analyser(spectrum_ports, 48000);
 
             // Get the internal Spectrum Data. We only use a single port here, so grab the only entry.
             self.spectrum_data = Some(handler.data[0].clone());
@@ -249,6 +401,11 @@ impl AudioPage for Configuration {
     fn on_close(&mut self) {
         if let Some(handler) = self.spectrum_handler.take() {
             handler.stop();
+        }
+
+        if let Some(mut handler) = self.loopback_handler.take() {
+            handler.stop();
+            handler.clear_buffer();
         }
 
         // Remove anything that may be cached, we should redraw later.
@@ -341,6 +498,37 @@ impl AudioPage for Configuration {
 
                         None => Task::none(),
                     }
+                }
+
+                ConfigMessage::HandleRecording => {
+                    // Pretty simple, this can't trigger unless we're either stopped or recording,
+                    // so just do whatever the opposite of that is :)
+                    if let Some(handler) = self.loopback_handler.as_mut() {
+                        if handler.state() != LoopbackHandlerState::Stopped {
+                            handler.stop();
+                        } else {
+                            handler.perform_record();
+                        }
+                    }
+                    Task::none()
+                }
+
+                ConfigMessage::HandlePlayback => {
+                    // Same as above, except with playback.
+                    if let Some(handler) = self.loopback_handler.as_mut() {
+                        if handler.state() != LoopbackHandlerState::Stopped {
+                            handler.stop();
+
+                            let msg = Message::Headphones(Headphones::MicFromLoopback(false));
+                            let _ = state.handle_message(msg);
+                        } else {
+                            let msg = Message::Headphones(Headphones::MicFromLoopback(true));
+                            let _ = state.handle_message(msg);
+
+                            handler.perform_playback();
+                        }
+                    }
+                    Task::none()
                 }
             },
 

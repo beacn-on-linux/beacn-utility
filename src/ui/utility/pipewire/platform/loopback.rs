@@ -120,17 +120,17 @@ impl LoopbackHandler {
         *self.state.borrow_mut() = LoopbackHandlerState::Stopped;
     }
 
-    fn clear_buffer(&mut self) {
+    pub fn clear_buffer(&mut self) {
         let samples = unsafe { &mut *self.samples.0.get() };
         samples.clear();
     }
 
-    fn current_len(&self) -> Duration {
+    pub fn current_len(&self) -> Duration {
         let len = self.samples_len.load(Ordering::Acquire);
         Duration::from_secs_f64(len as f64 / SAMPLE_RATE as f64)
     }
 
-    fn current_pos(&self) -> Duration {
+    pub fn current_pos(&self) -> Duration {
         let pos = self.samples_pos.load(Ordering::Acquire);
         Duration::from_secs_f64(pos as f64 / SAMPLE_RATE as f64)
     }
