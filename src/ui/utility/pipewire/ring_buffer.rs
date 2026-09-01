@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct RingBuffer {
     data: Box<[f32]>,
-    head: usize,
+    head: Arc<AtomicUsize>,
     len: Arc<AtomicUsize>,
 }
 
@@ -11,7 +11,7 @@ impl RingBuffer {
     pub(crate) fn new(capacity: usize) -> Self {
         Self {
             data: vec![0.0; capacity].into_boxed_slice(),
-            head: 0,
+            head: Arc::new(AtomicUsize::new(0)),
             len: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -21,8 +21,12 @@ impl RingBuffer {
         self.len.clone()
     }
 
+    pub(crate) fn head_handle(&self) -> Arc<AtomicUsize> {
+        self.head.clone()
+    }
+
     pub(crate) fn clear(&mut self) {
-        self.head = 0;
+        self.head.store(0, Ordering::Release);
         self.len.store(0, Ordering::Release);
     }
 
@@ -33,10 +37,11 @@ impl RingBuffer {
     /// Write as many samples from `src` as fit, batched via copy_from_slice.
     pub(crate) fn write(&mut self, src: &[f32]) -> usize {
         let current_len = self.len.load(Ordering::Relaxed);
+        let current_head = self.head.load(Ordering::Relaxed);
         let available = self.capacity() - current_len;
         let count = src.len().min(available);
         let capacity = self.capacity();
-        let tail = (self.head + current_len) % capacity;
+        let tail = (current_head + current_len) % capacity;
         let first = count.min(capacity - tail);
 
         self.data[tail..tail + first].copy_from_slice(&src[..first]);
@@ -58,12 +63,14 @@ impl RingBuffer {
         }
 
         let mut written = 0;
+        let mut head = self.head.load(Ordering::Relaxed);
         while written < count {
-            let read_pos = self.head % loop_len;
+            let read_pos = head % loop_len;
             let chunk = (loop_len - read_pos).min(count - written);
             dest[written..written + chunk].copy_from_slice(&self.data[read_pos..read_pos + chunk]);
             written += chunk;
-            self.head = (read_pos + chunk) % loop_len;
+            head = (read_pos + chunk) % loop_len;
         }
+        self.head.store(head, Ordering::Release);
     }
 }
