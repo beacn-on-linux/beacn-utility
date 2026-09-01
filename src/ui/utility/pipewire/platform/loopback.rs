@@ -135,3 +135,9 @@ impl LoopbackHandler {
         Duration::from_secs_f64(pos as f64 / SAMPLE_RATE as f64)
     }
 }
+
+impl Drop for LoopbackHandler {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
