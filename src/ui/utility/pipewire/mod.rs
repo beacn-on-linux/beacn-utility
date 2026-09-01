@@ -21,11 +21,13 @@ pub struct OutputStream {
     pub process: OutputProcess,
 }
 
+#[allow(unused)]
 pub enum PipewireStream {
     Input(Vec<InputStream>),
     Output(Vec<OutputStream>),
 }
 
+#[allow(unused)]
 impl PipewireStream {
     pub fn len(&self) -> usize {
         match self {
@@ -88,10 +90,12 @@ impl SpectrumHandle {
 }
 
 // SAFETY: The buffer is only ever accessed by a single thread at a single point in time.
+#[allow(unused)]
 struct SampleBuffer(UnsafeCell<RingBuffer>);
 unsafe impl Send for SampleBuffer {}
 unsafe impl Sync for SampleBuffer {}
 
+#[allow(unused)]
 pub struct LoopbackHandler {
     task: Option<thread::JoinHandle<()>>,
     stop_signal: Arc<AtomicBool>,
@@ -108,6 +112,7 @@ pub struct LoopbackHandler {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
 pub enum LoopbackHandlerState {
     Recording,
     Playing,
@@ -143,13 +148,12 @@ pub mod platform {
 pub mod platform {
     use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
     use crate::ui::utility::pipewire::{
-        InputStream, LoopbackHandler, LoopbackHandlerState, OutputStream, PipeWireNode,
-        PipewireStream, SampleBuffer, SpectrumHandle,
+        LoopbackHandler, LoopbackHandlerState, PipeWireNode, SampleBuffer, SpectrumHandle,
     };
     use anyhow::Result;
     use std::cell::{RefCell, UnsafeCell};
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool};
     use std::thread;
     use std::time::Duration;
 
@@ -157,7 +161,7 @@ pub mod platform {
         Ok(vec![])
     }
 
-    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+    pub fn start_spectrum_analyser(_: Vec<u32>, _: u32) -> SpectrumHandle {
         // This shouldn't be called on non-linux systems.
 
         let handle = thread::spawn(|| {});
