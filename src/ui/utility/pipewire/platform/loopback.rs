@@ -1,9 +1,9 @@
 use crate::ui::utility::pipewire::platform::audio::get_audio;
 use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
 use crate::ui::utility::pipewire::{
-    InputStream, LoopbackHandler, OutputStream, PipewireStream, SampleBuffer,
+    InputStream, LoopbackHandler, LoopbackHandlerState, OutputStream, PipewireStream, SampleBuffer,
 };
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -19,16 +19,32 @@ impl LoopbackHandler {
 
         let ring_buffer = RingBuffer::new(capacity);
         let samples_len = ring_buffer.len_handle();
+        let samples_pos = ring_buffer.head_handle();
 
         Self {
             task: None,
             stop_signal: Arc::new(AtomicBool::new(false)),
+
+            state: RefCell::new(LoopbackHandlerState::Stopped),
+
             samples: Arc::new(SampleBuffer(UnsafeCell::new(ring_buffer))),
             samples_len,
+            samples_pos,
 
             input_port,
             output_port,
         }
+    }
+
+    pub fn state(&self) -> LoopbackHandlerState {
+        // Are we in a running state while not running?
+        if !self.is_running() && *self.state.borrow() != LoopbackHandlerState::Stopped {
+            // This can happen if the process was internally stopped, for example, if the record
+            // buffer has been filled. So we'll correct the state here.
+            *self.state.borrow_mut() = LoopbackHandlerState::Stopped;
+        }
+
+        *self.state.borrow()
     }
 
     pub fn is_running(&self) -> bool {
@@ -65,6 +81,7 @@ impl LoopbackHandler {
             let _ = get_audio(PipewireStream::Input(vec![input_handler]), stopper);
         });
 
+        *self.state.borrow_mut() = LoopbackHandlerState::Recording;
         self.task = Some(handle);
     }
 
@@ -85,6 +102,8 @@ impl LoopbackHandler {
         let handle = thread::spawn(move || {
             let _ = get_audio(PipewireStream::Output(vec![output_handler]), stopper);
         });
+
+        *self.state.borrow_mut() = LoopbackHandlerState::Playing;
         self.task = Some(handle);
     }
 
@@ -98,6 +117,7 @@ impl LoopbackHandler {
 
         // Reset the Stop Signaller
         self.stop_signal.store(false, Ordering::Relaxed);
+        *self.state.borrow_mut() = LoopbackHandlerState::Stopped;
     }
 
     fn clear_buffer(&mut self) {
@@ -108,5 +128,10 @@ impl LoopbackHandler {
     fn current_len(&self) -> Duration {
         let len = self.samples_len.load(Ordering::Acquire);
         Duration::from_secs_f64(len as f64 / SAMPLE_RATE as f64)
+    }
+
+    fn current_pos(&self) -> Duration {
+        let pos = self.samples_pos.load(Ordering::Acquire);
+        Duration::from_secs_f64(pos as f64 / SAMPLE_RATE as f64)
     }
 }

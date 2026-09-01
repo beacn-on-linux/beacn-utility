@@ -1,7 +1,7 @@
 mod ring_buffer;
 
 use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -96,11 +96,22 @@ pub struct LoopbackHandler {
     task: Option<thread::JoinHandle<()>>,
     stop_signal: Arc<AtomicBool>,
 
+    state: RefCell<LoopbackHandlerState>,
+
     samples: Arc<SampleBuffer>,
+
     samples_len: Arc<AtomicUsize>,
+    samples_pos: Arc<AtomicUsize>,
 
     input_port: u32,
     output_port: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopbackHandlerState {
+    Recording,
+    Playing,
+    Stopped,
 }
 
 #[cfg(target_os = "linux")]
