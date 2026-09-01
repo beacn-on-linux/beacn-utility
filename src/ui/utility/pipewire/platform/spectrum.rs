@@ -1,5 +1,5 @@
-use crate::ui::utility::pipewire::audio::get_audio;
-use crate::ui::utility::pipewire::{ChannelStream, SpectrumData, SpectrumHandle};
+use crate::ui::utility::pipewire::platform::audio::get_audio;
+use crate::ui::utility::pipewire::{InputStream, PipewireStream, SpectrumData, SpectrumHandle};
 use log::debug;
 use rustfft::{FftPlanner, num_complex::Complex};
 use std::f32::consts::PI;
@@ -29,7 +29,7 @@ pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHan
     let stop_clone = stop_signal.clone();
     let data_clone = data.clone();
 
-    let task = thread::spawn(move || analyser_inner2(ports, sample_rate, data_clone, stop_clone));
+    let task = thread::spawn(move || analyser_inner(ports, sample_rate, data_clone, stop_clone));
 
     SpectrumHandle {
         task,
@@ -39,7 +39,7 @@ pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHan
 }
 
 // Take the ports, create spectrum handlers for them, then run the audio loop.
-fn analyser_inner2(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<AtomicBool>) {
+fn analyser_inner(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<AtomicBool>) {
     let mut streams = vec![];
     for (index, port) in ports.iter().enumerate() {
         // Create the handler, and the points cache..
@@ -51,7 +51,7 @@ fn analyser_inner2(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<Ato
 
         // Move everything into the handling closure.
         debug!("Creating stream for port: {:?} (inner)", port);
-        let stream = ChannelStream {
+        let stream = InputStream {
             channel_id: *port,
             process: Box::new(move |samples| {
                 handler.push_incoming_samples(samples);
@@ -65,7 +65,7 @@ fn analyser_inner2(ports: Vec<u32>, rate: u32, data: SpectrumData, stop: Arc<Ato
         streams.push(stream);
     }
 
-    let _ = get_audio(streams, stop);
+    let _ = get_audio(PipewireStream::Input(streams), stop);
 }
 
 #[derive(Clone)]

@@ -40,6 +40,20 @@ pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {
         Handle::from_memory(include_bytes!("../../resources/ui/icons/info.svg")),
     );
 
+    // Play / Pause / Record
+    map.insert(
+        "play",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/play.svg")),
+    );
+    map.insert(
+        "stop",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/stop.svg")),
+    );
+    map.insert(
+        "record",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/record.svg")),
+    );
+
     // EQ Modes
     map.insert(
         "eq_bell",

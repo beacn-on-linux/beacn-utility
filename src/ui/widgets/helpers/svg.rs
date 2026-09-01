@@ -103,3 +103,34 @@ where
             ..Default::default()
         })
 }
+
+pub fn svg_coloured_button_unstyled<'a, T>(svg: &'static str, svg_colour: Color) -> Button<'a, T>
+where
+    T: Clone + 'a,
+{
+    let icon_content: Element<'a, T> = if let Some(svg_handle) = SVG.get(svg) {
+        iced::widget::svg(svg_handle.clone())
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(move |_theme: &Theme, _status: svg::Status| svg::Style {
+                color: Some(svg_colour),
+            })
+            .into()
+    } else {
+        Space::new().into()
+    };
+
+    let centered_content = container(icon_content)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_x(Alignment::Center)
+        .align_y(Alignment::Center);
+
+    button(centered_content)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(0)
+        .style(move |_: &Theme, _: button::Status| button::Style {
+            ..Default::default()
+        })
+}

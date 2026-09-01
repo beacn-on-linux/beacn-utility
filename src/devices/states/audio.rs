@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use beacn_lib::audio::LinkedApp;
+use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::bass_enhancement::BassPreset;
 use beacn_lib::audio::messages::compressor::CompressorMode;
@@ -84,6 +85,7 @@ pub struct Headphones {
     pub fx_enabled: bool,
 
     // NOTE: The following values should *NOT* be persisted, or saved / loaded from profiles
+    pub mic_loopback_enabled: bool,
     pub studio_driverless: Option<bool>, // This is backwards at the moment, need to fix that
     pub mic_class_compliant: Option<bool>,
 }
@@ -217,6 +219,24 @@ pub struct Subwoofer {
 
 impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
+        let result = self.handle_message_inner(message);
+        if let Err(e) = &result {
+            self.device_state.state = LoadState::Error;
+            self.device_state.errors.push(ErrorMessage {
+                error_text: Some(e.to_string()),
+                failed_message: Some(message),
+            });
+
+            // Set the entire device as errored
+            let definition_error = "Message Send Error".to_owned();
+            let state = DefinitionState::Error(ErrorType::Other(definition_error));
+
+            self.device_definition.state = state;
+        }
+        result
+    }
+
+    fn handle_message_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
 
@@ -236,7 +256,43 @@ impl AudioState {
         }
     }
 
+    #[allow(unused)]
+    pub fn handle_bulk_message(&mut self, message: BulkMessage) -> Result<BulkMessage> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Bulk(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send(message)?;
+                let message = rx.recv()?;
+
+                // Quickly intercept the message, and set our local value
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
     pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
+        let result = self.handle_message_async_inner(message).await;
+        if let Err(e) = &result {
+            self.device_state.state = LoadState::Error;
+            self.device_state.errors.push(ErrorMessage {
+                error_text: Some(format!("{e}")),
+                failed_message: Some(message),
+            });
+
+            // Set the entire device as errored
+            let definition_error = "Message Send Error".to_owned();
+            let state = DefinitionState::Error(ErrorType::Other(definition_error));
+
+            self.device_definition.state = state;
+        }
+        result
+    }
+
+    async fn handle_message_async_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
 
@@ -365,7 +421,7 @@ impl AudioState {
                 continue;
             }
 
-            let value = state.handle_message(message);
+            let value = state.handle_message_inner(message);
             if let Err(e) = value {
                 // fetch_value didn't panic, but it did error
                 state.device_state.state = LoadState::Error;
@@ -379,6 +435,14 @@ impl AudioState {
         if state.device_definition.device_type == DeviceType::BeacnStudio {
             let _ = state.get_linked();
         }
+
+        // This honestly shouldn't be enabled on load, it implies something crashed while it
+        // was active, so we'll forcibly reset it.
+        if state.headphones.mic_loopback_enabled {
+            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = state.handle_message(message);
+        }
+
         state.device_state.state = LoadState::Running;
         state
     }
@@ -433,7 +497,7 @@ impl AudioState {
                 continue;
             }
 
-            if let Err(e) = state.handle_message_async(message).await {
+            if let Err(e) = state.handle_message_async_inner(message).await {
                 state.device_state.state = LoadState::Error;
                 state.device_state.errors.push(ErrorMessage {
                     error_text: Some(format!("{e}")),
@@ -446,6 +510,11 @@ impl AudioState {
             && let Some(false) = state.headphones.studio_driverless
         {
             let _ = state.get_linked_async().await;
+        }
+
+        if state.headphones.mic_loopback_enabled {
+            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = state.handle_message_async(message).await;
         }
 
         // Only change to Running if we're still considered loading..
@@ -575,6 +644,7 @@ impl AudioState {
                 MicHeadphones::MicClassCompliant(t) => {
                     self.headphones.mic_class_compliant = Some(t)
                 }
+                MicHeadphones::MicFromLoopback(t) => self.headphones.mic_loopback_enabled = t,
                 _ => unreachable!(),
             },
             Message::Lighting(l) => match l {

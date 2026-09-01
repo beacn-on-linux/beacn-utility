@@ -84,7 +84,7 @@ pub fn display_errors(
     errors: &[ErrorMessage],
 ) -> Element<'static, PageMessage> {
     let header = column![
-        text("An error occurred while loading the device.")
+        text("An error occurred communicating with the device.")
             .size(24)
             .font(heading_font()),
         text(format!(
@@ -179,9 +179,7 @@ fn error_details(errors: &[ErrorMessage]) -> Column<'static, PageMessage> {
     }
 
     column![
-        text("Device in Error State")
-            .size(18)
-            .font(subheading_font()),
+        text("Errors:").size(18).font(subheading_font()),
         Space::new().height(10),
         scrollable(list).width(Length::Fill).height(Length::Shrink),
     ]

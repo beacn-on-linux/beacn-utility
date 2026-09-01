@@ -2,14 +2,26 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::widgets::helpers::buttons::toggle_button;
 use crate::ui::widgets::helpers::composite::draw_horizontal_range;
+use beacn_lib::audio::data::{BulkMessage, SuppressionResponse};
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::suppressor::{Suppressor, SuppressorSensitivity, SuppressorStyle};
 use beacn_lib::types::{HasRange, Percent};
-use iced::widget::{Space, checkbox, column, row};
-use iced::{Element, Length, Task};
+use iced::widget::canvas::{Frame, Geometry};
+use iced::widget::{Canvas, Space, canvas, checkbox, column, container, row, rule};
+use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme, mouse};
 use std::ops::RangeInclusive;
 
-pub struct SuppressorPage;
+#[derive(Default)]
+pub struct SuppressorPage {
+    current: SuppressionResponse,
+    baseline: SuppressionResponse,
+}
+
+impl SuppressorPage {
+    pub(crate) fn new() -> Self {
+        Default::default()
+    }
+}
 
 impl ConfigPage for SuppressorPage {
     fn title(&self) -> &'static str {
@@ -17,6 +29,17 @@ impl ConfigPage for SuppressorPage {
     }
 
     fn update(&mut self, _state: &mut AudioState, _message: ChildMessage) -> Task<ChildMessage> {
+        if matches!(_message, ChildMessage::OnTick) {
+            let msg = BulkMessage::GetSuppressionBase;
+            if let Ok(BulkMessage::SuppressionBase(response)) = _state.handle_bulk_message(msg) {
+                self.baseline = response;
+            }
+
+            let msg = BulkMessage::GetSuppressionCurrent;
+            if let Ok(BulkMessage::SuppressionCurrent(response)) = _state.handle_bulk_message(msg) {
+                self.current = response;
+            }
+        }
         Task::none()
     }
 
@@ -72,10 +95,83 @@ impl ConfigPage for SuppressorPage {
             sliders = sliders.push(snap_button);
         }
 
-        column![enabled, mode, sliders]
+        let controls = column![enabled, mode, sliders]
             .padding(10.0)
             .spacing(10.0)
-            .width(330)
-            .into()
+            .width(330);
+
+        let canvas = Canvas::new(Suppression {
+            base: self.baseline,
+            live: self.current,
+            range_db: (-200.0, 100.0),
+        })
+        .width(Length::Fill)
+        .height(Length::Fill);
+        let canvas = container(canvas).width(Length::Fill).height(Length::Fill);
+
+        row![
+            controls,
+            Space::new().width(10.0),
+            rule::vertical(3),
+            canvas
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
+    }
+}
+
+struct Suppression {
+    base: SuppressionResponse,
+    live: SuppressionResponse,
+    range_db: (f32, f32),
+}
+
+impl Suppression {
+    fn magnitude_fraction(&self, db: f32) -> f32 {
+        let (min_db, max_db) = self.range_db;
+        let span = (max_db - min_db).abs().max(f32::EPSILON);
+
+        ((db - min_db) / span).clamp(0.0, 1.0)
+    }
+
+    /// Vertical pixel position for a specific DB value
+    fn y_for_db(&self, db: f32, height: f32) -> f32 {
+        height * (1.0 - self.magnitude_fraction(db))
+    }
+}
+
+impl<Message> canvas::Program<Message> for Suppression {
+    type State = ();
+
+    fn draw(
+        &self,
+        _: &Self::State,
+        renderer: &Renderer,
+        _: &Theme,
+        bounds: Rectangle,
+        _: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+        let distance = bounds.width / (self.base.values.len() as f32 - 1.0);
+        let mut start = 0.0;
+
+        for (base, live) in self.base.values.iter().zip(self.live.values.iter()) {
+            let base_y = self.y_for_db(*base, bounds.size().height);
+            frame.fill_rectangle(
+                Point::new(start - 2.0, base_y - 2.0),
+                Size::new(4.0, 4.0),
+                Color::from_rgb8(0, 255, 0),
+            );
+
+            let live_y = self.y_for_db(*live, bounds.size().height);
+            frame.fill_rectangle(
+                Point::new(start - 2.0, live_y - 2.0),
+                Size::new(4.0, 4.0),
+                Color::from_rgb8(0, 255, 255),
+            );
+            start += distance;
+        }
+        vec![frame.into_geometry()]
     }
 }

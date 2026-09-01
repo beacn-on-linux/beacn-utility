@@ -174,7 +174,7 @@ impl BeacnUtility {
 
                                 // Trigger the on_open callback for the first visible page
                                 if let Some(device) = self.devices.get_mut(&hash) {
-                                    device.pages[*page].on_open_fn(&device.state);
+                                    device.pages[*page].on_open_fn(&mut device.state);
                                 }
                             }
                         }
@@ -192,7 +192,7 @@ impl BeacnUtility {
                                     self.active_page = Some(*page);
 
                                     // Trigger the on_open callback for this page
-                                    device.pages[*page].on_open_fn(&device.state);
+                                    device.pages[*page].on_open_fn(&mut device.state);
 
                                     break;
                                 }
@@ -250,7 +250,7 @@ impl BeacnUtility {
                 {
                     // We need to try and pull this device from our devices
                     if let Some(device) = self.devices.get_mut(device) {
-                        device.pages[page].on_close_fn();
+                        device.pages[page].on_close_fn(&mut device.state);
                     }
                 }
 
@@ -260,7 +260,7 @@ impl BeacnUtility {
                 {
                     self.active_device = Some(device_id.clone());
                     self.active_page = Some(page_id);
-                    device.pages[page_id].on_open_fn(&device.state);
+                    device.pages[page_id].on_open_fn(&mut device.state);
                 }
             }
 
@@ -277,9 +277,25 @@ impl BeacnUtility {
                     return Task::none();
                 };
 
-                return device.pages[page_index]
+                let task = device.pages[page_index]
                     .update_fn(&mut device.state, msg)
                     .map(Message::Page);
+
+                // Before we proceed, should we still be allowed to be on this page?
+                let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
+                if !show(&device.pages[page_index]) {
+                    // Firstly, find a page that CAN be shown..
+                    let page = device.pages.iter().position(show);
+                    if let Some(page) = page {
+                        // Close this page..
+                        device.pages[page_index].on_close_fn(&mut device.state);
+
+                        self.active_page = Some(page);
+                        device.pages[page].on_open_fn(&mut device.state);
+                    }
+                }
+
+                return task;
             }
 
             Message::Tick => {
@@ -313,7 +329,7 @@ impl BeacnUtility {
                     && let Some(page) = self.active_page
                     && let Some(device) = self.devices.get_mut(hash)
                 {
-                    device.pages[page].on_open_fn(&device.state);
+                    device.pages[page].on_open_fn(&mut device.state);
                 }
 
                 // Spawn up the window
@@ -334,7 +350,7 @@ impl BeacnUtility {
                     && let Some(page) = self.active_page
                     && let Some(device) = self.devices.get_mut(hash)
                 {
-                    device.pages[page].on_close_fn();
+                    device.pages[page].on_close_fn(&mut device.state);
                 }
 
                 #[cfg(target_os = "linux")]
@@ -489,7 +505,7 @@ impl BeacnUtility {
         let resize_sub = window::resize_events().map(Message::WindowResized);
         let close_sub = window::close_requests().map(Message::WindowCloseRequested);
 
-        let tick_rate = 1000 / 30;
+        let tick_rate = 1000 / 45;
         let ticker = time::every(Duration::from_millis(tick_rate)).map(|_| Message::Tick);
 
         Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub, ticker])

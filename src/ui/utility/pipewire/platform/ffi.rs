@@ -1262,12 +1262,12 @@ impl Drop for PwProperties {
 }
 
 // Stream Handling
-pub struct CaptureBuffer {
+pub struct StreamBuffer {
     pw: PipeWire,
     stream_ptr: *mut c_void,
     raw: *mut pw_buffer,
 }
-impl CaptureBuffer {
+impl StreamBuffer {
     pub fn channel_count(&self) -> usize {
         unsafe { (*(*self.raw).buffer).n_datas as usize }
     }
@@ -1282,13 +1282,42 @@ impl CaptureBuffer {
                 return &[];
             }
             let chunk = &*d.chunk;
-            let n = (chunk.size as usize) / std::mem::size_of::<f32>();
+            let n = (chunk.size as usize) / size_of::<f32>();
             let ptr = (d.data as *const u8).add(chunk.offset as usize) as *const f32;
             std::slice::from_raw_parts(ptr, n)
         }
     }
+    pub fn channel_samples_mut(&mut self, channel: usize) -> &mut [f32] {
+        unsafe {
+            let spa_buf = &*(*self.raw).buffer;
+            if channel >= spa_buf.n_datas as usize {
+                return &mut [];
+            }
+            let d = &mut *spa_buf.datas.add(channel);
+            if d.data.is_null() {
+                return &mut [];
+            }
+
+            // Use the requested size as the expected buffer (if exists, else max)
+            let requested = (*self.raw).requested as usize;
+            let n = if requested > 0 {
+                requested.min(d.maxsize as usize / size_of::<f32>())
+            } else {
+                d.maxsize as usize / size_of::<f32>()
+            };
+
+            // Configure the chunk to send
+            if let Some(chunk) = d.chunk.as_mut() {
+                chunk.offset = 0;
+                chunk.stride = size_of::<f32>() as i32;
+                chunk.size = (n * size_of::<f32>()) as u32;
+            }
+
+            std::slice::from_raw_parts_mut(d.data as *mut f32, n)
+        }
+    }
 }
-impl Drop for CaptureBuffer {
+impl Drop for StreamBuffer {
     fn drop(&mut self) {
         let res = unsafe { (self.pw.api.pw_stream_queue_buffer)(self.stream_ptr, self.raw) };
         if res < 0 {
@@ -1301,7 +1330,7 @@ type StreamStateChangeCallback = Option<Box<dyn FnMut(i32, i32, Option<String>)>
 #[derive(Default)]
 // We should probably do this for other types, this code came later :D
 pub struct StreamCallbacks {
-    pub process: Option<Box<dyn FnMut(CaptureBuffer)>>,
+    pub process: Option<Box<dyn FnMut(StreamBuffer)>>,
     pub state_changed: StreamStateChangeCallback,
     pub param_changed: Option<Box<dyn FnMut(u32)>>,
 }
@@ -1319,7 +1348,7 @@ extern "C" fn stream_process_trampoline(data: *mut c_void) {
         return;
     }
     if let Some(cb) = ctx.callbacks.process.as_mut() {
-        let buf = CaptureBuffer {
+        let buf = StreamBuffer {
             pw: ctx.pw.clone(),
             stream_ptr: ctx.stream_ptr,
             raw,

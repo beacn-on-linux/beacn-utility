@@ -1,35 +1,38 @@
-use anyhow::Result;
+mod ring_buffer;
+
+use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
+use std::cell::{RefCell, UnsafeCell};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-#[cfg(target_os = "linux")]
-pub mod device;
-
-#[cfg(target_os = "linux")]
-pub mod spectrum;
-
-#[cfg(target_os = "linux")]
-mod audio;
-
-#[cfg(target_os = "linux")]
-mod ffi;
-
-#[cfg(target_os = "linux")]
-mod pod;
-
-#[cfg(target_os = "linux")]
-const TO_U32: fn(&String) -> Option<u32> = |s: &String| s.parse::<u32>().ok();
-
-#[cfg(target_os = "linux")]
-const TO_BOOL: fn(&String) -> Option<bool> = |s: &String| s.parse::<bool>().ok();
-
-pub type Process = Box<dyn FnMut(&[f32]) + Send + Sync>;
+pub type InputProcess = Box<dyn FnMut(&[f32]) + Send + Sync>;
 #[allow(unused)]
-pub struct ChannelStream {
+pub struct InputStream {
     pub channel_id: u32,
-    pub process: Process,
+    pub process: InputProcess,
+}
+
+pub type OutputProcess = Box<dyn FnMut(&mut [f32]) + Send + Sync>;
+#[allow(unused)]
+pub struct OutputStream {
+    pub channel_id: u32,
+    pub process: OutputProcess,
+}
+
+pub enum PipewireStream {
+    Input(Vec<InputStream>),
+    Output(Vec<OutputStream>),
+}
+
+impl PipewireStream {
+    pub fn len(&self) -> usize {
+        match self {
+            PipewireStream::Input(v) => v.len(),
+            PipewireStream::Output(v) => v.len(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -40,6 +43,7 @@ pub struct PipeWireNode {
     pub is_split_child: bool,
     pub node_type: PipeWireNodeType,
     pub channels: HashMap<String, u32>,
+    pub ports: Vec<PipeWirePort>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +51,22 @@ pub struct PipeWireNode {
 pub enum PipeWireNodeType {
     Source,
     Sink,
+}
+
+#[derive(Debug, Clone)]
+#[allow(unused)]
+pub struct PipeWirePort {
+    pub name: String,
+    pub id: u32,
+    pub port_type: PipeWirePortType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
+pub enum PipeWirePortType {
+    Input,
+    Output,
+    Monitor,
 }
 
 type SpectrumData = Vec<Arc<Mutex<Vec<f32>>>>;
@@ -67,29 +87,70 @@ impl SpectrumHandle {
     }
 }
 
-#[allow(unused_variables)]
-pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireNode>> {
-    #[cfg(target_os = "linux")]
-    {
+// SAFETY: The buffer is only ever accessed by a single thread at a single point in time.
+struct SampleBuffer(UnsafeCell<RingBuffer>);
+unsafe impl Send for SampleBuffer {}
+unsafe impl Sync for SampleBuffer {}
+
+pub struct LoopbackHandler {
+    task: Option<thread::JoinHandle<()>>,
+    stop_signal: Arc<AtomicBool>,
+
+    state: RefCell<LoopbackHandlerState>,
+
+    samples: Arc<SampleBuffer>,
+
+    samples_len: Arc<AtomicUsize>,
+    samples_pos: Arc<AtomicUsize>,
+
+    input_port: u32,
+    output_port: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoopbackHandlerState {
+    Recording,
+    Playing,
+    Stopped,
+}
+
+#[cfg(target_os = "linux")]
+pub mod platform {
+    mod audio;
+    mod ffi;
+    mod pod;
+
+    pub mod device;
+    pub mod loopback;
+    pub mod spectrum;
+
+    use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
+    use anyhow::Result;
+
+    const TO_U32: fn(&String) -> Option<u32> = |s: &String| s.parse::<u32>().ok();
+    const TO_BOOL: fn(&String) -> Option<bool> = |s: &String| s.parse::<bool>().ok();
+
+    pub fn find_pipewire_nodes_for_usb(bus: u8, address: u8) -> Result<Vec<PipeWireNode>> {
         device::find_pipewire_nodes_for_usb(bus, address)
     }
-    #[cfg(not(target_os = "linux"))]
-    {
-        Ok(vec![])
+
+    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+        spectrum::start_spectrum_analyser(ports, sample_rate)
     }
 }
 
-// TODO: This should probably result :D
-#[allow(unused_variables)]
-pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
-    #[cfg(target_os = "linux")]
-    return spectrum::start_spectrum_analyser(ports, sample_rate);
+#[cfg(not(target_os = "linux"))]
+pub mod platform {
+    use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
+    use anyhow::Result;
 
-    #[cfg(not(target_os = "linux"))]
-    {
-        // Reason it should result.. Should be noted that you can't call this without ports
-        // and you can't get ports without PipeWireNodes.. So this function should, in theory,
-        // NEVER be called on non-linux systems.
+    pub fn find_pipewire_nodes_for_usb(_: u8, _: u8) -> Result<Vec<PipeWireNode>> {
+        Ok(vec![])
+    }
+
+    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+        // This shouldn't be called on non-linux systems.
+
         let handle = thread::spawn(|| {});
         SpectrumHandle {
             task: handle,

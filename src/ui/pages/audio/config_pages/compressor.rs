@@ -7,11 +7,16 @@ use beacn_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
 };
 use beacn_lib::types::{HasRange, MakeUpGain, TimeFrame};
-use iced::widget::{Space, checkbox, column, container, row};
-use iced::{Element, Length, Task};
+use iced::widget::canvas::{Frame, Geometry};
+use iced::widget::{Canvas, Space, canvas, checkbox, column, container, row};
+use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme, mouse};
 use strum::IntoEnumIterator;
 
-pub struct CompressorPage;
+pub struct CompressorPage {
+    input_amount: f32,
+    attenuation: f32,
+    output_amount: f32,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum CompressorMessage {
@@ -24,6 +29,14 @@ impl ConfigPage for CompressorPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
+        if let ChildMessage::Meters(meters) = message {
+            self.input_amount = meters.pre_compressor;
+            self.output_amount = meters.post_compressor;
+            self.attenuation = meters.compressor_attenuation;
+
+            return Task::none();
+        }
+
         let ChildMessage::Compressor(message) = message else {
             return Task::none();
         };
@@ -137,6 +150,130 @@ impl ConfigPage for CompressorPage {
             .spacing(10.0)
             .width(330);
 
-        row![fields, makeup].spacing(10.0).into()
+        // Ok, lets render the 'stuff'..
+        let input_meter = Canvas::new(Meter {
+            db: self.input_amount,
+            range_db: (-50.0, 0.0),
+            anchor: MeterAnchor::Bottom,
+            fill_color: Color::from_rgb8(0, 92, 128),
+        })
+        .width(Length::Fixed(8.0))
+        .height(Length::Fill);
+
+        let attenuation_meter = Canvas::new(Meter {
+            db: self.attenuation,
+            range_db: (-20.0, 0.0),
+            anchor: MeterAnchor::Top,
+            fill_color: Color::from_rgb(0.95, 0.35, 0.3),
+        })
+        .width(Length::Fixed(8.0));
+
+        let attenuation_column = column![
+            attenuation_meter.height(Length::FillPortion(20)),
+            Space::new().height(Length::FillPortion(30)),
+        ];
+
+        let output_meter = Canvas::new(Meter {
+            db: self.output_amount,
+            range_db: (-50.0, 0.0),
+            anchor: MeterAnchor::Bottom,
+            fill_color: Color::from_rgb8(0, 92, 128),
+        })
+        .width(Length::Fixed(8.0))
+        .height(Length::Fill);
+
+        let meters = row![input_meter, attenuation_column, output_meter]
+            .padding(7.0)
+            .spacing(5.0);
+
+        row![fields, meters, makeup].spacing(10.0).into()
+    }
+}
+
+impl CompressorPage {
+    pub(crate) fn new() -> Self {
+        Self {
+            input_amount: 0.0,
+            attenuation: 0.0,
+            output_amount: 0.0,
+        }
+    }
+}
+
+enum MeterAnchor {
+    Bottom,
+    Top,
+}
+
+// TODO: This might need to be moved
+// With that said, it's currently only relevant for the compressor, the only other
+// linear meter is the mic amplitude meter, but that has different drawing.
+struct Meter {
+    db: f32,
+
+    range_db: (f32, f32),
+    anchor: MeterAnchor,
+    fill_color: Color,
+}
+
+impl Meter {
+    /// Fraction in [0,1] of the track height that a dB value covers.
+    fn magnitude_fraction(&self, db: f32) -> f32 {
+        let (min_db, max_db) = self.range_db;
+        let span = (max_db - min_db).abs().max(f32::EPSILON);
+        match self.anchor {
+            MeterAnchor::Bottom => ((db - min_db) / span).clamp(0.0, 1.0),
+            MeterAnchor::Top => ((max_db - db) / span).clamp(0.0, 1.0),
+        }
+    }
+
+    /// Vertical pixel position for a specific DB value
+    fn y_for_db(&self, db: f32, track_top: f32, track_height: f32) -> f32 {
+        match self.anchor {
+            MeterAnchor::Bottom => track_top + track_height * (1.0 - self.magnitude_fraction(db)),
+            MeterAnchor::Top => track_top + track_height * self.magnitude_fraction(db),
+        }
+    }
+}
+
+impl<Message> canvas::Program<Message> for Meter {
+    type State = ();
+
+    fn draw(
+        &self,
+        _: &Self::State,
+        renderer: &Renderer,
+        _: &Theme,
+        bounds: Rectangle,
+        _: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+
+        // Track background
+        frame.fill_rectangle(
+            Point::new(0.0, 0.0),
+            Size::new(bounds.size().width, bounds.size().height),
+            Color::from_rgb8(60, 60, 60),
+        );
+
+        // Filled portion, growing from this meter's anchor edge toward the
+        // current value.
+        let anchor_y = match self.anchor {
+            MeterAnchor::Bottom => bounds.size().height,
+            MeterAnchor::Top => 0.0,
+        };
+        let value_y = self.y_for_db(self.db, 0.0, bounds.size().height);
+        let (fill_y, fill_height) = if value_y <= anchor_y {
+            (value_y, anchor_y - value_y)
+        } else {
+            (anchor_y, value_y - anchor_y)
+        };
+        frame.fill_rectangle(
+            Point::new(0.0, fill_y),
+            Size::new(bounds.size().width, fill_height),
+            self.fill_color,
+        );
+
+        vec![frame.into_geometry()]
     }
 }
