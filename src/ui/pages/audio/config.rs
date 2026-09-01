@@ -25,7 +25,8 @@ use beacn_lib::types::HasRange;
 use iced::widget::button::Status;
 use iced::widget::canvas::{Frame, Geometry};
 use iced::widget::{
-    Canvas, Float, Space, button, canvas, column, container, responsive, row, rule, stack, text,
+    Canvas, Column, Float, Space, button, canvas, column, container, responsive, row, rule, stack,
+    text,
 };
 use iced::{
     Alignment, Background, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task,
@@ -194,7 +195,13 @@ impl Configuration {
             .align_x(Alignment::Center)
             .padding(8);
 
-        let buttons = if let Some(handler) = &self.loopback_handler {
+        let mut children: Vec<Element<'_, ConfigMessage>> = vec![
+            canvas_container.into(),
+            rule::horizontal(2).into(),
+            gain.into(),
+        ];
+
+        if let Some(handler) = &self.loopback_handler {
             let output = match handler.state() {
                 LoopbackHandlerState::Recording => {
                     format!("{:.1} / 10.0", handler.current_len().as_secs_f32())
@@ -301,12 +308,10 @@ impl Configuration {
                 .padding(2.0)
                 .align_y(Alignment::Center);
 
-            Element::new(column![rule::horizontal(2), row].spacing(2))
-        } else {
-            Element::new(Space::new())
-        };
+            children.push(Element::new(column![rule::horizontal(2), row].spacing(2)))
+        }
 
-        column![canvas_container, rule::horizontal(2), gain, buttons]
+        Column::with_children(children)
             .width(Length::Fixed(95.0))
             .align_x(Alignment::Center)
             .spacing(5.0)
