@@ -31,9 +31,8 @@ use iced::{
     Alignment, Background, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task,
     Theme, Vector, mouse,
 };
-use log::debug;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// The meter's dB span, shared by the label overlay and the `MicMeter`
 /// canvas so the two can never drift out of sync with each other.
