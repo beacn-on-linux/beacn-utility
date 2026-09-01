@@ -277,9 +277,25 @@ impl BeacnUtility {
                     return Task::none();
                 };
 
-                return device.pages[page_index]
+                let task = device.pages[page_index]
                     .update_fn(&mut device.state, msg)
                     .map(Message::Page);
+
+                // Before we proceed, should we still be allowed to be on this page?
+                let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
+                if !show(&device.pages[page_index]) {
+                    // Firstly, find a page that CAN be shown..
+                    let page = device.pages.iter().position(show);
+                    if let Some(page) = page {
+                        // Close this page..
+                        device.pages[page_index].on_close_fn(&mut device.state);
+
+                        self.active_page = Some(page);
+                        device.pages[page].on_open_fn(&mut device.state);
+                    }
+                }
+
+                return task;
             }
 
             Message::Tick => {
