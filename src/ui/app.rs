@@ -483,7 +483,7 @@ impl BeacnUtility {
         let resize_sub = window::resize_events().map(Message::WindowResized);
         let close_sub = window::close_requests().map(Message::WindowCloseRequested);
 
-        let tick_rate = 1000 / 60;
+        let tick_rate = 1000 / 45;
         let ticker = time::every(Duration::from_millis(tick_rate)).map(|_| Message::Tick);
 
         Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub, ticker])
