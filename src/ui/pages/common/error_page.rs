@@ -75,7 +75,7 @@ pub fn display_errors(
     errors: &[ErrorMessage],
 ) -> Element<'static, PageMessage> {
     let header = column![
-        text("An error occurred while loading the device.")
+        text("An error occurred communicating with the device.")
             .size(24)
             .font(heading_font()),
         text(format!(
@@ -159,7 +159,7 @@ fn error_details(errors: &[ErrorMessage]) -> Column<'static, PageMessage> {
         let mut entry = column![].spacing(4);
 
         if let Some(error) = &message.error_text {
-            entry = entry.push(text(format!("Error: {error:?}")));
+            entry = entry.push(text(format!("Error: {error}")));
         }
 
         if let Some(failed_message) = &message.failed_message {
@@ -170,11 +170,9 @@ fn error_details(errors: &[ErrorMessage]) -> Column<'static, PageMessage> {
     }
 
     column![
-        text("Device in Error State")
-            .size(18)
-            .font(subheading_font()),
+        text("Errors:").size(18).font(subheading_font()),
         Space::new().height(10),
-        scrollable(list).height(Length::Shrink),
+        scrollable(list).height(Length::Shrink).width(Length::Fill),
     ]
     .spacing(0)
 }
