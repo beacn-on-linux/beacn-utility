@@ -48,9 +48,8 @@ emath = "0.36.1"
 
 # Grab beacn-mic-lib for comms
 #beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["tokio"] }
-#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.3.1", features = ["tokio"] }
-#beacn-lib = { path = "../beacn-lib-fork", features = ["tokio"] }
-beacn-lib = { git = "https://github.com/frostycoolslug/beacn-lib.git", branch="eq_headphones", features = ["tokio"] }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.1", features = ["tokio"] }
+#beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
 # Image Handling
 image = "0.25.10"

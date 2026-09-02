@@ -396,8 +396,8 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "beacn-lib"
-version = "0.3.1"
-source = "git+https://github.com/frostycoolslug/beacn-lib.git?branch=eq_headphones#39977ba4a307d564fdf7fbf6163bd6bd984effb2"
+version = "0.4.1"
+source = "git+https://github.com/beacn-on-linux/beacn-lib.git?tag=v0.4.1#1cc34bbdb2e4daecc970172a93ffef7c17f0d5d1"
 dependencies = [
  "anyhow",
  "async-io",
