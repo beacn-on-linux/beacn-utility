@@ -494,11 +494,8 @@ impl EQDrawView {
 
     fn eq_gain_simd(frequencies: &[f32], band: EQBand, bands: &Bands) -> Vec<f32> {
         let mut gains = vec![0.0; frequencies.len()];
-        // let chunks = frequencies.chunks_exact(8);
-        // let remainder = chunks.remainder();
         let chunks = frequencies.as_chunks::<8>();
         let remainder = chunks.1;
-
 
         let coefficient = Self::get_coefficient(&bands[band]);
         for i in 0..chunks.0.len() {
