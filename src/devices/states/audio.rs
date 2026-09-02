@@ -443,6 +443,12 @@ impl AudioState {
             let _ = state.handle_message(message);
         }
 
+        // Same with this, if this is "Off", the app was closed while a snapshot was in progress.
+        if state.suppressor.style == SuppressorStyle::Off {
+            let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
+            let _ = state.handle_message(message);
+        }
+
         state.device_state.state = LoadState::Running;
         state
     }
@@ -514,6 +520,11 @@ impl AudioState {
 
         if state.headphones.mic_loopback_enabled {
             let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = state.handle_message_async(message).await;
+        }
+
+        if state.suppressor.style == SuppressorStyle::Off {
+            let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
             let _ = state.handle_message_async(message).await;
         }
 
