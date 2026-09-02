@@ -39,6 +39,7 @@ use strum::IntoEnumIterator;
 
 // Stolen from mic_equaliser
 const DRAG_DELAY: Duration = Duration::from_millis(80);
+const HIGHLIGHT_COLOUR: Color = Color::from_rgb8(0, 123, 178);
 
 #[derive(Debug, Clone)]
 pub enum HPEQMessage {
@@ -455,7 +456,7 @@ impl HPEqualiser {
             self.view[self.active_channel].set_border_colour(None);
             self.view[self.active_channel.other()].set_active(self.active_band);
         } else {
-            self.view[self.active_channel].set_border_colour(Some(Color::from_rgb8(0, 255, 0)));
+            self.view[self.active_channel].set_border_colour(Some(HIGHLIGHT_COLOUR));
             self.view[self.active_channel.other()].set_active(None);
         }
     }
@@ -501,7 +502,7 @@ impl HPEqualiser {
 
         // Only update the border if we're not linked
         if !is_linked {
-            self.view[ch].set_border_colour(Some(Color::from_rgb8(0, 255, 0)));
+            self.view[ch].set_border_colour(Some(HIGHLIGHT_COLOUR));
         }
     }
 
@@ -540,7 +541,7 @@ impl HPEqualiser {
         // Should depend on whether self.active = active
         let is_linked = state.eq_headphones.linked;
         let label_colour = match self.active_channel == channel && !is_linked {
-            true => Color::from_rgba8(0, 255, 0, 1.0),
+            true => HIGHLIGHT_COLOUR,
             false => Color::from_rgba8(255, 255, 255, 0.5),
         };
 
@@ -624,7 +625,7 @@ impl HPEqualiser {
             .style(move |theme, status| {
                 let mut style = slider_theme(theme, status);
                 if balance_at_zero {
-                    style.handle.border_color = Color::from_rgb(0.0, 1.0, 0.0);
+                    style.handle.border_color = Color::from_rgb8(0, 255, 0);
                 }
                 style
             })
