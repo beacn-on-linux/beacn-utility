@@ -327,6 +327,8 @@ impl HPEqualiser {
             // Prepare for a drag, will be taken care of during the handle_eq_move callback
             self.view[channel].set_track_motion(true);
             self.drag_start = Some(Instant::now());
+        } else if channel != self.active_channel {
+            self.switch_active_channel(channel, state);
         }
     }
     fn handle_eq_moved(&mut self, state: &mut AudioState, ch: Channel, point: Point) {
@@ -455,6 +457,25 @@ impl HPEqualiser {
         if is_linked {
             self.view[self.active_channel].set_border_colour(None);
             self.view[self.active_channel.other()].set_active(self.active_band);
+
+            // Ok, we need to take the active channel and use it as a reference to batch sync
+            let mut messages = vec![];
+            let bands = state.eq_headphones.bands[self.active_channel];
+            let c = self.active_channel.other();
+            for b in EQBand::iter() {
+                messages.push(EQHeadphones::Enabled(c, b, bands[b].enabled));
+                messages.push(EQHeadphones::Frequency(c, b, bands[b].frequency.into()));
+                messages.push(EQHeadphones::Gain(c, b, bands[b].gain.into()));
+                messages.push(EQHeadphones::Type(c, b, bands[b].band_type));
+                messages.push(EQHeadphones::Q(c, b, bands[b].q.into()));
+            }
+
+            for message in messages {
+                let _ = state.handle_message(Message::EQHeadphones(message));
+            }
+
+            // Sync the view now everything's updated..
+            self.view[c].set_bands(state.eq_headphones.bands[c]);
         } else {
             self.view[self.active_channel].set_border_colour(Some(HIGHLIGHT_COLOUR));
             self.view[self.active_channel.other()].set_active(None);
