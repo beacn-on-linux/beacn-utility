@@ -18,6 +18,7 @@ use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{Space, column, container, row, rule, text};
 use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, time, window};
 use iced_futures::subscription::from_recipe;
+use log::debug;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -318,6 +319,20 @@ impl BeacnUtility {
             }
 
             Message::Quit => {
+                // Trigger the page on_close callback before we quit.
+                //
+                // Some pages (for example, the audio config page) may put a device into a state
+                // which needs to be recovered from before exit (mic loopback).
+                if self.active_id.is_some() {
+                    debug!("Window Open, triggering close on current visible page");
+                    if let Some(hash) = &self.active_device
+                        && let Some(page) = self.active_page
+                        && let Some(device) = self.devices.get_mut(hash)
+                    {
+                        device.pages[page].on_close_fn(&mut device.state);
+                    }
+                }
+
                 return iced::exit();
             }
             Message::WindowOpen => {
