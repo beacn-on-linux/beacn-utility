@@ -171,11 +171,7 @@ impl ConfigPage for HeadphonesPage {
             .align_x(Alignment::Start);
 
         if device_version > beacn_lib::EQ_HEADPHONES_VERSION {
-            row![
-                levels,
-                rule::vertical(1.0),
-                amp_power
-            ]
+            row![levels, rule::vertical(1.0), amp_power]
                 .spacing(15)
                 .padding(Padding {
                     top: 7.0,
@@ -192,14 +188,14 @@ impl ConfigPage for HeadphonesPage {
                 rule::vertical(1.0),
                 amp_power
             ]
-                .spacing(15)
-                .padding(Padding {
-                    top: 7.0,
-                    bottom: 7.0,
-                    left: 20.0,
-                    right: 00.0,
-                })
-                .into()
+            .spacing(15)
+            .padding(Padding {
+                top: 7.0,
+                bottom: 7.0,
+                left: 20.0,
+                right: 00.0,
+            })
+            .into()
         }
     }
 }

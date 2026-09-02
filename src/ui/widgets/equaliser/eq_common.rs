@@ -1,6 +1,6 @@
 use crate::devices::states::audio::EqualiserBandConfig;
-use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType};
 use beacn_lib::audio::messages::eq_common::EQBandType::*;
+use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType};
 use enum_map::EnumMap;
 use iced::mouse::ScrollDelta;
 use iced::{Point, Rectangle, Size};

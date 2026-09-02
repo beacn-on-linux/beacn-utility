@@ -3,6 +3,9 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::*;
 use crate::ui::pages::audio::hp_equaliser::HPEQValue::*;
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::utility::pipewire::platform::{
+    find_pipewire_nodes_for_usb, start_spectrum_analyser,
+};
 use crate::ui::utility::pipewire::{PipeWireNodeType, SpectrumHandle};
 use crate::ui::widgets::equaliser::eq_common::{
     EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain, get_q_delta,
@@ -33,7 +36,6 @@ use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
-use crate::ui::utility::pipewire::platform::{find_pipewire_nodes_for_usb, start_spectrum_analyser};
 
 // Stolen from mic_equaliser
 const DRAG_DELAY: Duration = Duration::from_millis(80);

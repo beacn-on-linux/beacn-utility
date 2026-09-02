@@ -171,8 +171,7 @@ impl MicEqualiser {
             SetFrequency(frequency) => {
                 if let Some(active) = self.active_band {
                     let value = EQFrequency(frequency as f32);
-                    let msg =
-                        EQMicrophone::Frequency(state.eq_microphone.mode, active, value);
+                    let msg = EQMicrophone::Frequency(state.eq_microphone.mode, active, value);
                     let _ = state.handle_message(Message::EQMicrophone(msg));
 
                     let band = state.eq_microphone.bands[state.eq_microphone.mode][active];

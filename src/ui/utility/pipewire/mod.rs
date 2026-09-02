@@ -153,7 +153,7 @@ pub mod platform {
     use anyhow::Result;
     use std::cell::{RefCell, UnsafeCell};
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool};
+    use std::sync::atomic::AtomicBool;
     use std::thread;
     use std::time::Duration;
 
