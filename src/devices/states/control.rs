@@ -149,12 +149,15 @@ impl ControlState {
             if let Err(e) = state.handle_message_async(message.clone(), false).await {
                 state.device_state.state = LoadState::Error;
                 state.device_state.errors.push(ErrorMessage {
-                    error_text: Some(format!("{e:?}")),
+                    error_text: Some(format!("{e}")),
                     failed_message: None,
                 })
             }
         }
 
+        if state.device_state.state == LoadState::Loading {
+            state.device_state.state = LoadState::Running;
+        }
         state
     }
 

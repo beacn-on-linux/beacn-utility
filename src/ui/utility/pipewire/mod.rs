@@ -21,11 +21,13 @@ pub struct OutputStream {
     pub process: OutputProcess,
 }
 
+#[allow(unused)]
 pub enum PipewireStream {
     Input(Vec<InputStream>),
     Output(Vec<OutputStream>),
 }
 
+#[allow(unused)]
 impl PipewireStream {
     pub fn len(&self) -> usize {
         match self {
@@ -88,10 +90,12 @@ impl SpectrumHandle {
 }
 
 // SAFETY: The buffer is only ever accessed by a single thread at a single point in time.
+#[allow(unused)]
 struct SampleBuffer(UnsafeCell<RingBuffer>);
 unsafe impl Send for SampleBuffer {}
 unsafe impl Sync for SampleBuffer {}
 
+#[allow(unused)]
 pub struct LoopbackHandler {
     task: Option<thread::JoinHandle<()>>,
     stop_signal: Arc<AtomicBool>,
@@ -108,6 +112,7 @@ pub struct LoopbackHandler {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
 pub enum LoopbackHandlerState {
     Recording,
     Playing,
@@ -141,14 +146,22 @@ pub mod platform {
 
 #[cfg(not(target_os = "linux"))]
 pub mod platform {
-    use crate::ui::utility::pipewire::{PipeWireNode, SpectrumHandle};
+    use crate::ui::utility::pipewire::ring_buffer::RingBuffer;
+    use crate::ui::utility::pipewire::{
+        LoopbackHandler, LoopbackHandlerState, PipeWireNode, SampleBuffer, SpectrumHandle,
+    };
     use anyhow::Result;
+    use std::cell::{RefCell, UnsafeCell};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::thread;
+    use std::time::Duration;
 
     pub fn find_pipewire_nodes_for_usb(_: u8, _: u8) -> Result<Vec<PipeWireNode>> {
         Ok(vec![])
     }
 
-    pub fn start_spectrum_analyser(ports: Vec<u32>, sample_rate: u32) -> SpectrumHandle {
+    pub fn start_spectrum_analyser(_: Vec<u32>, _: u32) -> SpectrumHandle {
         // This shouldn't be called on non-linux systems.
 
         let handle = thread::spawn(|| {});
@@ -156,6 +169,46 @@ pub mod platform {
             task: handle,
             stop_signal: Arc::new(Default::default()),
             data: vec![],
+        }
+    }
+
+    // This is a pure NOOP implementation of the loopback handler, as with the spectrum analyser
+    // above this should never be called, but needs to exist for the config. I should probably
+    // trait this but that's only relevant if there were other implementations, which there
+    // currently aren't, and I'd still have the impl a no-op for it.
+    impl LoopbackHandler {
+        pub fn new(input_port: u32, output_port: u32) -> Self {
+            let ring_buffer = RingBuffer::new(0);
+            let samples_len = ring_buffer.len_handle();
+            let samples_pos = ring_buffer.head_handle();
+
+            Self {
+                task: None,
+                stop_signal: Arc::new(AtomicBool::new(false)),
+
+                state: RefCell::new(LoopbackHandlerState::Stopped),
+
+                samples: Arc::new(SampleBuffer(UnsafeCell::new(ring_buffer))),
+                samples_len,
+                samples_pos,
+
+                input_port,
+                output_port,
+            }
+        }
+
+        pub fn state(&self) -> LoopbackHandlerState {
+            LoopbackHandlerState::Stopped
+        }
+        pub fn perform_record(&mut self) {}
+        pub fn perform_playback(&mut self) {}
+        pub fn stop(&mut self) {}
+        pub fn clear_buffer(&mut self) {}
+        pub fn current_len(&self) -> Duration {
+            Duration::from_secs(0)
+        }
+        pub fn current_pos(&self) -> Duration {
+            Duration::from_secs(0)
         }
     }
 }

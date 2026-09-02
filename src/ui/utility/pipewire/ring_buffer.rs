@@ -1,12 +1,14 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[allow(unused)]
 pub struct RingBuffer {
     data: Box<[f32]>,
     head: Arc<AtomicUsize>,
     len: Arc<AtomicUsize>,
 }
 
+#[allow(unused)]
 impl RingBuffer {
     pub(crate) fn new(capacity: usize) -> Self {
         Self {

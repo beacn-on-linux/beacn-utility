@@ -282,6 +282,7 @@ impl BeacnUtility {
                     .map(Message::Page);
 
                 // Before we proceed, should we still be allowed to be on this page?
+                #[allow(clippy::borrowed_box)]
                 let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
                 if !show(&device.pages[page_index]) {
                     // Firstly, find a page that CAN be shown..
@@ -340,6 +341,8 @@ impl BeacnUtility {
                 return task.map(move |_| Message::WindowOpened(id));
             }
             Message::WindowOpened(_id) => {}
+
+            #[allow(unused)]
             Message::WindowCloseRequested(id) => {
                 self.active_id = None;
 
@@ -351,7 +354,11 @@ impl BeacnUtility {
                     device.pages[page].on_close_fn(&mut device.state);
                 }
 
+                #[cfg(target_os = "linux")]
                 return window::close(id);
+
+                #[cfg(not(target_os = "linux"))]
+                return iced::exit();
             }
             Message::WindowResized((_, size)) => {
                 self.window_settings.size = size;
@@ -512,6 +519,7 @@ fn create_pages_audio() -> Vec<Box<dyn Page>> {
     vec![
         Box::new(AP(audio::config::Configuration::new())),
         Box::new(AP(audio::lighting::LightingPage::new())),
+        Box::new(AP(audio::hp_equaliser::HPEqualiser::new())),
         Box::new(AP(audio::studio_link::StudioLink::new())),
         Box::new(AP(audio::about::About::new())),
         Box::new(common::error_page::ErrorPage::new()),

@@ -2,7 +2,7 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::widgets::helpers::composite::draw_range;
 use beacn_lib::audio::messages::Message;
-use beacn_lib::audio::messages::headphone_eq::{HPEQType, HPEQValue, HeadphoneEQ};
+use beacn_lib::audio::messages::eq_headphones_legacy::{EQHPLegacy, HPEQType, HPEQValue};
 use beacn_lib::audio::messages::headphones::HeadphoneTypes::{
     HighImpedance, InEarMonitors, LineLevel, NormalPower,
 };
@@ -41,9 +41,9 @@ impl ConfigPage for HeadphonesPage {
             HeadphonesMessage::EQEnabled(enabled) => {
                 let messages = vec![
                     Message::Headphones(Headphones::FXEnabled(enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Bass, enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Mids, enabled)),
-                    Message::HeadphoneEQ(HeadphoneEQ::Enabled(HPEQType::Treble, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Bass, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Mids, enabled)),
+                    Message::EQHPLegacy(EQHPLegacy::Enabled(HPEQType::Treble, enabled)),
                     Message::Subwoofer(Subwoofer::Enabled(enabled)),
                 ];
                 for message in messages {
@@ -52,7 +52,8 @@ impl ConfigPage for HeadphonesPage {
             }
 
             HeadphonesMessage::SubwooferAmount(amount) => {
-                let messages = Subwoofer::get_amount_messages(amount);
+                let version = state.device_definition.device_info.version;
+                let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
                     let _ = state.handle_message(message);
                 }
@@ -68,6 +69,8 @@ impl ConfigPage for HeadphonesPage {
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
+        let device_version = state.device_definition.device_info.version;
+
         let device_type = state.device_definition.device_type;
         let value = state.headphones.mic_monitor;
         let range = HPMicMonitorLevel::range();
@@ -117,24 +120,24 @@ impl ConfigPage for HeadphonesPage {
             .on_toggle(HeadphonesMessage::EQEnabled);
         let enabled = Element::from(enabled).map(ChildMessage::Headphones);
 
-        let value = state.headphone_eq.eq[HPEQType::Bass].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Bass].amount;
         let range = HPEQValue::range();
         let bass = draw_range("Bass", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Bass, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Bass, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
-        let value = state.headphone_eq.eq[HPEQType::Mids].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Mids].amount;
         let range = HPEQValue::range();
         let mids = draw_range("Mids", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Mids, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Mids, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
-        let value = state.headphone_eq.eq[HPEQType::Treble].amount;
+        let value = state.eq_hp_legacy.eq[HPEQType::Treble].amount;
         let range = HPEQValue::range();
         let treble = draw_range("Treble", value, range, "dB", |v| {
-            let msg = Message::HeadphoneEQ(HeadphoneEQ::Amount(HPEQType::Treble, HPEQValue(v)));
+            let msg = Message::EQHPLegacy(EQHPLegacy::Amount(HPEQType::Treble, HPEQValue(v)));
             ChildMessage::State(msg)
         });
 
@@ -167,20 +170,32 @@ impl ConfigPage for HeadphonesPage {
             .width(Length::Shrink)
             .align_x(Alignment::Start);
 
-        row![
-            levels,
-            rule::vertical(1.0),
-            eq,
-            rule::vertical(1.0),
-            amp_power
-        ]
-        .spacing(15)
-        .padding(Padding {
-            top: 7.0,
-            bottom: 7.0,
-            left: 20.0,
-            right: 00.0,
-        })
-        .into()
+        if device_version > beacn_lib::EQ_HEADPHONES_VERSION {
+            row![levels, rule::vertical(1.0), amp_power]
+                .spacing(15)
+                .padding(Padding {
+                    top: 7.0,
+                    bottom: 7.0,
+                    left: 20.0,
+                    right: 00.0,
+                })
+                .into()
+        } else {
+            row![
+                levels,
+                rule::vertical(1.0),
+                eq,
+                rule::vertical(1.0),
+                amp_power
+            ]
+            .spacing(15)
+            .padding(Padding {
+                top: 7.0,
+                bottom: 7.0,
+                left: 20.0,
+                right: 00.0,
+            })
+            .into()
+        }
     }
 }
