@@ -327,10 +327,6 @@ impl AudioPage for Configuration {
     fn on_open(&mut self, state: &mut AudioState) {
         self.equaliser.load_device(state);
 
-        if self.spectrum_handler.is_some() {
-            return;
-        }
-
         let location = state.location();
         let bus_addr = location.bus_id.parse::<u8>().unwrap_or(0);
         let dev_addr = location.device_address;
@@ -388,11 +384,14 @@ impl AudioPage for Configuration {
 
         if let Some(dry_mix_port) = dry_mix_port
             && let Some(loopback_port) = loopback_port
+            && self.loopback_handler.is_none()
         {
             self.loopback_handler = Some(LoopbackHandler::new(dry_mix_port, loopback_port));
         }
 
-        if let Some(spectrum_ports) = spectrum_port {
+        if let Some(spectrum_ports) = spectrum_port
+            && self.spectrum_handler.is_none()
+        {
             // Ok, we have a usable port list, let's fire up a listener..
             let handler = start_spectrum_analyser(spectrum_ports, 48000);
 
@@ -400,6 +399,9 @@ impl AudioPage for Configuration {
             self.spectrum_data = Some(handler.data[0].clone());
             self.spectrum_handler = Some(handler);
         }
+
+        // Open the active tab
+        self.tab_pages[self.selected_tab].on_open(state);
     }
 
     fn on_close(&mut self, state: &mut AudioState) {
@@ -417,6 +419,9 @@ impl AudioPage for Configuration {
 
         // Remove anything that may be cached, we should redraw later.
         self.equaliser.clear();
+
+        // Close the active tab
+        self.tab_pages[self.selected_tab].on_close(state);
     }
 
     fn on_tick(&mut self, state: &mut AudioState) -> Task<PageMessage> {
@@ -476,6 +481,7 @@ impl AudioPage for Configuration {
                     .map(PageMessage::AudioConfig),
 
                 ConfigMessage::SelectTab(tab_index) => {
+                    self.tab_pages[self.selected_tab].on_close(state);
                     self.selected_tab = tab_index;
                     self.tab_pages[self.selected_tab].on_open(state);
 

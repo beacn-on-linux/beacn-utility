@@ -11,6 +11,7 @@ use crate::ui::pages::audio::config_pages::expander::ExpanderMessage;
 use beacn_lib::audio::data::MetersResponse;
 
 use crate::ui::pages::audio::config_pages::headphones::HeadphonesMessage;
+use crate::ui::pages::audio::config_pages::suppressor::SuppressorMessage;
 use beacn_lib::audio::messages::Message;
 use iced::{Element, Task};
 
@@ -22,6 +23,7 @@ pub(crate) enum ChildMessage {
     Expander(ExpanderMessage),
     Compressor(CompressorMessage),
     Headphones(HeadphonesMessage),
+    Suppressor(SuppressorMessage),
 }
 
 pub trait ConfigPage {
@@ -32,6 +34,7 @@ pub trait ConfigPage {
     }
 
     fn on_open(&mut self, _state: &mut AudioState) {}
+    fn on_close(&mut self, _state: &mut AudioState) {}
 
     fn view(&self, device: &AudioState) -> Element<'_, ChildMessage>;
 }
