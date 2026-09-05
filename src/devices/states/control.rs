@@ -8,7 +8,7 @@ use beacn_lib::manager::DeviceLocation;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::time::Duration;
+use web_time::Duration;
 
 // Literally nothing to do here right now
 #[derive(Debug, Default, Clone)]

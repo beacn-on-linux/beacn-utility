@@ -34,10 +34,10 @@ use log::{debug, error};
 use std::collections::HashMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
-use std::time::Duration;
 use strum_macros::Display;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use web_time::Duration;
 
 pub(crate) async fn spawn_device_manager(
     self_rx: Receiver<ManagerMessages>,

@@ -33,7 +33,7 @@ use iced::{
     Theme, Vector, mouse,
 };
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use web_time::Instant;
 
 /// The meter's dB span, shared by the label overlay and the `MicMeter`
 /// canvas so the two can never drift out of sync with each other.

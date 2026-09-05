@@ -19,8 +19,8 @@ use iced::widget::{Canvas, checkbox, container, row, rule, text};
 use iced::{Alignment, Element, Length, Padding, Point, Rectangle, Task};
 use log::warn;
 use std::ops::RangeInclusive;
-use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
+use web_time::{Duration, Instant};
 
 const DRAG_DELAY: Duration = Duration::from_millis(80);
 

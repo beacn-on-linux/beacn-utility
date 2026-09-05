@@ -6,7 +6,7 @@ use beacn_lib::controller::messages::Message;
 use beacn_lib::manager::DeviceType;
 use iced::widget::{Space, container, row, rule, text};
 use iced::{Alignment, Element, Task};
-use std::time::Duration;
+use web_time::Duration;
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum ControlAboutMessage {

@@ -16,8 +16,8 @@ use iced::{
     Alignment, Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme, mouse,
 };
 use std::ops::RangeInclusive;
-use std::time::{Duration, Instant};
 use tokio::time::sleep;
+use web_time::{Duration, Instant};
 
 #[derive(Debug, Clone)]
 pub(crate) enum SuppressorMessage {

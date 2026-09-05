@@ -12,8 +12,8 @@ use iced::widget::canvas::{Cache, LineCap, LineJoin, Path, Stroke, Style};
 use iced::widget::{Space, canvas, checkbox, column, row, rule};
 use iced::{Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme};
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
+use web_time::{Duration, Instant};
 
 // Run this data sender at 20pps
 const POINTS_PER_SECOND: u64 = 10;

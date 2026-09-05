@@ -20,7 +20,7 @@ use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, time, wi
 use iced_futures::subscription::from_recipe;
 use log::debug;
 use std::collections::HashMap;
-use std::time::Duration;
+use web_time::Duration;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction

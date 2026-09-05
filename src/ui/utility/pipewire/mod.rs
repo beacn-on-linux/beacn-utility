@@ -155,7 +155,7 @@ pub mod platform {
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::thread;
-    use std::time::Duration;
+    use web_time::Duration;
 
     pub fn find_pipewire_nodes_for_usb(_: u8, _: u8) -> Result<Vec<PipeWireNode>> {
         Ok(vec![])

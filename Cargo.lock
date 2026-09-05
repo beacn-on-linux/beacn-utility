@@ -509,6 +509,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite-wasm",
  "unicode-segmentation",
+ "web-time",
  "wide",
  "zbus",
 ]

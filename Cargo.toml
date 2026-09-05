@@ -52,6 +52,9 @@ json-patch = "4.2.0"
 directories = "6.0.0"
 rayon = "1.12.0"
 
+# Drop in replacement for std::time
+web-time = "1.1.0"
+
 # These are all dependencies which aren't compatible with WASM
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Logging

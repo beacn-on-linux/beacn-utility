@@ -34,8 +34,8 @@ use iced::{Alignment, Background, Border, Color, Element, Font, Length, Padding,
 use log::warn;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
+use web_time::{Duration, Instant};
 
 // Stolen from mic_equaliser
 const DRAG_DELAY: Duration = Duration::from_millis(80);

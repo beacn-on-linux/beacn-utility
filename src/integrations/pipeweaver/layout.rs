@@ -18,8 +18,8 @@ use std::io::ErrorKind::UnexpectedEof;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use std::time::Instant;
 use strum::IntoEnumIterator;
+use web_time::Instant;
 
 // First thing we need, is to device the font used for rendering on the screen
 #[allow(unused)]

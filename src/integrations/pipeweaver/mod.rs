@@ -29,13 +29,13 @@ use std::cmp::PartialEq;
 use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
 use tokio_tungstenite_wasm::{Message, Utf8Bytes, WebSocketStream, connect};
+use web_time::{Duration, Instant};
 
 const HELD_TIME: Duration = Duration::from_millis(500);
 

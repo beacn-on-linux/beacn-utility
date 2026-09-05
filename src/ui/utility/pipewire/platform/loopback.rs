@@ -7,7 +7,7 @@ use std::cell::{RefCell, UnsafeCell};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use web_time::Duration;
 
 const SAMPLE_RATE: usize = 48000;
 const BUFFER_LEN_SECS: usize = 10;
