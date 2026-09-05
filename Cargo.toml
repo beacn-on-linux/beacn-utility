@@ -81,7 +81,11 @@ interprocess = { version = "2.4.2", features = ["tokio"] }
 
 # These are the WASM Alternatives
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+# Logging
 console_log = "1.1.0"
+
+# Beacn Lib for Hardware Comms
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["async"] }
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
