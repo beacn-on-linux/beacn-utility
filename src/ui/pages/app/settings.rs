@@ -75,7 +75,7 @@ impl SettingsPage {
 
     #[cfg(target_os = "linux")]
     fn set_autostart(&mut self, id: Id, enabled: bool) -> Task<SettingsMessage> {
-        use crate::{APP_NAME, BACKGROUND_PARAM, get_autostart_file, run_async_blocking};
+        use crate::{APP_NAME, get_autostart_file, run_async_blocking};
         use anyhow::anyhow;
         use ashpd::WindowIdentifier;
         use ashpd::desktop::background::Background;
@@ -109,7 +109,7 @@ impl SettingsPage {
                         .dbus_activatable(false)
                         .command::<Vec<_>, String>(vec![
                             String::from(APP_NAME),
-                            String::from(BACKGROUND_PARAM),
+                            String::from("--background"),
                         ]);
 
                     debug!("Requesting Background Access");
@@ -146,7 +146,7 @@ impl SettingsPage {
                             .set("Type", "Application")
                             .set("Name", "Beacn Utility")
                             .set("Comment", "A Tool for Configuring Beacn Devices")
-                            .set("Exec", format!("{exe:?} {BACKGROUND_PARAM}"))
+                            .set("Exec", format!("{exe:?} --background"))
                             .set("Terminal", "false");
 
                         match conf.write_to_file(path) {

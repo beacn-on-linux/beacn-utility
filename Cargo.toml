@@ -17,6 +17,9 @@ simplelog = "0.12.2"
 file-rotate = "0.8.0"
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 
+# Command Line Parsing
+clap = { version = "4.6", features = ["derive"] }
+
 # Error Handling
 anyhow = "1.0.104"
 

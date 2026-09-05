@@ -3,6 +3,7 @@ use anyhow::bail;
 use anyhow::{Result, anyhow};
 use beacn_lib::flume::{Receiver, unbounded};
 
+use clap::Parser;
 use directories::BaseDirs;
 use file_rotate::compression::Compression;
 use file_rotate::suffix::AppendCount;
@@ -32,8 +33,8 @@ mod ui;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
 
-const BACKGROUND_PARAM: &str = "--background";
-const LEGACY_BACKGROUND_PARAM: &str = "--startup";
+// const BACKGROUND_PARAM: &str = "--background";
+// const LEGACY_BACKGROUND_PARAM: &str = "--startup";
 
 const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
@@ -49,12 +50,25 @@ pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
     runtime().block_on(future)
 }
 
+#[derive(Parser, Debug)]
+#[command(about, version, author)]
+pub struct Args {
+    #[arg(short, long, default_value = "debug")]
+    pub log_level: LevelFilter,
+
+    /// Launch in the background, without opening the UI
+    #[arg(long, alias = "startup")]
+    pub background: bool,
+}
+
 fn main() -> Result<()> {
     let tokio_rt = Runtime::new().expect("Failed to create Tokio Runtime");
     let _guard = tokio_rt.enter();
 
     // Configure the static runtime as this runtime
     runtime();
+
+    let args = Args::parse();
 
     println!("Initialising Logging...");
     let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
@@ -75,9 +89,16 @@ fn main() -> Result<()> {
     config.add_filter_ignore_str("cosmic_text");
     config.add_filter_ignore_str("sctk");
 
+    // These are *INCREDIBLY* noisy when we're in trace mode, but we don't need their trace output
+    config.add_filter_ignore_str("tungstenite::protocol");
+    config.add_filter_ignore_str("tungstenite::handshake");
+    config.add_filter_ignore_str("tokio_tungstenite");
+    config.add_filter_ignore_str("calloop");
+    config.add_filter_ignore_str("iced_graphics::text::paragraph");
+
     // Setup Console Logging
     log_targets.push(TermLogger::new(
-        LevelFilter::Debug,
+        args.log_level,
         config.build(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -113,13 +134,9 @@ fn main() -> Result<()> {
     // Install a PANIC logger, to hopefully drop info if something breaks
     log_panics::init();
 
-    let args: Vec<String> = env::args().collect();
-    let hide_initial = args.contains(&BACKGROUND_PARAM.to_string())
-        || args.contains(&LEGACY_BACKGROUND_PARAM.to_string());
-
     // Firstly, create a message bus which allows threads to message back to here
     let (window_tx, window_rx) = unbounded();
-    if !hide_initial {
+    if !args.background {
         window_tx.send(WindowMessage::OpenWindow)?;
     }
 
