@@ -15,8 +15,8 @@ use beacn_lib::flume::{Receiver, Sender, TryRecvError};
 use beacn_lib::manager::DeviceType;
 use beacn_lib::types::RGBA;
 use enum_map::{EnumMap, enum_map};
-use futures_lite::stream::StreamExt;
 use iced::futures::SinkExt;
+use iced::futures::StreamExt;
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
 use interprocess::local_socket::tokio::prelude::LocalSocketStream;
 use interprocess::local_socket::traits::tokio::Stream;
@@ -31,13 +31,11 @@ use std::io::ErrorKind;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
-use tokio::net::TcpStream;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
-use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
+use tokio_tungstenite_wasm::{Message, Utf8Bytes, WebSocketStream, connect};
 
 const HELD_TIME: Duration = Duration::from_millis(500);
 
@@ -144,7 +142,7 @@ pub enum ChannelType {
     Target,
 }
 
-type WebSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type WebSocket = WebSocketStream;
 type Renderers = HashMap<String, ChannelRenderer>;
 
 struct PipeweaverHandler {
@@ -239,9 +237,9 @@ impl PipeweaverHandler {
 
             // We only suppress 'Connection Refused' errors, as they're expected to happen
             let is_connection_refused = e
-                .downcast_ref::<tungstenite::Error>()
+                .downcast_ref::<tokio_tungstenite_wasm::Error>()
                 .and_then(|e| {
-                    if let tungstenite::Error::Io(io) = e {
+                    if let tokio_tungstenite_wasm::Error::Io(io) = e {
                         Some(io)
                     } else {
                         None
@@ -330,8 +328,8 @@ impl PipeweaverHandler {
 
     async fn connect_with_stop(&mut self, url: &str) -> Result<WebSocket> {
         select! {
-            result = connect_async(url) => {
-                Ok(result?.0)
+            result = connect(url) => {
+                Ok(result?)
             }
             Ok(_) = self.stop_rx.changed() => {
                 bail!("Shutdown requested")
