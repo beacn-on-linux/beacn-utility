@@ -87,6 +87,11 @@ console_log = "1.1.0"
 # Beacn Lib for Hardware Comms
 beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["async"] }
 
+# Async Runtime
+tokio_with_wasm = { version = "0.10.1", features = ["rt", "time", "sync", "macros"] }
+
+# UI Framework (iced) - No tokio, and specifically only the webgl platform
+iced = { version = "0.14.0", default-features = false, features = ["wgpu", "webgl", "advanced", "svg", "canvas"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
