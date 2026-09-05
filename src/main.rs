@@ -92,7 +92,7 @@ async fn main() -> Result<()> {
 
         // Setup Console Logging
         log_targets.push(TermLogger::new(
-            LevelFilter::from(args.log_level),
+            args.log_level,
             config.build(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
