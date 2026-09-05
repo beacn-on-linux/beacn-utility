@@ -24,7 +24,7 @@ clap = { version = "4.6", features = ["derive"] }
 anyhow = "1.0.104"
 
 # Async Runtime
-tokio = { version = "1.53.1", features = ["process", "rt-multi-thread", "signal"] }
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal", "macros"] }
 
 # Opening Stuff
 open = "5.4.0"
