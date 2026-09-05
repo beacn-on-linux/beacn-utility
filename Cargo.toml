@@ -9,12 +9,9 @@ license = "MIT"
 categories = ["hardware-support"]
 build = "build.rs"
 
-
 [dependencies]
 # Logging
 log = "0.4.33"
-simplelog = "0.12.2"
-file-rotate = "0.8.0"
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
 
 # Command Line Parsing
@@ -22,12 +19,6 @@ clap = { version = "4.6", features = ["derive"] }
 
 # Error Handling
 anyhow = "1.0.104"
-
-# Async Runtime
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal", "macros"] }
-
-# Opening Stuff
-open = "5.4.0"
 
 # Enum Helpers
 strum = "0.28.0"
@@ -38,41 +29,57 @@ enum-map = "3.1"
 oneshot = "0.2.1"
 
 # Used for SIMD EQ calculations
-wide = "1.5.0"
+wide = "1.7.0"
 
 # UI Framework (iced)
-iced = { version = "0.14.0", features = ["tokio", "advanced", "svg", "canvas"] }
 iced_futures = "0.14.0"
 iced_color_picker = "0.14.0"
-
 unicode-segmentation = "1"
 emath = "0.36.1"
-
-
-# Grab beacn-mic-lib for comms
-#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["tokio"] }
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.2", features = ["tokio"] }
-#beacn-lib = { path = "../beacn-lib", features = ["tokio"] }
 
 # Image Handling
 image = "0.25.10"
 fontdue = "0.9.3"
-
-# For Creating .desktop files outside the flatpak runtime
-rust-ini = "0.21.3"
 
 # Profile Loading / Saving
 serde = "1.0.229"
 serde_json = "1.0.151"
 
 # Pipeweaver Stuff
-interprocess = { version = "2.4.2", features = ["tokio"] }
 tokio-tungstenite = "0.30.0"
 futures-lite = "2.6.1"
 json-patch = "4.2.0"
 
 directories = "6.0.0"
 rayon = "1.12.0"
+
+# These are all dependencies which aren't compatible with WASM
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Logging
+simplelog = "0.12.2"
+file-rotate = "0.8.0"
+
+# Beacn Lib for Hardware Comms
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["tokio"] }
+
+# Async Runtime
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal", "macros"] }
+
+# UI Framework (iced)
+iced = { version = "0.14.0", features = ["tokio", "advanced", "svg", "canvas"] }
+
+# Opening Stuff
+open = "5.4.0"
+
+# For Creating .desktop files outside the flatpak runtime
+rust-ini = "0.21.3"
+
+# Pipeweaver Stuff
+interprocess = { version = "2.4.2", features = ["tokio"] }
+
+# These are the WASM Alternatives
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
