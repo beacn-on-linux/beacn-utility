@@ -7,7 +7,6 @@ use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
-use crate::{run_async_blocking, runtime};
 use anyhow::{Result, anyhow, bail};
 use beacn_lib::controller::messages::Message as BeacnMessage;
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
@@ -30,10 +29,11 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
+use tokio::runtime::Handle;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use tokio::{select, time};
+use tokio::{select, task, time};
 use tokio_tungstenite_wasm::{Message, Utf8Bytes, WebSocketStream, connect};
 use web_time::{Duration, Instant};
 
@@ -53,36 +53,38 @@ pub fn launch_pipeweaver_ui() -> bool {
     if let Ok(path) = get_pipeweaver_socket_path()
         && let Ok(file_name) = path.to_fs_name::<GenericFilePath>()
     {
-        return run_async_blocking(async move {
-            if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
-                let command = json!( {
-                    "Daemon": "OpenInterface",
-                });
-                if let Err(e) = send_json(&mut stream, &command).await {
-                    warn!("Failed to send command to Pipeweaver: {}", e);
-                    return false;
-                }
-
-                let Ok(response) = read_json(&mut stream).await else {
-                    warn!("Failed to read response from Pipeweaver");
-                    return false;
-                };
-
-                let Some(response) = response.as_str() else {
-                    warn!("Failed to parse response from Pipeweaver");
-                    return false;
-                };
-
-                return match response {
-                    "Ok" => true,
-                    _ => {
-                        warn!("Unexpected response from Pipeweaver: {}", response);
-                        false
+        return task::block_in_place(|| {
+            Handle::current().block_on(async move {
+                if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
+                    let command = json!( {
+                        "Daemon": "OpenInterface",
+                    });
+                    if let Err(e) = send_json(&mut stream, &command).await {
+                        warn!("Failed to send command to Pipeweaver: {}", e);
+                        return false;
                     }
-                };
-            }
-            warn!("Failed to connect to Pipeweaver");
-            false
+
+                    let Ok(response) = read_json(&mut stream).await else {
+                        warn!("Failed to read response from Pipeweaver");
+                        return false;
+                    };
+
+                    let Some(response) = response.as_str() else {
+                        warn!("Failed to parse response from Pipeweaver");
+                        return false;
+                    };
+
+                    return match response {
+                        "Ok" => true,
+                        _ => {
+                            warn!("Unexpected response from Pipeweaver: {}", response);
+                            false
+                        }
+                    };
+                }
+                warn!("Failed to connect to Pipeweaver");
+                false
+            })
         });
     }
     warn!("Cannot locate Pipeweaver Socket");
@@ -1291,7 +1293,7 @@ pub fn spawn_pipeweaver_handler(
     suspended_rx: watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     let mut handler = PipeweaverHandler::new(device, sender, input_rx, stop_rx, suspended_rx);
-    runtime().spawn(async move { handler.run_handler().await })
+    task::spawn(async move { handler.run_handler().await })
 }
 
 fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {

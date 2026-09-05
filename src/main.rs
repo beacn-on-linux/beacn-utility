@@ -11,9 +11,7 @@ use iced::{Font, Size, window};
 use log::{LevelFilter, debug, info, warn};
 
 use std::path::PathBuf;
-use std::sync::OnceLock;
 use std::{env, fs};
-use tokio::runtime::Handle;
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
 use crate::ui::app::{BeacnUtility, Flags};
@@ -36,15 +34,6 @@ const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
 const APP_TITLE: &str = "Beacn Utility";
 const ICON: &[u8] = include_bytes!("../resources/icons/beacn-utility-large.png");
-
-static TOKIO_RUNTIME: OnceLock<Handle> = OnceLock::new();
-
-pub fn runtime() -> &'static Handle {
-    TOKIO_RUNTIME.get_or_init(Handle::current)
-}
-pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
-    task::block_in_place(|| runtime().block_on(future))
-}
 
 #[derive(Parser, Debug)]
 #[command(about, version, author)]
@@ -143,7 +132,7 @@ async fn main() -> Result<()> {
     }
 
     // Check whether an existing instance is running, and bail if so
-    if run_async_blocking(handle_active_instance()) {
+    if handle_active_instance().await {
         return Ok(());
     }
 
@@ -205,7 +194,7 @@ async fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     // Join on the remaining tasks
-    let _ = run_async_blocking(async { join!(signal, ipc, tray, device_manager) });
+    let _ = join!(signal, ipc, tray, device_manager);
 
     debug!("Shutdown Complete");
 

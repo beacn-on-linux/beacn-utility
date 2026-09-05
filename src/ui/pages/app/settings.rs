@@ -4,6 +4,8 @@ use anyhow::Result;
 use iced::widget::{Space, checkbox, column, rule, text};
 use iced::{Element, Task, window};
 use log::debug;
+use tokio::runtime::Handle;
+use tokio::task;
 use window::Id;
 
 #[derive(Debug, Copy, Clone)]
@@ -75,7 +77,7 @@ impl SettingsPage {
 
     #[cfg(target_os = "linux")]
     fn set_autostart(&mut self, id: Id, enabled: bool) -> Task<SettingsMessage> {
-        use crate::{APP_NAME, get_autostart_file, run_async_blocking};
+        use crate::{APP_NAME, get_autostart_file};
         use anyhow::anyhow;
         use ashpd::WindowIdentifier;
         use ashpd::desktop::background::Background;
@@ -92,10 +94,12 @@ impl SettingsPage {
 
                 // This needs to be blocked, the handles aren't safely sendable across threads
                 // and this lookup is async, so we need to block here.
-                run_async_blocking(WindowIdentifier::from_raw_handle(
-                    &window_handle,
-                    display_handle.as_ref(),
-                ))
+                task::block_in_place(|| {
+                    Handle::current().block_on(WindowIdentifier::from_raw_handle(
+                        &window_handle,
+                        display_handle.as_ref(),
+                    ))
+                })
             })
             .then(move |identifier| {
                 // We can send this directly into an iced task, rather than blocking
