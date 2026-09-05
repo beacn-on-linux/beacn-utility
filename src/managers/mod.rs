@@ -2,10 +2,10 @@ use tokio::sync::oneshot;
 
 pub mod ipc;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub mod login;
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 pub mod tray;
 
 #[derive(Debug)]

@@ -74,7 +74,7 @@ json-patch = "4.2.0"
 directories = "6.0.0"
 rayon = "1.12.0"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(target_os = "linux")'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["tokio", "raw_handle", "background"] }
 

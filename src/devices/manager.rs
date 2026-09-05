@@ -46,10 +46,10 @@ pub(crate) async fn spawn_device_manager(
     let (plug_tx, plug_rx) = unbounded();
     let (manage_tx, manage_rx) = unbounded();
 
-    #[cfg_attr(not(unix), allow(unused))]
+    #[cfg_attr(not(target_os = "linux"), allow(unused))]
     let (login_tx, login_rx) = bounded(5);
 
-    #[cfg_attr(not(unix), allow(unused))]
+    #[cfg_attr(not(target_os = "linux"), allow(unused))]
     let (login_stop_tx, login_stop_rx) = tokio::sync::mpsc::channel(1);
 
     // Device state, keyed by location.
@@ -77,7 +77,7 @@ pub(crate) async fn spawn_device_manager(
     // don't need now that we're on a runtime.
     tokio::spawn(watch_hotplug_devices(plug_tx, manage_rx));
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     {
         use crate::managers::login::spawn_login_handler;
         tokio::spawn(spawn_login_handler(login_tx, login_stop_rx));

@@ -146,13 +146,13 @@ async fn main() -> Result<()> {
     let ipc = task::spawn(handle_ipc(ipc_rx, ipc_window_tx));
 
     // Ok, spawn up the Tray Handler
-    #[cfg_attr(not(unix), allow(unused))]
+    #[cfg_attr(not(target_os = "linux"), allow(unused))]
     let (tray_tx, tray_rx) = unbounded();
 
-    #[cfg_attr(not(unix), allow(unused))]
+    #[cfg_attr(not(target_os = "linux"), allow(unused))]
     let tray_window_tx = window_tx.clone();
     let tray = task::spawn(async move {
-        #[cfg(unix)]
+        #[cfg(target_os = "linux")]
         {
             use log::error;
             use managers::tray::handle_tray;
@@ -398,6 +398,12 @@ async fn shutdown_signal() {
         _ = ctrl_logoff.recv() => println!("User logging off"),
         _ = ctrl_shutdown.recv() => println!("System shutting down"),
     }
+}
+
+// Not supported OS / Setup, so just wait forever
+#[cfg(not(any(unix, windows)))]
+async fn shutdown_signal() {
+    std::future::pending::<()>().await;
 }
 
 // This enum is passed into various 'Helper' threads and settings (such as the
