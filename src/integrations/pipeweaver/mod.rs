@@ -3,9 +3,8 @@ use tokio_with_wasm as tokio;
 
 use crate::devices::manager::ControlMessage;
 use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer};
-use crate::integrations::pipeweaver::helpers::{
-    Mix, MuteTarget, OrderGroup, get_pipeweaver_socket_path, read_json, send_json,
-};
+use crate::integrations::pipeweaver::helpers::{Mix, MuteTarget, OrderGroup};
+
 use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
@@ -20,9 +19,6 @@ use enum_map::{EnumMap, enum_map};
 use iced::futures::SinkExt;
 use iced::futures::StreamExt;
 use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
-use interprocess::local_socket::tokio::prelude::LocalSocketStream;
-use interprocess::local_socket::traits::tokio::Stream;
-use interprocess::local_socket::{GenericFilePath, ToFsName};
 use json_patch::Patch;
 use log::{debug, info, warn};
 use serde::Deserialize;
@@ -32,7 +28,6 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
-use tokio::runtime::Handle;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -53,44 +48,57 @@ const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
 
 // Simple method that checks whether pipeweaver is running, and if so, launches the UI
 pub fn launch_pipeweaver_ui() -> bool {
-    if let Ok(path) = get_pipeweaver_socket_path()
-        && let Ok(file_name) = path.to_fs_name::<GenericFilePath>()
-    {
-        return task::block_in_place(|| {
-            Handle::current().block_on(async move {
-                if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
-                    let command = json!( {
-                        "Daemon": "OpenInterface",
-                    });
-                    if let Err(e) = send_json(&mut stream, &command).await {
-                        warn!("Failed to send command to Pipeweaver: {}", e);
-                        return false;
-                    }
-
-                    let Ok(response) = read_json(&mut stream).await else {
-                        warn!("Failed to read response from Pipeweaver");
-                        return false;
-                    };
-
-                    let Some(response) = response.as_str() else {
-                        warn!("Failed to parse response from Pipeweaver");
-                        return false;
-                    };
-
-                    return match response {
-                        "Ok" => true,
-                        _ => {
-                            warn!("Unexpected response from Pipeweaver: {}", response);
-                            false
+    #[cfg(not(target_arch = "wasm32"))]
+    return {
+        use crate::integrations::pipeweaver::helpers::{
+            get_pipeweaver_socket_path, read_json, send_json,
+        };
+        use interprocess::local_socket::tokio::prelude::LocalSocketStream;
+        use interprocess::local_socket::traits::tokio::Stream;
+        use interprocess::local_socket::{GenericFilePath, ToFsName};
+        use tokio::runtime::Handle;
+        if let Ok(path) = get_pipeweaver_socket_path()
+            && let Ok(file_name) = path.to_fs_name::<GenericFilePath>()
+        {
+            return task::block_in_place(|| {
+                Handle::current().block_on(async move {
+                    if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
+                        let command = json!( {
+                            "Daemon": "OpenInterface",
+                        });
+                        if let Err(e) = send_json(&mut stream, &command).await {
+                            warn!("Failed to send command to Pipeweaver: {}", e);
+                            return false;
                         }
-                    };
-                }
-                warn!("Failed to connect to Pipeweaver");
-                false
-            })
-        });
-    }
-    warn!("Cannot locate Pipeweaver Socket");
+
+                        let Ok(response) = read_json(&mut stream).await else {
+                            warn!("Failed to read response from Pipeweaver");
+                            return false;
+                        };
+
+                        let Some(response) = response.as_str() else {
+                            warn!("Failed to parse response from Pipeweaver");
+                            return false;
+                        };
+
+                        return match response {
+                            "Ok" => true,
+                            _ => {
+                                warn!("Unexpected response from Pipeweaver: {}", response);
+                                false
+                            }
+                        };
+                    }
+                    warn!("Failed to connect to Pipeweaver");
+                    false
+                })
+            });
+        }
+        warn!("Cannot locate Pipeweaver Socket");
+        false
+    };
+
+    #[cfg(target_arch = "wasm32")]
     false
 }
 
