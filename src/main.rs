@@ -5,15 +5,11 @@ use beacn_lib::flume::{Receiver, unbounded};
 
 use clap::Parser;
 use directories::BaseDirs;
-use file_rotate::compression::Compression;
-use file_rotate::suffix::AppendCount;
-use file_rotate::{ContentLimit, FileRotate};
+
 use iced::font::{Family, Weight};
 use iced::{Font, Size, window};
 use log::{LevelFilter, debug, info, warn};
-use simplelog::{
-    ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode, WriteLogger,
-};
+
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::{env, fs};
@@ -66,63 +62,74 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Initialising Logging...");
-    let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use file_rotate::compression::Compression;
+        use file_rotate::suffix::AppendCount;
+        use file_rotate::{ContentLimit, FileRotate};
 
-    let mut config = ConfigBuilder::new();
-    // The tracing package, when used, will output to INFO from zbus every second..
-    config.add_filter_ignore_str("tracing");
-    config.add_filter_ignore_str("winit::event_loop");
-    config.add_filter_ignore_str("winit::window");
-    config.add_filter_ignore_str("zbus");
-    config.add_filter_ignore_str("nusb::platform::linux_usbfs");
-    config.add_filter_ignore_str("nusb::platform::windows_winusb");
-    config.add_filter_ignore_str("naga");
-    config.add_filter_ignore_str("iced_wgpu");
-    config.add_filter_ignore_str("iced_winit");
-    config.add_filter_ignore_str("wgpu_hal");
-    config.add_filter_ignore_str("wgpu_core");
-    config.add_filter_ignore_str("cosmic_text");
-    config.add_filter_ignore_str("sctk");
+        use simplelog::{
+            ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode,
+            WriteLogger,
+        };
 
-    // These are *INCREDIBLY* noisy when we're in trace mode, but we don't need their trace output
-    config.add_filter_ignore_str("tungstenite::protocol");
-    config.add_filter_ignore_str("tungstenite::handshake");
-    config.add_filter_ignore_str("tokio_tungstenite");
-    config.add_filter_ignore_str("calloop");
-    config.add_filter_ignore_str("iced_graphics::text::paragraph");
+        let mut log_targets: Vec<Box<dyn SharedLogger>> = vec![];
 
-    // Setup Console Logging
-    log_targets.push(TermLogger::new(
-        args.log_level,
-        config.build(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    ));
+        let mut config = ConfigBuilder::new();
+        // The tracing package, when used, will output to INFO from zbus every second..
+        config.add_filter_ignore_str("tracing");
+        config.add_filter_ignore_str("winit::event_loop");
+        config.add_filter_ignore_str("winit::window");
+        config.add_filter_ignore_str("zbus");
+        config.add_filter_ignore_str("nusb::platform::linux_usbfs");
+        config.add_filter_ignore_str("nusb::platform::windows_winusb");
+        config.add_filter_ignore_str("naga");
+        config.add_filter_ignore_str("iced_wgpu");
+        config.add_filter_ignore_str("iced_winit");
+        config.add_filter_ignore_str("wgpu_hal");
+        config.add_filter_ignore_str("wgpu_core");
+        config.add_filter_ignore_str("cosmic_text");
+        config.add_filter_ignore_str("sctk");
 
-    // Try to establish a log file in the XDG data directory
-    match get_logs_path() {
-        Ok(path) => {
-            let log_file = path.join("beacn-utility.log");
-            println!("Logging to file: {log_file:?}");
+        // These are *INCREDIBLY* noisy when we're in trace mode, but we don't need their trace output
+        config.add_filter_ignore_str("tungstenite::protocol");
+        config.add_filter_ignore_str("tungstenite::handshake");
+        config.add_filter_ignore_str("tokio_tungstenite");
+        config.add_filter_ignore_str("calloop");
+        config.add_filter_ignore_str("iced_graphics::text::paragraph");
 
-            let file_rotate = FileRotate::new(
-                log_file,
-                AppendCount::new(5),
-                ContentLimit::Bytes(1024 * 1024 * 2),
-                Compression::OnRotate(1),
-                None,
-            );
-            log_targets.push(WriteLogger::new(
-                LevelFilter::Debug,
-                config.build(),
-                file_rotate,
-            ));
+        // Setup Console Logging
+        log_targets.push(TermLogger::new(
+            args.log_level,
+            config.build(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ));
+
+        // Try to establish a log file in the XDG data directory
+        match get_logs_path() {
+            Ok(path) => {
+                let log_file = path.join("beacn-utility.log");
+                println!("Logging to file: {log_file:?}");
+
+                let file_rotate = FileRotate::new(
+                    log_file,
+                    AppendCount::new(5),
+                    ContentLimit::Bytes(1024 * 1024 * 2),
+                    Compression::OnRotate(1),
+                    None,
+                );
+                log_targets.push(WriteLogger::new(
+                    LevelFilter::Debug,
+                    config.build(),
+                    file_rotate,
+                ));
+            }
+
+            Err(e) => warn!("Log file directory creation failed, File Logging Disabled: {e}"),
         }
-
-        Err(e) => warn!("Log file directory creation failed, File Logging Disabled: {e}"),
+        CombinedLogger::init(log_targets)?;
     }
-
-    CombinedLogger::init(log_targets)?;
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 
