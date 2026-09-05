@@ -35,6 +35,7 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
+use log::trace;
 
 type Rgb = [u8; 3];
 
@@ -239,12 +240,14 @@ impl AudioState {
     fn handle_message_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
+        trace!("Sending Message: {:?}", message);
 
         match &self.device_sender {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send(message)?;
                 let message = rx.recv()?;
+                trace!("Received Message: {:?}", message);
 
                 // Quickly intercept the message, and set our local value
                 if let Ok(message) = message {
@@ -295,12 +298,14 @@ impl AudioState {
     async fn handle_message_async_inner(&mut self, message: Message) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
+        trace!("Sending Message: {:?}", message);
 
         match &self.device_sender {
             Some(sender) => {
                 // Send the message, return the response (or fail).
                 sender.send_async(message).await?;
                 let message = rx.await?;
+                trace!("Received Message: {:?}", message);
 
                 // Quickly intercept the message, and set our local value
                 if let Ok(message) = message {
