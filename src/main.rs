@@ -401,11 +401,3 @@ pub enum WindowMessage {
     OpenWindow,
     Quit,
 }
-
-// This needs to exist until egui is killed completely.
-pub enum ToMainMessages {
-    SpawnWindow,
-    // RequestRedraw,
-    // UpdateContext(Context),
-    Quit,
-}
