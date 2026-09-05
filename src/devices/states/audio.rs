@@ -238,9 +238,9 @@ impl AudioState {
     }
 
     fn handle_message_inner(&mut self, message: Message) -> Result<Message> {
+        trace!("Sending Message: {:?}", message);
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
-        trace!("Sending Message: {:?}", message);
 
         match &self.device_sender {
             Some(sender) => {
@@ -296,9 +296,9 @@ impl AudioState {
     }
 
     async fn handle_message_async_inner(&mut self, message: Message) -> Result<Message> {
+        trace!("Sending Message: {:?}", message);
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Handle(message, tx);
-        trace!("Sending Message: {:?}", message);
 
         match &self.device_sender {
             Some(sender) => {
