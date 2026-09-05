@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 use tokio::sync::oneshot;
 
 pub mod ipc;

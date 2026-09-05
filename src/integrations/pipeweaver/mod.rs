@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 use crate::devices::manager::ControlMessage;
 use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer};
 use crate::integrations::pipeweaver::helpers::{

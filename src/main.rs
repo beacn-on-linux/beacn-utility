@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use anyhow::bail;
 use anyhow::{Result, anyhow};

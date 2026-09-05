@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 use crate::ui::pages::info_row;
 use crate::{HASH, VERSION, has_autostart};
 use anyhow::Result;

@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage};
 use crate::ui::widgets::helpers::buttons::toggle_button;
