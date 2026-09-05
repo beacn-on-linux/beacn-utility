@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
 
         // Setup Console Logging
         log_targets.push(TermLogger::new(
-            args.log_level,
+            LevelFilter::from(args.log_level),
             config.build(),
             TerminalMode::Mixed,
             ColorChoice::Auto,
@@ -119,6 +119,9 @@ async fn main() -> Result<()> {
         }
         CombinedLogger::init(log_targets)?;
     }
+
+    #[cfg(target_arch = "wasm32")]
+    console_log::init_with_level(log::Level::Debug).expect("Failed to initialise logging");
 
     info!("Starting {} v{} - {}", APP_NAME, VERSION, HASH);
 

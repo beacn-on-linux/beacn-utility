@@ -81,6 +81,7 @@ interprocess = { version = "2.4.2", features = ["tokio"] }
 
 # These are the WASM Alternatives
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+console_log = "1.1.0"
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
