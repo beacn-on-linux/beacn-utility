@@ -1,11 +1,16 @@
 //! A Recipe for reading events from a flume channel.
 
 use beacn_lib::flume::Receiver;
-//use futures::Stream;
 use iced::advanced::subscription::{EventStream, Hasher, Recipe};
 use iced::futures::Stream;
 use std::pin::Pin;
 use std::sync::Arc;
+
+#[cfg(not(target_arch = "wasm32"))]
+type RecipeStream<Out> = Pin<Box<dyn Stream<Item = Out> + Send>>;
+
+#[cfg(target_arch = "wasm32")]
+type RecipeStream<Out> = Pin<Box<dyn Stream<Item = Out>>>;
 
 pub struct TrackedReceiver<T, Out, F>
 where
@@ -32,7 +37,7 @@ where
         self.id.hash(state);
     }
 
-    fn stream(self: Box<Self>, _: EventStream) -> Pin<Box<dyn Stream<Item = Self::Output> + Send>> {
+    fn stream(self: Box<Self>, _: EventStream) -> RecipeStream<Self::Output> {
         let rx = self.rx;
         let map_fn = Arc::new(self.map_fn);
 
