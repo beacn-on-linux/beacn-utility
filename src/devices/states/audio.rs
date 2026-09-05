@@ -444,7 +444,7 @@ impl AudioState {
         }
 
         // Same with this, if this is "Off", the app was closed while a snapshot was in progress.
-        if state.suppressor.style == SuppressorStyle::Off {
+        if state.suppressor.style == SuppressorStyle::Instant {
             let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
             let _ = state.handle_message(message);
         }
@@ -523,7 +523,7 @@ impl AudioState {
             let _ = state.handle_message_async(message).await;
         }
 
-        if state.suppressor.style == SuppressorStyle::Off {
+        if state.suppressor.style == SuppressorStyle::Instant {
             let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
             let _ = state.handle_message_async(message).await;
         }

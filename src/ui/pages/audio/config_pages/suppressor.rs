@@ -15,52 +15,65 @@ use iced::widget::{
 use iced::{
     Alignment, Color, Element, Length, Point, Rectangle, Renderer, Size, Task, Theme, mouse,
 };
-use log::debug;
 use std::ops::RangeInclusive;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 #[derive(Debug, Clone)]
 pub(crate) enum SuppressorMessage {
     Start,
-    Step,
+    //Step,
     End,
 }
 
-#[derive(Default)]
 pub struct SuppressorPage {
+    // Used for the live suppression response
     current: SuppressionResponse,
     baseline: SuppressionResponse,
 
-    // Indicates
-    snapshot_enabled: bool,
+    // This is for state restore after a snapshot completes.
+    suppressor_enabled: bool,
+
+    // Is the snapshot itself currently running?
     snapshot_running: bool,
-    snapshot_step: u8,
+
+    snapshot_started: Instant,
 }
 
 impl SuppressorPage {
     pub(crate) fn new() -> Self {
-        Default::default()
+        Self {
+            current: Default::default(),
+            baseline: Default::default(),
+
+            suppressor_enabled: false,
+            snapshot_running: false,
+
+            snapshot_started: Instant::now(),
+        }
+    }
+}
+
+impl SuppressorPage {
+    fn stop_snapshot(&mut self, state: &mut AudioState) {
+        if !self.snapshot_running {
+            return;
+        }
+
+        let msg = Message::Suppressor(Suppressor::Enabled(self.suppressor_enabled));
+        let _ = state.handle_message(msg);
+
+        let style = SuppressorStyle::Snapshot;
+        let msg = Message::Suppressor(Suppressor::Style(style));
+        let _ = state.handle_message(msg);
+
+        self.snapshot_running = false;
     }
 }
 
 impl ConfigPage for SuppressorPage {
     fn title(&self) -> &'static str {
         "Noise Suppression"
-    }
-
-    fn on_close(&mut self, state: &mut AudioState) {
-        if self.snapshot_running {
-            self.snapshot_running = false;
-
-            debug!("Aborting Suppressor Snapshot");
-            let msg = Message::Suppressor(Suppressor::Enabled(self.snapshot_enabled));
-            let _ = state.handle_message(msg);
-
-            let style = SuppressorStyle::Snapshot;
-            let msg = Message::Suppressor(Suppressor::Style(style));
-            let _ = state.handle_message(msg);
-        }
     }
 
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
@@ -82,66 +95,32 @@ impl ConfigPage for SuppressorPage {
 
         match message {
             SuppressorMessage::Start => {
-                self.snapshot_enabled = state.suppressor.enabled;
+                self.suppressor_enabled = state.suppressor.enabled;
                 self.snapshot_running = true;
-                self.snapshot_step = 0;
+                self.snapshot_started = Instant::now();
 
                 let message = Message::Suppressor(Suppressor::Enabled(false));
                 let _ = state.handle_message(message);
 
-                // NOTE: This doesn't actually mean 'off', this is the listen mode used by the
-                // snapshot process which adapts the suppression level.
-                let message = Message::Suppressor(Suppressor::Style(SuppressorStyle::Off));
+                let message = Message::Suppressor(Suppressor::Style(SuppressorStyle::Instant));
                 let _ = state.handle_message(message);
 
                 Task::perform(
                     async move {
-                        sleep(Duration::from_millis(1500)).await;
+                        sleep(Duration::from_millis(5000)).await;
                     },
-                    |_| ChildMessage::Suppressor(SuppressorMessage::Step),
+                    |_| ChildMessage::Suppressor(SuppressorMessage::End),
                 )
             }
-            SuppressorMessage::Step => {
-                // Will happen if someone closes and immediately re-opens the page before an above
-                // task has completed. Other pages will ignore that message.
-                if !self.snapshot_running {
-                    return Task::none();
-                }
-
-                self.snapshot_step += 1;
-                if self.snapshot_step == 4 {
-                    Task::perform(
-                        async move {
-                            sleep(Duration::from_millis(3000)).await;
-                        },
-                        |_| ChildMessage::Suppressor(SuppressorMessage::End),
-                    )
-                } else {
-                    Task::perform(
-                        async move {
-                            sleep(Duration::from_millis(1500)).await;
-                        },
-                        move |_| ChildMessage::Suppressor(SuppressorMessage::Step),
-                    )
-                }
-            }
             SuppressorMessage::End => {
-                if !self.snapshot_running {
-                    return Task::none();
-                }
-
-                debug!("Suppressor setup complete");
-                let msg = Message::Suppressor(Suppressor::Enabled(self.snapshot_enabled));
-                let _ = state.handle_message(msg);
-
-                let style = SuppressorStyle::Snapshot;
-                let msg = Message::Suppressor(Suppressor::Style(style));
-                let _ = state.handle_message(msg);
-
-                self.snapshot_running = false;
+                self.stop_snapshot(state);
                 Task::none()
             }
         }
+    }
+
+    fn on_close(&mut self, state: &mut AudioState) {
+        self.stop_snapshot(state);
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {
@@ -206,9 +185,12 @@ impl ConfigPage for SuppressorPage {
                 .width(Length::Fill),
             )
         } else {
+            let timer = Instant::now()
+                .duration_since(self.snapshot_started)
+                .as_secs_f32();
             Element::from(
                 stack![
-                    progress_bar(0.0..=5.0, self.snapshot_step as f32),
+                    progress_bar(0.0..=5.0, timer),
                     text("Snapshot in progress, stay quiet!")
                         .width(Length::Fill)
                         .height(Length::Fill)
