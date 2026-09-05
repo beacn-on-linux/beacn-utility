@@ -7,7 +7,7 @@ use crate::integrations::pipeweaver::layout::{
     BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
     JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
 };
-use crate::runtime;
+use crate::{run_async_blocking, runtime};
 use anyhow::{Result, anyhow, bail};
 use beacn_lib::controller::messages::Message as BeacnMessage;
 use beacn_lib::controller::{ButtonLighting, ButtonState, Buttons, Dials, Interactions};
@@ -56,8 +56,7 @@ pub fn launch_pipeweaver_ui() -> bool {
     if let Ok(path) = get_pipeweaver_socket_path()
         && let Ok(file_name) = path.to_fs_name::<GenericFilePath>()
     {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        return rt.block_on(async move {
+        return run_async_blocking(async move {
             if let Ok(mut stream) = LocalSocketStream::connect(file_name).await {
                 let command = json!( {
                     "Daemon": "OpenInterface",

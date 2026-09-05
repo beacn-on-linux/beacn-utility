@@ -47,7 +47,7 @@ pub fn runtime() -> &'static Handle {
     TOKIO_RUNTIME.get_or_init(Handle::current)
 }
 pub fn run_async_blocking<F: Future>(future: F) -> F::Output {
-    runtime().block_on(future)
+    task::block_in_place(|| runtime().block_on(future))
 }
 
 #[derive(Parser, Debug)]
@@ -61,13 +61,8 @@ pub struct Args {
     pub background: bool,
 }
 
-fn main() -> Result<()> {
-    let tokio_rt = Runtime::new().expect("Failed to create Tokio Runtime");
-    let _guard = tokio_rt.enter();
-
-    // Configure the static runtime as this runtime
-    runtime();
-
+#[tokio::main]
+async fn main() -> Result<()> {
     let args = Args::parse();
 
     println!("Initialising Logging...");
@@ -141,7 +136,7 @@ fn main() -> Result<()> {
     }
 
     // Check whether an existing instance is running, and bail if so
-    if tokio_rt.block_on(handle_active_instance()) {
+    if run_async_blocking(handle_active_instance()) {
         return Ok(());
     }
 
@@ -203,7 +198,7 @@ fn main() -> Result<()> {
     let _ = tray_tx.send(ManagerMessages::Quit);
 
     // Join on the remaining tasks
-    let _ = tokio_rt.block_on(async { join!(signal, ipc, tray, device_manager) });
+    let _ = run_async_blocking(async { join!(signal, ipc, tray, device_manager) });
 
     debug!("Shutdown Complete");
 

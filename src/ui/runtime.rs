@@ -1,3 +1,4 @@
+use crate::run_async_blocking;
 use iced_futures::MaybeSend;
 use tokio::runtime::Handle;
 
@@ -14,6 +15,6 @@ impl iced::Executor for SharedTokioExecutor {
     }
 
     fn block_on<T>(&self, future: impl Future<Output = T>) -> T {
-        self.0.block_on(future)
+        run_async_blocking(future)
     }
 }
