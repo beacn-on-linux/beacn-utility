@@ -17,7 +17,7 @@ use simplelog::{
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::{env, fs};
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Handle;
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
 use crate::ui::app::{BeacnUtility, Flags};

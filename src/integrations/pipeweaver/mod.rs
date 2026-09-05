@@ -36,7 +36,6 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, time};
-use tokio_tungstenite::tungstenite::handshake::client::Response;
 use tokio_tungstenite::tungstenite::{Message, Utf8Bytes};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async, tungstenite};
 
@@ -315,8 +314,8 @@ impl PipeweaverHandler {
     }
 
     async fn handle_connection(&mut self, url: &str, meter: &str) -> Result<()> {
-        let (mut stream, _) = self.connect_with_stop(url).await?;
-        let (mut meter, _) = self.connect_with_stop(meter).await?;
+        let mut stream = self.connect_with_stop(url).await?;
+        let mut meter = self.connect_with_stop(meter).await?;
         info!("Successfully connected to Pipeweaver");
 
         self.has_connected = true;
@@ -329,10 +328,10 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    async fn connect_with_stop(&mut self, url: &str) -> Result<(WebSocket, Response)> {
+    async fn connect_with_stop(&mut self, url: &str) -> Result<WebSocket> {
         select! {
             result = connect_async(url) => {
-                Ok(result?)
+                Ok(result?.0)
             }
             Ok(_) = self.stop_rx.changed() => {
                 bail!("Shutdown requested")
