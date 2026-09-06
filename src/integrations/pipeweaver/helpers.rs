@@ -1,19 +1,24 @@
-use crate::integrations::pipeweaver::{PIPEWEAVER_APP_NAME, PIPEWEAVER_APP_NAME_ID};
-use anyhow::Error;
-use directories::BaseDirs;
 use enum_map::Enum;
-use interprocess::local_socket::tokio::prelude::LocalSocketStream;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::path::PathBuf;
-use std::{env, fs};
 use strum_macros::EnumIter;
+
+#[cfg(not(target_arch = "wasm32"))]
+use interprocess::local_socket::tokio::prelude::LocalSocketStream;
+#[cfg(not(target_arch = "wasm32"))]
+use serde_json::Value;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn get_pipeweaver_socket_path() -> anyhow::Result<PathBuf> {
+    use crate::integrations::pipeweaver::{PIPEWEAVER_APP_NAME, PIPEWEAVER_APP_NAME_ID};
+    use directories::BaseDirs;
+    use std::{env, fs};
     let path = BaseDirs::new()
         .and_then(|base| base.runtime_dir().map(|p| p.to_path_buf()))
-        .map(Ok::<PathBuf, Error>)
+        .map(Ok::<PathBuf, anyhow::Error>)
         .unwrap_or_else(|| {
             let tmp_dir = env::temp_dir().join(PIPEWEAVER_APP_NAME);
             if !tmp_dir.exists() {
@@ -26,6 +31,7 @@ pub(super) fn get_pipeweaver_socket_path() -> anyhow::Result<PathBuf> {
     Ok(socket_path)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) async fn send_json(stream: &mut LocalSocketStream, value: &Value) -> anyhow::Result<()> {
     let data = serde_json::to_vec(value)?;
 
@@ -37,6 +43,7 @@ pub(super) async fn send_json(stream: &mut LocalSocketStream, value: &Value) -> 
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) async fn read_json(stream: &mut LocalSocketStream) -> anyhow::Result<Value> {
     let len = stream.read_u32().await?;
 
