@@ -1,3 +1,6 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
 /*
   This file primarily manages hot-plugging opening devices, and device messaging.
 
@@ -28,7 +31,6 @@ use beacn_lib::manager::{
 };
 use beacn_lib::version::VersionNumber;
 use beacn_lib::{BeacnError, UsbError};
-//use futures::FutureExt;
 use iced::futures::FutureExt;
 use log::{debug, error};
 use std::collections::HashMap;
