@@ -93,6 +93,9 @@ tokio_with_wasm = { version = "0.10.1", features = ["rt", "time", "sync", "macro
 # UI Framework (iced) - No tokio, and specifically only the webgl platform
 iced = { version = "0.14.0", default-features = false, features = ["wgpu", "webgl", "advanced", "svg", "canvas"] }
 
+# Open Web Pages
+webbrowser = "1.2.4"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["tokio", "raw_handle", "background"] }

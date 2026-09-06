@@ -2,6 +2,7 @@ use crate::devices::manager::DefinitionState;
 use crate::devices::states::{ErrorMessage, LoadState, State};
 use crate::ui::app::DeviceState;
 use crate::ui::pages::page::{Page, PageMessage};
+use crate::ui::utility::open_url;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
 use iced::Task;
 use iced::font::Weight;
@@ -41,7 +42,7 @@ impl Page for ErrorPage {
 
         match message {
             ErrorPageMessages::OpenUrl(url) => {
-                let _ = open::that_detached(url);
+                let _ = open_url(&url);
             }
         }
 

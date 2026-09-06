@@ -1,6 +1,7 @@
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::info_row;
 use crate::ui::pages::page::{AudioPage, PageMessage};
+use crate::ui::utility::open_url;
 use crate::ui::widgets::helpers::svg::svg_button_unstyled;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::headphones::Headphones;
@@ -39,7 +40,7 @@ impl AudioPage for About {
 
         match message {
             AboutMessage::OpenUrl(url) => {
-                let _ = open::that_detached(url);
+                let _ = open_url(&url);
             }
             AboutMessage::SetStudioDriverless(enabled) => {
                 if state.device_definition.device_type != DeviceType::BeacnStudio {

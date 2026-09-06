@@ -1,3 +1,4 @@
+use crate::ui::utility::open_url;
 use iced::widget::{Space, button, container, rule, text};
 use iced::{Alignment, Element, Length, Task};
 
@@ -17,7 +18,7 @@ impl PipeweaverPage {
     pub(crate) fn update(&mut self, message: PipeweaverMessage) -> Task<PipeweaverMessage> {
         match message {
             PipeweaverMessage::GetPipeweaver => {
-                let _ = open::that_detached(PIPEWEAVER_URL);
+                let _ = open_url(PIPEWEAVER_URL);
             }
         }
 
