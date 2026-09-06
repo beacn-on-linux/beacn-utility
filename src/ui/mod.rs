@@ -2,10 +2,14 @@ use iced::advanced::svg::Handle;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+// Don't use this on WASM
+#[cfg(not(target_arch = "wasm32"))]
+pub mod runtime;
+
 pub mod app;
 pub mod events;
 pub mod pages;
-pub mod runtime;
+
 pub mod utility;
 pub mod widgets;
 
