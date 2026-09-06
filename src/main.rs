@@ -28,17 +28,12 @@ mod ui;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HASH: &str = env!("GIT_HASH");
 
-// const BACKGROUND_PARAM: &str = "--background";
-// const LEGACY_BACKGROUND_PARAM: &str = "--startup";
-
-// WASM will
 #[cfg(target_arch = "wasm32")]
 mod quit_notify {
     use tokio_with_wasm as tokio;
 
     use std::sync::{Arc, LazyLock};
     use tokio::sync::Notify;
-
     pub static QUIT_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
 }
 
