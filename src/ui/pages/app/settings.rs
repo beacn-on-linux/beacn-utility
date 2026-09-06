@@ -1,14 +1,10 @@
-#[cfg(target_arch = "wasm32")]
-use tokio_with_wasm as tokio;
-
 use crate::ui::pages::info_row;
 use crate::{HASH, VERSION, has_autostart};
 use anyhow::Result;
 use iced::widget::{Space, checkbox, column, rule, text};
 use iced::{Element, Task, window};
 use log::debug;
-use tokio::runtime::Handle;
-use tokio::task;
+
 use window::Id;
 
 #[derive(Debug, Copy, Clone)]
@@ -87,6 +83,8 @@ impl SettingsPage {
         use ini::Ini;
         use log::warn;
         use std::{env, fs};
+        use tokio::runtime::Handle;
+        use tokio::task;
 
         if ashpd::is_sandboxed() {
             println!("Running inside Flatpak, using Background Portal");
