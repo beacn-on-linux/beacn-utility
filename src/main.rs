@@ -1,7 +1,6 @@
 #[cfg(target_arch = "wasm32")]
 use tokio_with_wasm as tokio;
 
-use crate::managers::ipc::{handle_active_instance, handle_ipc};
 use anyhow::bail;
 use anyhow::{Result, anyhow};
 use beacn_lib::flume::{Receiver, unbounded};
@@ -18,7 +17,6 @@ use std::{env, fs};
 
 use crate::devices::manager::{DeviceMessage, spawn_device_manager};
 use crate::ui::app::{BeacnUtility, Flags};
-use crate::ui::runtime::SharedTokioExecutor;
 use crate::ui::widgets::theme::build_beacn_theme;
 use tokio::{join, task};
 
@@ -32,6 +30,17 @@ const HASH: &str = env!("GIT_HASH");
 
 // const BACKGROUND_PARAM: &str = "--background";
 // const LEGACY_BACKGROUND_PARAM: &str = "--startup";
+
+// WASM will
+#[cfg(target_arch = "wasm32")]
+mod quit_notify {
+    use tokio_with_wasm as tokio;
+
+    use std::sync::{Arc, LazyLock};
+    use tokio::sync::Notify;
+
+    pub static QUIT_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
+}
 
 const APP_TLD: &str = "io.github.beacn_on_linux";
 const APP_NAME: &str = "beacn-utility";
@@ -138,14 +147,27 @@ async fn main() -> Result<()> {
     }
 
     // Check whether an existing instance is running, and bail if so
-    if handle_active_instance().await {
-        return Ok(());
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use crate::managers::ipc::handle_active_instance;
+        if handle_active_instance().await {
+            return Ok(());
+        }
     }
 
     // Spawn up the IPC handler
     let (ipc_tx, ipc_rx) = unbounded();
     let ipc_window_tx = window_tx.clone();
-    let ipc = task::spawn(handle_ipc(ipc_rx, ipc_window_tx));
+
+    let ipc = task::spawn(async move {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use managers::ipc::handle_ipc;
+            if let Err(e) = handle_ipc(ipc_rx, ipc_window_tx).await {
+                error!("Failed to Spawn IPC: {e}");
+            }
+        }
+    });
 
     // Ok, spawn up the Tray Handler
     #[cfg_attr(not(target_os = "linux"), allow(unused))]
@@ -192,6 +214,9 @@ async fn main() -> Result<()> {
     });
 
     spawn_iced_window(device_rx, window_rx)?;
+
+    #[cfg(target_arch = "wasm32")]
+    quit_notify::QUIT_NOTIFY.notified().await;
 
     debug!("Shutdown Triggered - Waiting for Threads to Terminate..");
     let _ = signal_tx.send(ManagerMessages::Quit);
@@ -247,7 +272,7 @@ fn spawn_iced_window(
         };
     }
 
-    iced::daemon(
+    let window = iced::daemon(
         move || {
             let device_rx = device_rx.clone();
             let window_rx = window_rx.clone();
@@ -264,10 +289,15 @@ fn spawn_iced_window(
     .title(BeacnUtility::title)
     .subscription(BeacnUtility::subscription)
     .theme(|_state: &BeacnUtility, _window_id: window::Id| build_beacn_theme())
-    .settings(settings)
-    .executor::<SharedTokioExecutor>()
-    .run()
-    .map_err(anyhow::Error::from)
+    .settings(settings);
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let window = {
+        use crate::ui::runtime::SharedTokioExecutor;
+        window.executor::<SharedTokioExecutor>()
+    };
+
+    window.run().map_err(anyhow::Error::from)
 }
 
 fn load_icon_iced(bytes: &[u8]) -> window::Icon {

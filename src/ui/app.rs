@@ -333,6 +333,9 @@ impl BeacnUtility {
                     }
                 }
 
+                #[cfg(target_arch = "wasm32")]
+                crate::quit_notify::QUIT_NOTIFY.notify_one();
+
                 return iced::exit();
             }
             Message::WindowOpen => {
