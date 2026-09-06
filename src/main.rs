@@ -432,8 +432,32 @@ async fn shutdown_signal() {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+async fn shutdown_signal() {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::prelude::*;
+
+    let (tx, rx) = oneshot::channel::<()>();
+    let tx = std::cell::RefCell::new(Some(tx));
+
+    let closure = Closure::wrap(Box::new(move || {
+        if let Some(tx) = tx.borrow_mut().take() {
+            let _ = tx.send(());
+        }
+    }) as Box<dyn FnMut()>);
+
+    // We're being kinda hopeful here, if anything fails we stall forever.
+    if let Some(window) = web_sys::window() {
+        let closure = closure.as_ref().unchecked_ref();
+        let _ = window.add_event_listener_with_callback("pagehide", closure);
+    }
+    closure.forget();
+
+    let _ = rx.await;
+}
+
 // Not supported OS / Setup, so just wait forever
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(unix, windows, target_arch = "wasm32")))]
 async fn shutdown_signal() {
     std::future::pending::<()>().await;
 }

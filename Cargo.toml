@@ -96,6 +96,10 @@ iced = { version = "0.14.0", default-features = false, features = ["wgpu", "webg
 # Open Web Pages
 webbrowser = "1.2.4"
 
+# WASM Helpers
+wasm-bindgen = "0.2"
+web-sys = "0.3"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 # Apature Science Handheld Portal Device (autostart / background)
 ashpd = { version = "0.13.13", features = ["tokio", "raw_handle", "background"] }

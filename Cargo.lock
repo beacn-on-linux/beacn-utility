@@ -511,6 +511,8 @@ dependencies = [
  "tokio-tungstenite-wasm",
  "tokio_with_wasm",
  "unicode-segmentation",
+ "wasm-bindgen",
+ "web-sys",
  "web-time",
  "webbrowser",
  "wide",
