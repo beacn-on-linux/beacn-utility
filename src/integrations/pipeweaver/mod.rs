@@ -43,9 +43,6 @@ static PW_SPLASH: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| {
     Arc::new(bytes.to_vec())
 });
 
-const PIPEWEAVER_APP_NAME: &str = "PipeWeaver";
-const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
-
 // Simple method that checks whether pipeweaver is running, and if so, launches the UI
 pub fn launch_pipeweaver_ui() -> bool {
     #[cfg(not(target_arch = "wasm32"))]

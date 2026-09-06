@@ -10,7 +10,7 @@ use directories::BaseDirs;
 
 use iced::font::{Family, Weight};
 use iced::{Font, Size, window};
-use log::{LevelFilter, debug, info, warn};
+use log::{LevelFilter, debug, info};
 
 use std::path::PathBuf;
 use std::{env, fs};
@@ -68,6 +68,7 @@ async fn main() -> Result<()> {
         use file_rotate::compression::Compression;
         use file_rotate::suffix::AppendCount;
         use file_rotate::{ContentLimit, FileRotate};
+        use log::warn;
 
         use simplelog::{
             ColorChoice, CombinedLogger, ConfigBuilder, SharedLogger, TermLogger, TerminalMode,
@@ -156,12 +157,16 @@ async fn main() -> Result<()> {
     }
 
     // Spawn up the IPC handler
+    #[allow(unused)]
     let (ipc_tx, ipc_rx) = unbounded();
+
+    #[allow(unused)]
     let ipc_window_tx = window_tx.clone();
 
     let ipc = task::spawn(async move {
         #[cfg(not(target_arch = "wasm32"))]
         {
+            use log::error;
             use managers::ipc::handle_ipc;
             if let Err(e) = handle_ipc(ipc_rx, ipc_window_tx).await {
                 error!("Failed to Spawn IPC: {e}");

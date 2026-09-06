@@ -13,7 +13,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn get_pipeweaver_socket_path() -> anyhow::Result<PathBuf> {
-    use crate::integrations::pipeweaver::{PIPEWEAVER_APP_NAME, PIPEWEAVER_APP_NAME_ID};
+    const PIPEWEAVER_APP_NAME: &str = "PipeWeaver";
+    const PIPEWEAVER_APP_NAME_ID: &str = "pipeweaver";
+
     use directories::BaseDirs;
     use std::{env, fs};
     let path = BaseDirs::new()
