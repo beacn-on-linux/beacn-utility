@@ -3,9 +3,18 @@ use beacn_lib::audio::messages::eq_common::EQBand;
 use beacn_lib::audio::messages::eq_common::EQBandType::*;
 
 use crate::ui::widgets::equaliser::eq_common::{
-    Bands, EqGeometry, MAX_GAIN, MIN_GAIN, band_type_has_gain,
+    Bands, EqGeometry, MAX_FREQUENCY, MAX_GAIN, MIN_FREQUENCY, MIN_GAIN, band_type_has_gain,
 };
 use crate::ui::widgets::equaliser::eq_util::{BiquadCoefficient, EQUtil};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+pub enum EqVisualizerMode {
+    /// Static EQ visualization (original upstream behavior)
+    Static,
+    /// Official BEACN software style: ballistics modulate the low (bass) and high (sibilance) ends of the main curve
+    #[default]
+    BeacnBallistics,
+}
 use enum_map::EnumMap;
 use iced::alignment::Vertical;
 use iced::mouse;
@@ -49,6 +58,62 @@ fn eq_point_colour(index: usize) -> Color {
     Color::from_rgb8(r, g, b)
 }
 
+/// BEACN frequency guide zone definition
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EqGuideZone {
+    pub label: &'static str,
+    pub min_freq: u32,
+    pub max_freq: u32,
+    pub db_offset: f32,
+    pub is_alternate: bool,
+}
+
+pub const EQ_GUIDE_ZONES: [EqGuideZone; 6] = [
+    EqGuideZone {
+        label: "SUB BASS",
+        min_freq: 20,
+        max_freq: 80,
+        db_offset: 1.8,
+        is_alternate: false,
+    },
+    EqGuideZone {
+        label: "BASS / MUDDINESS",
+        min_freq: 80,
+        max_freq: 250,
+        db_offset: -1.8,
+        is_alternate: true,
+    },
+    EqGuideZone {
+        label: "BROADCAST",
+        min_freq: 250,
+        max_freq: 1000,
+        db_offset: 1.8,
+        is_alternate: false,
+    },
+    EqGuideZone {
+        label: "NASAL",
+        min_freq: 1000,
+        max_freq: 2500,
+        db_offset: -1.8,
+        is_alternate: true,
+    },
+    EqGuideZone {
+        label: "LOW / MID HIGHS & ESSES",
+        min_freq: 2500,
+        max_freq: 7000,
+        db_offset: 1.8,
+        is_alternate: false,
+    },
+    EqGuideZone {
+        label: "HIGHS & AIR",
+        min_freq: 7000,
+        max_freq: 20000,
+        db_offset: -1.8,
+        is_alternate: true,
+    },
+];
+
+
 /// Mouse events for the EQ widget
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EQMouseEvent {
@@ -88,6 +153,12 @@ pub struct EQDrawView {
     // Frequency response cache, so we can avoid regenerating when one changes
     band_freq_response: RefCell<EnumMap<EQBand, Option<Vec<f32>>>>,
 
+    // Visualizer Mode
+    visualizer_mode: EqVisualizerMode,
+
+    // Guide mode showing official BEACN vocal frequency blocks
+    show_guide: bool,
+
     // Spectrum Data points
     spectrum_bins: Vec<f32>,
 }
@@ -112,6 +183,8 @@ impl EQDrawView {
             spectrum_cache: Cache::new(),
             band_freq_response: RefCell::new(Default::default()),
 
+            visualizer_mode: EqVisualizerMode::BeacnBallistics,
+            show_guide: true,
             spectrum_bins: vec![],
         }
     }
@@ -133,6 +206,40 @@ impl EQDrawView {
     pub fn bands(&self) -> &Bands {
         &self.bands
     }
+
+    pub fn visualizer_mode(&self) -> EqVisualizerMode {
+        self.visualizer_mode
+    }
+
+    pub fn set_visualizer_mode(&mut self, mode: EqVisualizerMode) {
+        if self.visualizer_mode != mode {
+            self.visualizer_mode = mode;
+            self.curve_cache.clear();
+        }
+    }
+
+    pub fn cycle_visualizer_mode(&mut self) -> EqVisualizerMode {
+        let next = match self.visualizer_mode {
+            EqVisualizerMode::Static => EqVisualizerMode::BeacnBallistics,
+            EqVisualizerMode::BeacnBallistics => EqVisualizerMode::Static,
+        };
+        self.set_visualizer_mode(next);
+        next
+    }
+
+    /// Whether the BEACN frequency guide blocks and labels are shown
+    pub fn show_guide(&self) -> bool {
+        self.show_guide
+    }
+
+    /// Toggle the frequency guide blocks and labels
+    pub fn set_show_guide(&mut self, show: bool) {
+        if self.show_guide != show {
+            self.show_guide = show;
+            self.grid_cache.clear();
+        }
+    }
+
 
     /// Replace entire bandset at once
     pub fn set_bands(&mut self, bands: Bands) {
@@ -165,11 +272,17 @@ impl EQDrawView {
     pub fn set_spectrum(&mut self, data: Vec<f32>) {
         self.spectrum_bins = data;
         self.spectrum_cache.clear();
+        if self.visualizer_mode != EqVisualizerMode::Static {
+            self.curve_cache.clear();
+        }
     }
 
     pub fn clear_spectrum(&mut self) {
         self.spectrum_bins = vec![];
         self.spectrum_cache.clear();
+        if self.visualizer_mode != EqVisualizerMode::Static {
+            self.curve_cache.clear();
+        }
     }
 
     /// Set's whether we should emit movement events
@@ -210,6 +323,68 @@ impl EQDrawView {
         let freq_ticks = [30, 50, 100, 250, 500, 1000, 2000, 5000, 10000, 16000];
 
         frame.fill_rectangle(plot_rect.position(), plot_rect.size(), background);
+
+        if self.show_guide {
+            // Alternating vertical column shading matching official BEACN software
+            for zone in &EQ_GUIDE_ZONES {
+                let x_start = EqGeometry::freq_to_x(zone.min_freq, plot_rect)
+                    .clamp(plot_rect.x, plot_rect.x + plot_rect.width);
+                let x_end = EqGeometry::freq_to_x(zone.max_freq, plot_rect)
+                    .clamp(plot_rect.x, plot_rect.x + plot_rect.width);
+                let zone_width = x_end - x_start;
+
+                if zone.is_alternate && zone_width > 0.0 {
+                    frame.fill_rectangle(
+                        Point::new(x_start, plot_rect.y + EQ_PLOT_BORDER_WIDTH),
+                        iced::Size::new(zone_width, plot_rect.height - EQ_PLOT_BORDER_WIDTH * 2.0),
+                        Color::from_rgba8(255, 255, 255, 0.025),
+                    );
+                }
+
+                // Vertical boundary line between zones
+                if x_start > plot_rect.x + 1.0 && x_start < plot_rect.x + plot_rect.width - 1.0 {
+                    frame.stroke(
+                        &Path::line(
+                            Point::new(x_start, plot_rect.y + EQ_PLOT_BORDER_WIDTH),
+                            Point::new(x_start, plot_rect.y + plot_rect.height - EQ_PLOT_BORDER_WIDTH),
+                        ),
+                        Stroke::default()
+                            .with_color(Color::from_rgba8(255, 255, 255, 0.06))
+                            .with_width(1.0),
+                    );
+                }
+            }
+
+            // Draw horizontal 0 dB center reference line
+            let y_zero = EqGeometry::db_to_y(0.0, plot_rect);
+            frame.stroke(
+                &Path::line(
+                    Point::new(plot_rect.x + EQ_PLOT_BORDER_WIDTH, y_zero),
+                    Point::new(plot_rect.x + plot_rect.width - EQ_PLOT_BORDER_WIDTH, y_zero),
+                ),
+                Stroke::default()
+                    .with_color(Color::from_rgba8(255, 255, 255, 0.15))
+                    .with_width(1.0),
+            );
+
+            // Draw guide text labels (staggered above/below 0 dB line)
+            for zone in &EQ_GUIDE_ZONES {
+                let x_start = EqGeometry::freq_to_x(zone.min_freq, plot_rect);
+                let x_end = EqGeometry::freq_to_x(zone.max_freq, plot_rect);
+                let x_center = (x_start + x_end) / 2.0;
+                let y_pos = EqGeometry::db_to_y(zone.db_offset, plot_rect);
+
+                frame.fill_text(canvas::Text {
+                    content: zone.label.to_string(),
+                    position: Point::new(x_center, y_pos),
+                    color: Color::from_rgba8(190, 195, 205, 0.50),
+                    size: Pixels(10.5),
+                    align_x: Alignment::Center,
+                    align_y: Vertical::Center,
+                    ..canvas::Text::default()
+                });
+            }
+        }
 
         let half = EQ_PLOT_BORDER_WIDTH / 2.0;
         let border_rect = Rectangle::new(
@@ -266,16 +441,14 @@ impl EQDrawView {
         }
     }
 
-    fn draw_eq_curve(&self, frame: &mut Frame, plot_rect: Rectangle) {
-        let curve_colour = Color::WHITE;
-
+    pub fn get_summed_frequency_response(&self, plot_rect: Rectangle, steps: usize) -> Vec<f32> {
         let sources: Vec<Vec<f32>> = EQBand::iter()
             .filter(|&band| self.bands[band].enabled)
-            .map(|band| self.get_eq_frequency_response(plot_rect, band, EQ_CURVE_RESOLUTION))
+            .map(|band| self.get_eq_frequency_response(plot_rect, band, steps))
             .collect();
 
-        let summed: Vec<f32> = if sources.is_empty() {
-            vec![0.0; EQ_CURVE_RESOLUTION + 1]
+        if sources.is_empty() {
+            vec![0.0; steps + 1]
         } else {
             let mut result = vec![0.0; sources[0].len()];
             for vec in &sources {
@@ -284,10 +457,98 @@ impl EQDrawView {
                 }
             }
             result
+        }
+    }
+
+    /// Official BEACN hardware visualizer effect:
+    /// Measures bulk energy in the low band (bass / plosives / fundamental vocal body)
+    /// and high band (sibilance / breath / air), and dynamically deflects only the
+    /// low (< 240 Hz) and high (> 3 kHz) ends of the main curve, while keeping the
+    /// midrange (240 Hz - 3 kHz) rock-solid on the dialed-in EQ target.
+    pub fn compute_beacn_ballistics(&self, gains: &[f32]) -> Vec<f32> {
+        if gains.is_empty() || self.spectrum_bins.is_empty() {
+            return gains.to_vec();
+        }
+
+        let num_bins = self.spectrum_bins.len();
+        let min_freq = MIN_FREQUENCY as f32;
+        let max_freq = MAX_FREQUENCY as f32;
+        let log_min = min_freq.ln();
+        let log_max = max_freq.ln();
+
+        let freq_to_bin = |f: f32| -> usize {
+            let f = f.clamp(min_freq, max_freq);
+            let t = (f.ln() - log_min) / (log_max - log_min);
+            ((t * (num_bins - 1) as f32).round() as usize).min(num_bins - 1)
         };
 
-        let steps = summed.len() - 1;
-        let points: Vec<Point> = summed
+        // Sample Low section (20 Hz - 200 Hz): chest resonance, plosives, bass
+        let bin_low_start = freq_to_bin(20.0);
+        let bin_low_end = freq_to_bin(200.0);
+        let mut low_max = -120.0_f32;
+        for &db in &self.spectrum_bins[bin_low_start..=bin_low_end] {
+            if db.is_finite() && db > low_max {
+                low_max = db;
+            }
+        }
+
+        // Sample High section (3,500 Hz - 14,000 Hz): sibilance, 's', 'sh', air
+        let bin_high_start = freq_to_bin(3500.0);
+        let bin_high_end = freq_to_bin(14000.0);
+        let mut high_max = -120.0_f32;
+        for &db in &self.spectrum_bins[bin_high_start..=bin_high_end] {
+            if db.is_finite() && db > high_max {
+                high_max = db;
+            }
+        }
+
+        // Activity factor: ambient noise floor ~ -70 dBFS; active speech ~ -30 dBFS
+        let low_activity = ((low_max - (-70.0)) / 40.0).clamp(0.0, 1.0);
+        let high_activity = ((high_max - (-70.0)) / 40.0).clamp(0.0, 1.0);
+
+        if low_activity <= 0.001 && high_activity <= 0.001 {
+            return gains.to_vec();
+        }
+
+        let steps = gains.len() - 1;
+        let mut modulated = Vec::with_capacity(gains.len());
+
+        let low_cutoff_freq = 240.0_f32;
+        let high_cutoff_freq = 3000.0_f32;
+
+        let log_low_cutoff = low_cutoff_freq.ln();
+        let log_high_cutoff = high_cutoff_freq.ln();
+
+        for (i, &g_static) in gains.iter().enumerate() {
+            let t = i as f32 / steps as f32;
+            let freq = (log_min + t * (log_max - log_min)).exp();
+
+            let mut delta = 0.0_f32;
+
+            // Deflect low frequencies (bass): max deflection at 20-60 Hz, tapering to 0 at 240 Hz
+            if freq < low_cutoff_freq {
+                let w = (1.0 - (freq.ln() - log_min) / (log_low_cutoff - log_min)).clamp(0.0, 1.0);
+                delta += low_activity * 4.0 * w;
+            }
+
+            // Deflect high frequencies (sibilance): tapering from 0 at 3 kHz up to max at 20 kHz
+            if freq > high_cutoff_freq {
+                let w =
+                    ((freq.ln() - log_high_cutoff) / (log_max - log_high_cutoff)).clamp(0.0, 1.0);
+                delta += high_activity * 3.5 * w;
+            }
+
+            modulated.push((g_static + delta).clamp(MIN_GAIN, MAX_GAIN));
+        }
+
+        modulated
+    }
+
+    fn draw_eq_curve(&self, frame: &mut Frame, plot_rect: Rectangle, gains: &[f32]) {
+        let curve_colour = Color::WHITE;
+
+        let steps = gains.len() - 1;
+        let points: Vec<Point> = gains
             .iter()
             .enumerate()
             .map(|(i, &db)| {
@@ -616,8 +877,20 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
             }
         }
 
+        if !self.spectrum_bins.is_empty() {
+            geometries.push(self.spectrum_cache.draw(renderer, bounds.size(), |frame| {
+                self.draw_spectrum(frame, plot_rect);
+            }));
+        }
+
+        let summed = self.get_summed_frequency_response(plot_rect, EQ_CURVE_RESOLUTION);
+        let curve_gains = match self.visualizer_mode {
+            EqVisualizerMode::Static => summed,
+            EqVisualizerMode::BeacnBallistics => self.compute_beacn_ballistics(&summed),
+        };
+
         geometries.push(self.curve_cache.draw(renderer, bounds.size(), |frame| {
-            self.draw_eq_curve(frame, plot_rect);
+            self.draw_eq_curve(frame, plot_rect, &curve_gains);
         }));
 
         // Control points + selection ring are cheap and depend on
@@ -625,12 +898,6 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
         let mut points_frame = Frame::new(renderer, bounds.size());
         self.draw_band_points(&mut points_frame, plot_rect);
         geometries.push(points_frame.into_geometry());
-
-        if !self.spectrum_bins.is_empty() {
-            geometries.push(self.spectrum_cache.draw(renderer, bounds.size(), |frame| {
-                self.draw_spectrum(frame, plot_rect);
-            }));
-        }
 
         geometries
     }
@@ -705,3 +972,93 @@ fn catmull_rom_continue(
         builder.bezier_curve_to(control_a, control_b, p2);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_visualizer_mode_cycling() {
+        let mut view = EQDrawView::default();
+        assert_eq!(view.visualizer_mode(), EqVisualizerMode::BeacnBallistics);
+
+        assert_eq!(view.cycle_visualizer_mode(), EqVisualizerMode::Static);
+        assert_eq!(view.visualizer_mode(), EqVisualizerMode::Static);
+
+        assert_eq!(
+            view.cycle_visualizer_mode(),
+            EqVisualizerMode::BeacnBallistics
+        );
+        assert_eq!(view.visualizer_mode(), EqVisualizerMode::BeacnBallistics);
+    }
+
+    #[test]
+    fn test_beacn_ballistics_modulates_low_and_high_extremes_only() {
+        let mut view = EQDrawView::default();
+        let steps = 128;
+        let static_gains = vec![0.0_f32; steps + 1];
+
+        // 1. When no audio energy / silence, gains are untouched
+        view.set_spectrum(vec![-120.0; 128]);
+        let modulated_quiet = view.compute_beacn_ballistics(&static_gains);
+        assert_eq!(modulated_quiet, static_gains);
+
+        // 2. Strong bass energy (-20 dB in bins 0..20, quiet everywhere else)
+        let mut bass_spectrum = vec![-120.0; 128];
+        for b in &mut bass_spectrum[0..20] {
+            *b = -20.0;
+        }
+        view.set_spectrum(bass_spectrum);
+        let modulated_bass = view.compute_beacn_ballistics(&static_gains);
+
+        // Low frequency (index 0, ~20 Hz) MUST be deflected upward
+        assert!(modulated_bass[0] > 1.0);
+
+        // Midrange frequency (~1,000 Hz, around step 64) MUST be exactly 0.0 (unperturbed)
+        let mid_idx = steps / 2;
+        assert_eq!(modulated_bass[mid_idx], 0.0);
+
+        // High frequency (index 128, 20 kHz) MUST be exactly 0.0 (no sibilance energy)
+        assert_eq!(modulated_bass[steps], 0.0);
+
+        // 3. Strong sibilance energy (-20 dB in high bins 100..128, quiet everywhere else)
+        let mut sibilance_spectrum = vec![-120.0; 128];
+        for b in &mut sibilance_spectrum[100..128] {
+            *b = -20.0;
+        }
+        view.set_spectrum(sibilance_spectrum);
+        let modulated_sibilance = view.compute_beacn_ballistics(&static_gains);
+
+        // Low frequency MUST be untouched
+        assert_eq!(modulated_sibilance[0], 0.0);
+
+        // Midrange MUST be untouched
+        assert_eq!(modulated_sibilance[mid_idx], 0.0);
+
+        // High frequency MUST be deflected upward
+        assert!(modulated_sibilance[steps] > 1.0);
+    }
+
+    #[test]
+    fn test_eq_guide_zones() {
+        assert_eq!(EQ_GUIDE_ZONES.len(), 6);
+        assert_eq!(EQ_GUIDE_ZONES[0].label, "SUB BASS");
+        assert_eq!(EQ_GUIDE_ZONES[1].label, "BASS / MUDDINESS");
+        assert_eq!(EQ_GUIDE_ZONES[2].label, "BROADCAST");
+        assert_eq!(EQ_GUIDE_ZONES[3].label, "NASAL");
+        assert_eq!(EQ_GUIDE_ZONES[4].label, "LOW / MID HIGHS & ESSES");
+        assert_eq!(EQ_GUIDE_ZONES[5].label, "HIGHS & AIR");
+
+        // Frequencies must be contiguous and ascending
+        for i in 0..EQ_GUIDE_ZONES.len() - 1 {
+            assert_eq!(EQ_GUIDE_ZONES[i].max_freq, EQ_GUIDE_ZONES[i + 1].min_freq);
+        }
+
+        let mut view = EQDrawView::default();
+        assert!(view.show_guide());
+
+        view.set_show_guide(false);
+        assert!(!view.show_guide());
+    }
+}
+
