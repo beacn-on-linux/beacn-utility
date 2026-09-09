@@ -65,7 +65,7 @@ impl ProfileManager {
             (bool, f32),
             (bool, f32),
         );
-        let default_defs: [FactoryDef<'_>; 4] = [
+        let default_defs: [FactoryDef<'_>; 8] = [
             (
                 "Broadcast",
                 vec![
@@ -121,6 +121,63 @@ impl ProfileManager {
                 (true, 40.0),
                 (false, 0.0),
                 (true, 50.0),
+            ),
+            (
+                "Podcast Warmth",
+                vec![
+                    (EQBand::Band1, EQBandType::HighPassFilter, 75.0, 0.0, 0.7),
+                    (EQBand::Band2, EQBandType::BellBand, 220.0, 1.5, 1.1),
+                    (EQBand::Band3, EQBandType::BellBand, 450.0, -2.5, 1.4),
+                    (EQBand::Band4, EQBandType::BellBand, 3800.0, 2.5, 1.0),
+                    (EQBand::Band5, EQBandType::HighShelf, 10000.0, 1.5, 0.7),
+                ],
+                (true, -18.0, 3.0, 10.0, 80.0, 2.0),
+                (true, -40, 2.2, 8.0, 90.0),
+                (true, 30.0),
+                (true, 2.5),
+                (true, 35.0),
+            ),
+            (
+                "Streaming & Esports",
+                vec![
+                    (EQBand::Band1, EQBandType::HighPassFilter, 100.0, 0.0, 0.7),
+                    (EQBand::Band2, EQBandType::BellBand, 320.0, -3.0, 1.4),
+                    (EQBand::Band3, EQBandType::BellBand, 3000.0, 3.5, 1.1),
+                    (EQBand::Band4, EQBandType::HighShelf, 8500.0, 1.0, 0.7),
+                ],
+                (true, -22.0, 4.0, 5.0, 60.0, 3.0),
+                (true, -35, 3.0, 5.0, 60.0),
+                (true, 50.0),
+                (false, 0.0),
+                (true, 45.0),
+            ),
+            (
+                "Flat Studio Reference",
+                vec![
+                    (EQBand::Band1, EQBandType::HighPassFilter, 80.0, 0.0, 0.7),
+                    (EQBand::Band2, EQBandType::BellBand, 250.0, 0.0, 1.0),
+                    (EQBand::Band3, EQBandType::BellBand, 2500.0, 0.0, 1.0),
+                    (EQBand::Band4, EQBandType::HighShelf, 10000.0, 0.0, 0.7),
+                ],
+                (false, -18.0, 2.0, 15.0, 100.0, 0.0),
+                (false, -45, 1.5, 10.0, 100.0),
+                (false, 0.0),
+                (false, 0.0),
+                (false, 0.0),
+            ),
+            (
+                "ASMR & Intimate Vocal",
+                vec![
+                    (EQBand::Band1, EQBandType::HighPassFilter, 60.0, 0.0, 0.7),
+                    (EQBand::Band2, EQBandType::BellBand, 150.0, -1.5, 1.2),
+                    (EQBand::Band3, EQBandType::BellBand, 4000.0, 1.5, 0.8),
+                    (EQBand::Band4, EQBandType::HighShelf, 12000.0, 3.0, 0.7),
+                ],
+                (true, -14.0, 1.8, 20.0, 150.0, 1.0),
+                (false, -48, 1.5, 15.0, 120.0),
+                (true, 15.0),
+                (true, 1.5),
+                (true, 40.0),
             ),
         ];
 
