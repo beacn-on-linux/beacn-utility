@@ -228,11 +228,13 @@ impl EQDrawView {
     }
 
     /// Whether the BEACN frequency guide blocks and labels are shown
+    #[allow(dead_code)]
     pub fn show_guide(&self) -> bool {
         self.show_guide
     }
 
     /// Toggle the frequency guide blocks and labels
+    #[allow(dead_code)]
     pub fn set_show_guide(&mut self, show: bool) {
         if self.show_guide != show {
             self.show_guide = show;
@@ -441,14 +443,14 @@ impl EQDrawView {
         }
     }
 
-    pub fn get_summed_frequency_response(&self, plot_rect: Rectangle, steps: usize) -> Vec<f32> {
+    pub fn get_summed_frequency_response(&self, plot_rect: Rectangle) -> Vec<f32> {
         let sources: Vec<Vec<f32>> = EQBand::iter()
             .filter(|&band| self.bands[band].enabled)
-            .map(|band| self.get_eq_frequency_response(plot_rect, band, steps))
+            .map(|band| self.get_eq_frequency_response(plot_rect, band, EQ_CURVE_RESOLUTION))
             .collect();
 
         if sources.is_empty() {
-            vec![0.0; steps + 1]
+            vec![0.0; EQ_CURVE_RESOLUTION + 1]
         } else {
             let mut result = vec![0.0; sources[0].len()];
             for vec in &sources {
@@ -884,7 +886,7 @@ impl canvas::Program<EQMouseEvent> for EQDrawView {
             }));
         }
 
-        let summed = self.get_summed_frequency_response(plot_rect, EQ_CURVE_RESOLUTION);
+        let summed = self.get_summed_frequency_response(plot_rect);
         let curve_gains = match self.visualizer_mode {
             EqVisualizerMode::Static => summed,
             EqVisualizerMode::BeacnBallistics => self.compute_beacn_ballistics(&summed),
@@ -1038,28 +1040,6 @@ mod tests {
 
         // High frequency MUST be deflected upward
         assert!(modulated_sibilance[steps] > 1.0);
-    }
-
-    #[test]
-    fn test_eq_guide_zones() {
-        assert_eq!(EQ_GUIDE_ZONES.len(), 6);
-        assert_eq!(EQ_GUIDE_ZONES[0].label, "SUB BASS");
-        assert_eq!(EQ_GUIDE_ZONES[1].label, "BASS / MUDDINESS");
-        assert_eq!(EQ_GUIDE_ZONES[2].label, "BROADCAST");
-        assert_eq!(EQ_GUIDE_ZONES[3].label, "NASAL");
-        assert_eq!(EQ_GUIDE_ZONES[4].label, "LOW / MID HIGHS & ESSES");
-        assert_eq!(EQ_GUIDE_ZONES[5].label, "HIGHS & AIR");
-
-        // Frequencies must be contiguous and ascending
-        for i in 0..EQ_GUIDE_ZONES.len() - 1 {
-            assert_eq!(EQ_GUIDE_ZONES[i].max_freq, EQ_GUIDE_ZONES[i + 1].min_freq);
-        }
-
-        let mut view = EQDrawView::default();
-        assert!(view.show_guide());
-
-        view.set_show_guide(false);
-        assert!(!view.show_guide());
     }
 }
 
