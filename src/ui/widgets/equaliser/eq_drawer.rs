@@ -11,7 +11,7 @@ use crate::ui::widgets::equaliser::eq_util::{BiquadCoefficient, EQUtil};
 pub enum EqVisualizerMode {
     /// Static EQ visualization (original upstream behavior)
     Static,
-    /// Official BEACN software style: ballistics modulate the low (bass) and high (sibilance) ends of the main curve
+    /// BEACN-style dynamic ballistics: vocal activity deflects the low and high extremes of the curve
     #[default]
     BeacnBallistics,
 }
@@ -58,7 +58,7 @@ fn eq_point_colour(index: usize) -> Color {
     Color::from_rgb8(r, g, b)
 }
 
-/// BEACN frequency guide zone definition
+/// Vocal frequency guide zone definition (inspired by the BEACN app's vocal frequency zones)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EqGuideZone {
     pub label: &'static str,
@@ -156,7 +156,7 @@ pub struct EQDrawView {
     // Visualizer Mode
     visualizer_mode: EqVisualizerMode,
 
-    // Guide mode showing official BEACN vocal frequency blocks
+    // Guide mode showing vocal frequency reference zones
     show_guide: bool,
 
     // Spectrum Data points
@@ -325,7 +325,7 @@ impl EQDrawView {
         frame.fill_rectangle(plot_rect.position(), plot_rect.size(), background);
 
         if self.show_guide {
-            // Alternating vertical column shading matching official BEACN software
+            // Alternating vertical column shading for vocal frequency zones
             for zone in &EQ_GUIDE_ZONES {
                 let x_start = EqGeometry::freq_to_x(zone.min_freq, plot_rect)
                     .clamp(plot_rect.x, plot_rect.x + plot_rect.width);
@@ -460,11 +460,12 @@ impl EQDrawView {
         }
     }
 
-    /// Official BEACN hardware visualizer effect:
+    /// BEACN-style vocal visualizer effect:
     /// Measures bulk energy in the low band (bass / plosives / fundamental vocal body)
     /// and high band (sibilance / breath / air), and dynamically deflects only the
-    /// low (< 240 Hz) and high (> 3 kHz) ends of the main curve, while keeping the
-    /// midrange (240 Hz - 3 kHz) rock-solid on the dialed-in EQ target.
+    /// low (< 240 Hz) and high (> 3 kHz) ends of the curve to reflect vocal activity,
+    /// while keeping the midrange (240 Hz - 3 kHz) rock-solid on the dialed-in EQ target.
+    /// (Note: This is an independent open-source recreation inspired by BEACN software).
     pub fn compute_beacn_ballistics(&self, gains: &[f32]) -> Vec<f32> {
         if gains.is_empty() || self.spectrum_bins.is_empty() {
             return gains.to_vec();
