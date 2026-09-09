@@ -477,16 +477,9 @@ impl AudioState {
                     "Profile '{}' loaded from disk, syncing to device",
                     active_name
                 );
-                let valid_messages = Message::generate_fetch_message(
-                    state.device_definition.device_type,
-                    state.device_definition.device_info.version,
-                );
                 for msg in profile.settings {
-                    if valid_messages.iter().any(|v| v.is_same_target(&msg)) {
-                        let _ = state.handle_message(msg);
-                    } else {
-                        trace!("Skipping message not valid for this device/version: {msg:?}");
-                    }
+                    state.set_local_value(msg);
+                    let _ = state.handle_message(msg);
                 }
             }
             Ok(None) => {
@@ -597,16 +590,9 @@ impl AudioState {
                     "Profile '{}' loaded from disk, syncing to device",
                     active_name
                 );
-                let valid_messages = Message::generate_fetch_message(
-                    state.device_definition.device_type,
-                    state.device_definition.device_info.version,
-                );
                 for msg in profile.settings {
-                    if valid_messages.iter().any(|v| v.is_same_target(&msg)) {
-                        let _ = state.handle_message_async(msg).await;
-                    } else {
-                        trace!("Skipping message not valid for this device/version: {msg:?}");
-                    }
+                    state.set_local_value(msg);
+                    let _ = state.handle_message_async(msg).await;
                 }
             }
             Ok(None) => {
@@ -828,16 +814,9 @@ impl AudioState {
             self.active_profile_name = new_name.to_string();
             let _ = ProfileManager::set_active_profile_name(new_name);
 
-            let valid_messages = Message::generate_fetch_message(
-                self.device_definition.device_type,
-                self.device_definition.device_info.version,
-            );
             for msg in profile.settings {
-                if valid_messages.iter().any(|v| v.is_same_target(&msg)) {
-                    let _ = self.handle_message(msg);
-                } else {
-                    trace!("Skipping message not valid for this device/version: {msg:?}");
-                }
+                self.set_local_value(msg);
+                let _ = self.handle_message(msg);
             }
 
             self.is_loading_profile = false;

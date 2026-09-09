@@ -651,7 +651,6 @@ impl AudioPage for Configuration {
         let bottom = self.bottom_view(state).map(PageMessage::AudioConfig);
         row![
             column![
-                // Top Profile Toolbar
                 container(toolbar)
                     .width(Length::Fill)
                     .height(Length::Fixed(32.0))

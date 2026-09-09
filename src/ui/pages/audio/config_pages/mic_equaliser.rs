@@ -278,22 +278,23 @@ impl MicEqualiser {
             warn!("Should not be called in Simple Mode!");
         }
 
-        let eq_freq_1 = EQFrequency(36.0);
+        let eq_freq_1 = EQFrequency(100.0);
         let eq_freq_2 = EQFrequency(500.0);
-        let eq_freq_3 = EQFrequency(2000.0);
+        let eq_freq_3 = EQFrequency(2500.0);
+        let eq_freq_4 = EQFrequency(10000.0);
 
         let gain = EQGain(0.0);
         let q = EQQ(0.7);
 
-        // This is basically the default setup for the 'Simple' Mode
-        let messages = vec![
+        let mut messages = vec![
             Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band1, true)),
             Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band2, true)),
             Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band3, true)),
+            Message::EQMicrophone(EQMicrophone::Enabled(mode, EQBand::Band4, true)),
             Message::EQMicrophone(EQMicrophone::Type(
                 mode,
                 EQBand::Band1,
-                EQBandType::HighPassFilter,
+                EQBandType::BellBand,
             )),
             Message::EQMicrophone(EQMicrophone::Type(
                 mode,
@@ -303,20 +304,33 @@ impl MicEqualiser {
             Message::EQMicrophone(EQMicrophone::Type(
                 mode,
                 EQBand::Band3,
+                EQBandType::BellBand,
+            )),
+            Message::EQMicrophone(EQMicrophone::Type(
+                mode,
+                EQBand::Band4,
                 EQBandType::HighShelf,
             )),
             Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band1, eq_freq_1)),
             Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band2, eq_freq_2)),
             Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band3, eq_freq_3)),
+            Message::EQMicrophone(EQMicrophone::Frequency(mode, EQBand::Band4, eq_freq_4)),
             Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band1, gain)),
             Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band2, gain)),
             Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band3, gain)),
+            Message::EQMicrophone(EQMicrophone::Gain(mode, EQBand::Band4, gain)),
             Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band1, q)),
             Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band2, q)),
             Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band3, q)),
+            Message::EQMicrophone(EQMicrophone::Q(mode, EQBand::Band4, q)),
         ];
 
+        for band in [EQBand::Band5, EQBand::Band6, EQBand::Band7, EQBand::Band8, EQBand::Band9] {
+            messages.push(Message::EQMicrophone(EQMicrophone::Enabled(mode, band, false)));
+        }
+
         for message in messages {
+            state.set_local_value(message);
             let _ = state.handle_message(message);
         }
     }
@@ -592,16 +606,22 @@ impl MicEqualiser {
         let mode = state.eq_microphone.mode;
         let bands = state.eq_microphone.bands[state.eq_microphone.mode];
 
+        if let Some(active) = self.active_band {
+            if !bands[active].enabled {
+                self.active_band = None;
+            }
+        }
+
         if self.active_band.is_none() {
             for band in EQBand::iter() {
                 if bands[band].enabled {
                     self.active_band = Some(band);
-                    self.view.set_active(self.active_band);
                     break;
                 }
             }
         }
 
+        self.view.set_active(self.active_band);
         self.view.set_bands(bands);
         self.eq_mode = mode;
     }
