@@ -4,6 +4,7 @@ use beacn_lib::manager::DeviceLocation;
 
 pub mod audio;
 pub mod control;
+pub mod profile;
 
 pub trait State {
     fn location(&self) -> &DeviceLocation;

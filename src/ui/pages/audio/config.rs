@@ -1,5 +1,6 @@
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
+use crate::devices::states::profile::ProfileManager;
 use crate::ui::pages::audio::config_pages::compressor::CompressorPage;
 use crate::ui::pages::audio::config_pages::expander::ExpanderPage;
 use crate::ui::pages::audio::config_pages::headphones::HeadphonesPage;
@@ -14,6 +15,7 @@ use crate::ui::utility::pipewire::platform::{
 use crate::ui::utility::pipewire::{
     LoopbackHandler, LoopbackHandlerState, PipeWireNodeType, PipeWirePortType, SpectrumHandle,
 };
+use crate::ui::widgets::helpers::buttons::padded_button;
 use crate::ui::widgets::helpers::composite::draw_range;
 use crate::ui::widgets::helpers::svg::{svg_button_style, svg_coloured_button_unstyled};
 use crate::ui::widgets::helpers::tabs::render_tab;
@@ -25,13 +27,14 @@ use beacn_lib::types::HasRange;
 use iced::widget::button::Status;
 use iced::widget::canvas::{Frame, Geometry};
 use iced::widget::{
-    Canvas, Column, Float, Space, button, canvas, column, container, responsive, row, rule, stack,
-    text,
+    Canvas, Column, Float, Space, button, canvas, column, container, pick_list, responsive, row,
+    rule, stack, text, text_input,
 };
 use iced::{
     Alignment, Background, Color, Element, Length, Padding, Point, Rectangle, Renderer, Size, Task,
     Theme, Vector, mouse,
 };
+use log::warn;
 use std::sync::{Arc, Mutex};
 use web_time::Instant;
 
@@ -48,6 +51,11 @@ pub(crate) enum ConfigMessage {
     OutputGainChanged(f32),
     HandleRecording,
     HandlePlayback,
+
+    SelectProfile(String),
+    ToggleNewProfile,
+    NewProfileNameChanged(String),
+    CreateProfile,
 }
 
 pub struct Configuration {
@@ -61,6 +69,10 @@ pub struct Configuration {
 
     selected_tab: usize,
     tab_pages: Vec<Box<dyn ConfigPage>>,
+
+    available_profiles: Vec<String>,
+    show_new_profile_input: bool,
+    new_profile_name: String,
 }
 
 impl Configuration {
@@ -82,6 +94,10 @@ impl Configuration {
                 Box::new(CompressorPage::new()),
                 Box::new(HeadphonesPage),
             ],
+
+            available_profiles: ProfileManager::list_profiles(),
+            show_new_profile_input: false,
+            new_profile_name: String::new(),
         }
     }
 
@@ -317,6 +333,41 @@ impl Configuration {
             .spacing(5.0)
             .into()
     }
+
+    fn profile_toolbar(&self, state: &AudioState) -> Element<'_, ConfigMessage> {
+        let active_profile = state.active_profile_name.clone();
+        let profiles = self.available_profiles.clone();
+
+        let profile_picker =
+            pick_list(profiles, Some(active_profile), ConfigMessage::SelectProfile)
+                .text_size(12.0)
+                .padding(Padding {
+                    top: 2.0,
+                    bottom: 2.0,
+                    left: 6.0,
+                    right: 6.0,
+                });
+
+        let new_btn =
+            padded_button("+ New", Alignment::Center).on_press(ConfigMessage::ToggleNewProfile);
+
+        let mut row = row![text("Profile:").size(12.0), profile_picker, new_btn,]
+            .spacing(8.0)
+            .align_y(Alignment::Center);
+
+        if self.show_new_profile_input {
+            let input = text_input("Profile name...", &self.new_profile_name)
+                .on_input(ConfigMessage::NewProfileNameChanged)
+                .on_submit(ConfigMessage::CreateProfile)
+                .size(12.0)
+                .width(Length::Fixed(140.0));
+            let save_btn =
+                padded_button("Save", Alignment::Center).on_press(ConfigMessage::CreateProfile);
+            row = row.push(input).push(save_btn);
+        }
+
+        row.into()
+    }
 }
 
 impl AudioPage for Configuration {
@@ -543,6 +594,39 @@ impl AudioPage for Configuration {
                     }
                     Task::none()
                 }
+
+                ConfigMessage::SelectProfile(name) => {
+                    if let Err(e) = state.switch_profile(&name) {
+                        warn!("Failed to switch profile to '{name}': {e}");
+                    } else {
+                        self.available_profiles = ProfileManager::list_profiles();
+                        self.equaliser.load_device(state);
+                        self.tab_pages[self.selected_tab].on_open(state);
+                    }
+                    Task::none()
+                }
+
+                ConfigMessage::ToggleNewProfile => {
+                    self.show_new_profile_input = !self.show_new_profile_input;
+                    self.new_profile_name.clear();
+                    Task::none()
+                }
+
+                ConfigMessage::NewProfileNameChanged(name) => {
+                    self.new_profile_name = name;
+                    Task::none()
+                }
+
+                ConfigMessage::CreateProfile => {
+                    let name = self.new_profile_name.trim().to_string();
+                    if !name.is_empty() {
+                        let _ = state.save_profile_as(&name);
+                        self.available_profiles = ProfileManager::list_profiles();
+                        self.show_new_profile_input = false;
+                        self.new_profile_name.clear();
+                    }
+                    Task::none()
+                }
             },
 
             _ => Task::none(),
@@ -550,6 +634,8 @@ impl AudioPage for Configuration {
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, PageMessage> {
+        let toolbar = self.profile_toolbar(state).map(PageMessage::AudioConfig);
+
         let equaliser = self
             .equaliser
             .view(state)
@@ -565,6 +651,17 @@ impl AudioPage for Configuration {
         let bottom = self.bottom_view(state).map(PageMessage::AudioConfig);
         row![
             column![
+                // Top Profile Toolbar
+                container(toolbar)
+                    .width(Length::Fill)
+                    .height(Length::Fixed(32.0))
+                    .padding(Padding {
+                        top: 4.0,
+                        bottom: 2.0,
+                        left: 10.0,
+                        right: 10.0,
+                    }),
+                rule::horizontal(1),
                 // Remaining space
                 container(equaliser)
                     .width(Length::Fill)
