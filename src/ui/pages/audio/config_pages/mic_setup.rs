@@ -47,14 +47,14 @@ impl ConfigPage for MicrophoneSetup {
         let value = device.de_esser.amount;
         let range = Percent::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
-        let deesser = draw_range("De-Esser", value, range, "dB", |v| {
+        let deesser = draw_range("De-Esser", value, range, "%", |v| {
             ChildMessage::State(Message::DeEsser(DeEsser::Amount(Percent(v as f32))))
         });
 
         let value = device.bass_enhancement.amount;
         let range = BassAmount::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
-        let bass_amnt = draw_range("Amount", value, range, "dB", |v| {
+        let bass_amnt = draw_range("Amount", value, range, "", |v| {
             ChildMessage::State(Message::BassEnhancement(BassEnhancement::Amount(
                 BassAmount(v as f32),
             )))
@@ -63,14 +63,14 @@ impl ConfigPage for MicrophoneSetup {
         let value = device.exciter.amount;
         let range = Percent::range();
         let range: RangeInclusive<u8> = (*range.start() as u8)..=(*range.end() as u8);
-        let exc_amnt = draw_range("Amount", value, range, "dB", |v| {
+        let exc_amnt = draw_range("Amount", value, range, "%", |v| {
             ChildMessage::State(Message::Exciter(Exciter::Amount(Percent(v as f32))))
         });
 
         let value = device.exciter.freq;
         let range = ExciterFreq::range();
         let range: RangeInclusive<u16> = (*range.start() as u16)..=(*range.end() as u16);
-        let exc_freq = draw_range("Frequency", value, range, "dB", |v| {
+        let exc_freq = draw_range("Frequency", value, range, "Hz", |v| {
             ChildMessage::State(Message::Exciter(Exciter::Frequency(ExciterFreq(v as f32))))
         });
 
