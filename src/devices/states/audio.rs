@@ -35,7 +35,9 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use log::trace;
+use log::{info, trace, warn};
+
+use crate::devices::states::profile::{AudioProfile, ProfileManager};
 
 type Rgb = [u8; 3];
 
@@ -46,6 +48,9 @@ pub(crate) struct AudioState {
     pub device_sender: Option<Sender<AudioMessage>>,
 
     pub current_settings: Vec<Message>,
+
+    pub active_profile_name: String,
+    pub is_loading_profile: bool,
 
     pub headphones: Headphones,
     pub lighting: Lighting,
@@ -222,6 +227,10 @@ impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
+            if self.is_loading_profile {
+                warn!("Ignoring invalid profile setting: {e}");
+                return result;
+            }
             self.device_state.state = LoadState::Error;
             self.device_state.errors.push(ErrorMessage {
                 error_text: Some(e.to_string()),
@@ -233,6 +242,8 @@ impl AudioState {
             let state = DefinitionState::Error(ErrorType::Other(definition_error));
 
             self.device_definition.state = state;
+        } else if self.device_state.state == LoadState::Running && !self.is_loading_profile {
+            self.save_active_profile();
         }
         result
     }
@@ -280,6 +291,10 @@ impl AudioState {
     pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_async_inner(message).await;
         if let Err(e) = &result {
+            if self.is_loading_profile {
+                warn!("Ignoring invalid profile setting: {e}");
+                return result;
+            }
             self.device_state.state = LoadState::Error;
             self.device_state.errors.push(ErrorMessage {
                 error_text: Some(format!("{e}")),
@@ -291,6 +306,8 @@ impl AudioState {
             let state = DefinitionState::Error(ErrorType::Other(definition_error));
 
             self.device_definition.state = state;
+        } else if self.device_state.state == LoadState::Running && !self.is_loading_profile {
+            self.save_active_profile();
         }
         result
     }
@@ -455,6 +472,37 @@ impl AudioState {
         }
 
         state.device_state.state = LoadState::Running;
+
+        ProfileManager::ensure_default_profiles();
+        let active_name = ProfileManager::get_active_profile_name();
+        state.active_profile_name = active_name.clone();
+        let _ = ProfileManager::set_active_profile_name(&active_name);
+
+        state.is_loading_profile = true;
+        match ProfileManager::load_profile(&active_name) {
+            Ok(Some(profile)) => {
+                info!(
+                    "Profile '{}' loaded from disk, syncing to device",
+                    active_name
+                );
+                for msg in profile.settings {
+                    state.set_local_value(msg);
+                    let _ = state.handle_message(msg);
+                }
+            }
+            Ok(None) => {
+                info!(
+                    "No profile on disk for '{}', saving current device settings into initial profile",
+                    active_name
+                );
+                state.save_active_profile();
+            }
+            Err(e) => {
+                warn!("Failed to load profile '{}': {e}", active_name);
+            }
+        }
+        state.is_loading_profile = false;
+
         state
     }
 
@@ -537,6 +585,37 @@ impl AudioState {
         if state.device_state.state == LoadState::Loading {
             state.device_state.state = LoadState::Running;
         }
+
+        ProfileManager::ensure_default_profiles();
+        let active_name = ProfileManager::get_active_profile_name();
+        state.active_profile_name = active_name.clone();
+        let _ = ProfileManager::set_active_profile_name(&active_name);
+
+        state.is_loading_profile = true;
+        match ProfileManager::load_profile(&active_name) {
+            Ok(Some(profile)) => {
+                info!(
+                    "Profile '{}' loaded from disk, syncing to device",
+                    active_name
+                );
+                for msg in profile.settings {
+                    state.set_local_value(msg);
+                    let _ = state.handle_message_async(msg).await;
+                }
+            }
+            Ok(None) => {
+                info!(
+                    "No profile on disk for '{}', saving current device settings into initial profile",
+                    active_name
+                );
+                state.save_active_profile();
+            }
+            Err(e) => {
+                warn!("Failed to load profile '{}': {e}", active_name);
+            }
+        }
+        state.is_loading_profile = false;
+
         state
     }
 
@@ -711,5 +790,53 @@ impl AudioState {
                 _ => unreachable!(),
             },
         }
+    }
+
+    pub fn save_active_profile(&self) {
+        let filtered_settings: Vec<Message> = self
+            .current_settings
+            .iter()
+            .filter(|m| {
+                !matches!(
+                    m,
+                    Message::Headphones(MicHeadphones::MicFromLoopback(_))
+                        | Message::Headphones(MicHeadphones::StudioDriverless(_))
+                        | Message::Headphones(MicHeadphones::MicClassCompliant(_))
+                )
+            })
+            .cloned()
+            .collect();
+
+        let profile = AudioProfile {
+            schema_version: 1,
+            name: self.active_profile_name.clone(),
+            settings: filtered_settings,
+        };
+
+        let _ = ProfileManager::save_profile(&self.active_profile_name, &profile);
+    }
+
+    pub fn switch_profile(&mut self, new_name: &str) -> Result<()> {
+        if let Some(profile) = ProfileManager::load_profile(new_name)? {
+            self.is_loading_profile = true;
+            self.active_profile_name = new_name.to_string();
+            let _ = ProfileManager::set_active_profile_name(new_name);
+
+            for msg in profile.settings {
+                self.set_local_value(msg);
+                let _ = self.handle_message(msg);
+            }
+
+            self.is_loading_profile = false;
+            self.save_active_profile();
+        }
+        Ok(())
+    }
+
+    pub fn save_profile_as(&mut self, new_name: &str) -> Result<()> {
+        self.active_profile_name = new_name.to_string();
+        let _ = ProfileManager::set_active_profile_name(new_name);
+        self.save_active_profile();
+        Ok(())
     }
 }
