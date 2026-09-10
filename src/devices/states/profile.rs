@@ -386,6 +386,21 @@ impl ProfileManager {
         Ok(())
     }
 
+    pub fn sanitize_message(message: Message) -> Message {
+        match message {
+            Message::BassEnhancement(BassEnhancement::Amount(amt)) => {
+                Message::BassEnhancement(BassEnhancement::Amount(BassAmount(amt.0.clamp(0.0, 10.0))))
+            }
+            Message::Suppressor(Suppressor::Amount(amt)) => {
+                Message::Suppressor(Suppressor::Amount(Percent(amt.0.clamp(0.0, 100.0))))
+            }
+            Message::DeEsser(DeEsser::Amount(amt)) => {
+                Message::DeEsser(DeEsser::Amount(Percent(amt.0.clamp(0.0, 100.0))))
+            }
+            other => other,
+        }
+    }
+
     /// Load the profile from disk
     pub fn load_profile(profile_name: &str) -> Result<Option<AudioProfile>> {
         let dir = Self::get_profile_dir(profile_name)?;
@@ -396,8 +411,9 @@ impl ProfileManager {
 
         let file = File::open(&profile_file)
             .with_context(|| format!("Failed to open profile file: {profile_file:?}"))?;
-        let profile: AudioProfile = serde_json::from_reader(file)
+        let mut profile: AudioProfile = serde_json::from_reader(file)
             .with_context(|| format!("Failed to parse profile JSON: {profile_file:?}"))?;
+        profile.settings = profile.settings.into_iter().map(Self::sanitize_message).collect();
         debug!(
             "Loaded audio profile: '{}' ({profile_file:?})",
             profile.name
@@ -474,5 +490,24 @@ mod tests {
             "Invalid_Name_Test__"
         );
         assert_eq!(sanitize_filename("Name with spaces"), "Name with spaces");
+    }
+
+    #[test]
+    fn test_sanitize_message_clamps_out_of_range_values() {
+        let msg = Message::BassEnhancement(BassEnhancement::Amount(BassAmount(15.0)));
+        let sanitized = ProfileManager::sanitize_message(msg);
+        if let Message::BassEnhancement(BassEnhancement::Amount(amt)) = sanitized {
+            assert_eq!(amt.0, 10.0);
+        } else {
+            panic!("Expected BassEnhancement::Amount");
+        }
+
+        let msg_neg = Message::BassEnhancement(BassEnhancement::Amount(BassAmount(-2.0)));
+        let sanitized_neg = ProfileManager::sanitize_message(msg_neg);
+        if let Message::BassEnhancement(BassEnhancement::Amount(amt)) = sanitized_neg {
+            assert_eq!(amt.0, 0.0);
+        } else {
+            panic!("Expected BassEnhancement::Amount");
+        }
     }
 }

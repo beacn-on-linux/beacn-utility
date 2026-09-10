@@ -227,6 +227,10 @@ impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
+            if self.is_loading_profile {
+                warn!("Ignoring invalid profile setting: {e}");
+                return result;
+            }
             self.device_state.state = LoadState::Error;
             self.device_state.errors.push(ErrorMessage {
                 error_text: Some(e.to_string()),
@@ -287,6 +291,10 @@ impl AudioState {
     pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_async_inner(message).await;
         if let Err(e) = &result {
+            if self.is_loading_profile {
+                warn!("Ignoring invalid profile setting: {e}");
+                return result;
+            }
             self.device_state.state = LoadState::Error;
             self.device_state.errors.push(ErrorMessage {
                 error_text: Some(format!("{e}")),
