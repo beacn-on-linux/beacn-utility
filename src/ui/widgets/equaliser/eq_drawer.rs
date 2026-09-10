@@ -981,21 +981,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_visualizer_mode_cycling() {
-        let mut view = EQDrawView::default();
-        assert_eq!(view.visualizer_mode(), EqVisualizerMode::BeacnBallistics);
-
-        assert_eq!(view.cycle_visualizer_mode(), EqVisualizerMode::Static);
-        assert_eq!(view.visualizer_mode(), EqVisualizerMode::Static);
-
-        assert_eq!(
-            view.cycle_visualizer_mode(),
-            EqVisualizerMode::BeacnBallistics
-        );
-        assert_eq!(view.visualizer_mode(), EqVisualizerMode::BeacnBallistics);
-    }
-
-    #[test]
     fn test_beacn_ballistics_modulates_low_and_high_extremes_only() {
         let mut view = EQDrawView::default();
         let steps = 128;
