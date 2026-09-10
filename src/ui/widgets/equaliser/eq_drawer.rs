@@ -9,9 +9,7 @@ use crate::ui::widgets::equaliser::eq_util::{BiquadCoefficient, EQUtil};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub enum EqVisualizerMode {
-    /// Static EQ visualization (original upstream behavior)
     Static,
-    /// BEACN-style dynamic ballistics: vocal activity deflects the low and high extremes of the curve
     #[default]
     BeacnBallistics,
 }
@@ -58,7 +56,6 @@ fn eq_point_colour(index: usize) -> Color {
     Color::from_rgb8(r, g, b)
 }
 
-/// Vocal frequency guide zone definition (inspired by the BEACN app's vocal frequency zones)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EqGuideZone {
     pub label: &'static str,
@@ -327,7 +324,6 @@ impl EQDrawView {
         frame.fill_rectangle(plot_rect.position(), plot_rect.size(), background);
 
         if self.show_guide {
-            // Alternating vertical column shading for vocal frequency zones
             for zone in &EQ_GUIDE_ZONES {
                 let x_start = EqGeometry::freq_to_x(zone.min_freq, plot_rect)
                     .clamp(plot_rect.x, plot_rect.x + plot_rect.width);
@@ -343,7 +339,6 @@ impl EQDrawView {
                     );
                 }
 
-                // Vertical boundary line between zones
                 if x_start > plot_rect.x + 1.0 && x_start < plot_rect.x + plot_rect.width - 1.0 {
                     frame.stroke(
                         &Path::line(
@@ -357,7 +352,6 @@ impl EQDrawView {
                 }
             }
 
-            // Draw horizontal 0 dB center reference line
             let y_zero = EqGeometry::db_to_y(0.0, plot_rect);
             frame.stroke(
                 &Path::line(
@@ -369,7 +363,6 @@ impl EQDrawView {
                     .with_width(1.0),
             );
 
-            // Draw guide text labels (staggered above/below 0 dB line)
             for zone in &EQ_GUIDE_ZONES {
                 let x_start = EqGeometry::freq_to_x(zone.min_freq, plot_rect);
                 let x_end = EqGeometry::freq_to_x(zone.max_freq, plot_rect);
@@ -462,12 +455,6 @@ impl EQDrawView {
         }
     }
 
-    /// BEACN-style vocal visualizer effect:
-    /// Measures bulk energy in the low band (bass / plosives / fundamental vocal body)
-    /// and high band (sibilance / breath / air), and dynamically deflects only the
-    /// low (< 240 Hz) and high (> 3 kHz) ends of the curve to reflect vocal activity,
-    /// while keeping the midrange (240 Hz - 3 kHz) rock-solid on the dialed-in EQ target.
-    /// (Note: This is an independent open-source recreation inspired by BEACN software).
     pub fn compute_beacn_ballistics(&self, gains: &[f32]) -> Vec<f32> {
         if gains.is_empty() || self.spectrum_bins.is_empty() {
             return gains.to_vec();
@@ -485,7 +472,6 @@ impl EQDrawView {
             ((t * (num_bins - 1) as f32).round() as usize).min(num_bins - 1)
         };
 
-        // Sample Low section (20 Hz - 200 Hz): chest resonance, plosives, bass
         let bin_low_start = freq_to_bin(20.0);
         let bin_low_end = freq_to_bin(200.0);
         let mut low_max = -120.0_f32;
@@ -495,7 +481,6 @@ impl EQDrawView {
             }
         }
 
-        // Sample High section (3,500 Hz - 14,000 Hz): sibilance, 's', 'sh', air
         let bin_high_start = freq_to_bin(3500.0);
         let bin_high_end = freq_to_bin(14000.0);
         let mut high_max = -120.0_f32;
@@ -505,7 +490,6 @@ impl EQDrawView {
             }
         }
 
-        // Activity factor: ambient noise floor ~ -70 dBFS; active speech ~ -30 dBFS
         let low_activity = ((low_max - (-70.0)) / 40.0).clamp(0.0, 1.0);
         let high_activity = ((high_max - (-70.0)) / 40.0).clamp(0.0, 1.0);
 
@@ -528,13 +512,11 @@ impl EQDrawView {
 
             let mut delta = 0.0_f32;
 
-            // Deflect low frequencies (bass): max deflection at 20-60 Hz, tapering to 0 at 240 Hz
             if freq < low_cutoff_freq {
                 let w = (1.0 - (freq.ln() - log_min) / (log_low_cutoff - log_min)).clamp(0.0, 1.0);
                 delta += low_activity * 4.0 * w;
             }
 
-            // Deflect high frequencies (sibilance): tapering from 0 at 3 kHz up to max at 20 kHz
             if freq > high_cutoff_freq {
                 let w =
                     ((freq.ln() - log_high_cutoff) / (log_max - log_high_cutoff)).clamp(0.0, 1.0);
@@ -986,12 +968,10 @@ mod tests {
         let steps = 128;
         let static_gains = vec![0.0_f32; steps + 1];
 
-        // 1. When no audio energy / silence, gains are untouched
         view.set_spectrum(vec![-120.0; 128]);
         let modulated_quiet = view.compute_beacn_ballistics(&static_gains);
         assert_eq!(modulated_quiet, static_gains);
 
-        // 2. Strong bass energy (-20 dB in bins 0..20, quiet everywhere else)
         let mut bass_spectrum = vec![-120.0; 128];
         for b in &mut bass_spectrum[0..20] {
             *b = -20.0;
@@ -999,17 +979,11 @@ mod tests {
         view.set_spectrum(bass_spectrum);
         let modulated_bass = view.compute_beacn_ballistics(&static_gains);
 
-        // Low frequency (index 0, ~20 Hz) MUST be deflected upward
         assert!(modulated_bass[0] > 1.0);
-
-        // Midrange frequency (~1,000 Hz, around step 64) MUST be exactly 0.0 (unperturbed)
         let mid_idx = steps / 2;
         assert_eq!(modulated_bass[mid_idx], 0.0);
-
-        // High frequency (index 128, 20 kHz) MUST be exactly 0.0 (no sibilance energy)
         assert_eq!(modulated_bass[steps], 0.0);
 
-        // 3. Strong sibilance energy (-20 dB in high bins 100..128, quiet everywhere else)
         let mut sibilance_spectrum = vec![-120.0; 128];
         for b in &mut sibilance_spectrum[100..128] {
             *b = -20.0;
@@ -1017,13 +991,8 @@ mod tests {
         view.set_spectrum(sibilance_spectrum);
         let modulated_sibilance = view.compute_beacn_ballistics(&static_gains);
 
-        // Low frequency MUST be untouched
         assert_eq!(modulated_sibilance[0], 0.0);
-
-        // Midrange MUST be untouched
         assert_eq!(modulated_sibilance[mid_idx], 0.0);
-
-        // High frequency MUST be deflected upward
         assert!(modulated_sibilance[steps] > 1.0);
     }
 }

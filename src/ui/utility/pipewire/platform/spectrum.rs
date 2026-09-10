@@ -130,7 +130,7 @@ impl DynamicSpectrumAnalyzer {
             return;
         }
 
-        // Copy windowed samples into preallocated FFT buffer
+        // Copy the chronological history straight into the FFT buffer
         for (i, buffer) in self.fft_buffer.iter_mut().enumerate().take(self.fft_size) {
             let sample = self.history[i];
             let window = self.window[i];
@@ -145,25 +145,23 @@ impl DynamicSpectrumAnalyzer {
         let log_min = min_freq.ln();
         let log_max = max_freq.ln();
 
-        // Hann window has an amplitude coherent gain of 0.5, so compensate with 4.0 / N
         let scale_factor = 4.0 / self.fft_size as f32;
         let max_valid_bin = self.fft_size / 2;
 
         let dt = (sample_count as f32 / self.sample_rate).max(0.001);
-        // Realistic decay rate of ~28 dB/s provides smooth RTA release
         let max_decay = 28.0_f32 * dt;
 
-        // 3. Map the bins using a band-aware log bucket approach
+        // 3. Map the bins using a true band-aware bucket approach
         for (i, item) in output_db.iter_mut().enumerate().take(num_points) {
             let t_norm = i as f32 / ((num_points - 1).max(1)) as f32;
             let target_freq = (log_min + t_norm * (log_max - log_min)).exp();
 
-            // Establish frequency tracking boundaries in log space
+            // Establish pixel tracking boundaries safely in log space
             let step = (log_max - log_min) / (num_points as f32);
             let freq_low = (target_freq.ln() - step * 0.5).exp();
             let freq_high = (target_freq.ln() + step * 0.5).exp();
 
-            // Convert frequency boundaries to FFT bin indices
+            // Convert frequency boundaries to exact FFT bin indices
             let bin_low_f = (freq_low * self.fft_size as f32) / self.sample_rate;
             let bin_high_f = (freq_high * self.fft_size as f32) / self.sample_rate;
 
@@ -189,10 +187,10 @@ impl DynamicSpectrumAnalyzer {
             // Convert directly to decibels
             let mut db = 20.0 * (peak_mag + 1e-6).log10();
 
-            // Strict clamp output boundaries to required range
+            // Strict clamp output boundaries to your required range
             db = db.clamp(MIN_DB, 0.0);
 
-            // Ballistic damping: fast attack for vocal transients, smooth decay
+            // Ballistic damping across frames for fluid rendering
             if db > *item {
                 *item = (0.85 * db) + (0.15 * *item);
             } else {
@@ -200,7 +198,6 @@ impl DynamicSpectrumAnalyzer {
             }
         }
 
-        // Apply gentle 3-point spatial filter across log bins
         let temp = output_db.to_vec();
         for i in 1..num_points - 1 {
             output_db[i] = 0.20 * temp[i - 1] + 0.60 * temp[i] + 0.20 * temp[i + 1];
@@ -218,7 +215,6 @@ mod tests {
         let mut analyzer = DynamicSpectrumAnalyzer::new(sample_rate);
         let mut output_db = vec![MIN_DB; EQ_CURVE_RESOLUTION];
 
-        // Generate 1 kHz sine wave at -10 dBFS (amplitude ~ 0.316)
         let freq = 1000.0;
         let amplitude = 0.316_f32;
         let chunk_size = 256;
@@ -232,7 +228,6 @@ mod tests {
             analyzer.render_spectrum_frame(&mut output_db, samples.len());
         }
 
-        // Find the peak in the output
         let mut max_db = MIN_DB;
         let mut peak_bin = 0;
         for (i, &db) in output_db.iter().enumerate() {
@@ -258,13 +253,11 @@ mod tests {
         let mut analyzer = DynamicSpectrumAnalyzer::new(sample_rate);
         let mut output_db = vec![MIN_DB; EQ_CURVE_RESOLUTION];
 
-        // Send a burst of signal
         let samples = vec![0.5_f32; 1024];
         analyzer.push_incoming_samples(&samples);
         analyzer.render_spectrum_frame(&mut output_db, samples.len());
         let peak_before = output_db[50];
 
-        // Send 0.1s of silence (4800 samples)
         let silence = vec![0.0_f32; 4800];
         analyzer.push_incoming_samples(&silence);
         analyzer.render_spectrum_frame(&mut output_db, silence.len());
