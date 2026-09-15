@@ -345,7 +345,7 @@ async fn handle_device_attached(
             let event_tx = event_tx.clone();
             tokio::spawn(async move {
                 // Load the settings, then re-send the arrival.
-                state.load_settings_async().await;
+                state.load_settings().await;
                 let arrived = DeviceArriveMessage::Audio(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
                 event_tx.send(message).unwrap();

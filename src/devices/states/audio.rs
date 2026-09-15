@@ -280,42 +280,6 @@ impl AudioState {
         }
     }
 
-    pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
-        let result = self.handle_message_async_inner(message).await;
-        if let Err(e) = &result {
-            self.record_error(format!("{e}"), Some(message.clone()));
-
-            // Set the entire device as errored
-            let definition_error = "Message Send Error".to_owned();
-            let state = DefinitionState::Error(ErrorType::Other(definition_error));
-
-            self.device_definition.state = state;
-        }
-        result
-    }
-
-    async fn handle_message_async_inner(&mut self, message: Message) -> Result<Message> {
-        trace!("Sending Message: {:?}", message);
-        let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Handle(message, tx);
-
-        match &self.device_sender {
-            Some(sender) => {
-                // Send the message, return the response (or fail).
-                sender.send_async(message).await?;
-                let message = rx.await?;
-                trace!("Received Message: {:?}", message);
-
-                // Quickly intercept the message, and set our local value
-                if let Ok(message) = message {
-                    self.set_local_value(message);
-                }
-                Ok(message?)
-            }
-            None => bail!("Device Sender not Ready"),
-        }
-    }
-
     pub(crate) fn record_error(&mut self, error: String, message: Option<Message>) {
         self.device_state.state = LoadState::Error;
         self.device_state.errors.push(ErrorMessage {
@@ -344,27 +308,6 @@ impl AudioState {
         Ok(())
     }
 
-    pub async fn get_linked_async(&mut self) -> Result<()> {
-        let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Linked(LinkedCommands::GetLinked(tx));
-
-        match &self.device_sender {
-            Some(sender) => {
-                // Send the message, return the response (or fail).
-                sender.send_async(message).await?;
-                let message = rx.await?;
-
-                if let Ok(apps) = message {
-                    self.linked = apps;
-                } else {
-                    self.linked = None;
-                }
-            }
-            None => bail!("Device Sender not Ready"),
-        }
-        Ok(())
-    }
-
     pub fn set_link(&mut self, app: LinkedApp) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Linked(LinkedCommands::SetLinked(app, tx));
@@ -378,63 +321,6 @@ impl AudioState {
         }
 
         Ok(())
-    }
-
-    pub async fn load_settings_async(&mut self) {
-        let device_type = self.device_definition.device_type;
-        let version = self.device_definition.device_info.version;
-
-        // Before we do anything else, is this definition in an error state?
-        if let DefinitionState::Error(error) = &self.device_definition.state {
-            match error {
-                ErrorType::PermissionDenied => {
-                    self.device_state.state = LoadState::PermissionDenied
-                }
-                ErrorType::ResourceBusy => self.device_state.state = LoadState::ResourceBusy,
-                ErrorType::Other(s) => {
-                    self.record_error(format!("Device Definition Error: {s}"), None);
-                }
-                ErrorType::Unknown => {
-                    self.record_error("Unknown Error".to_string(), None);
-                }
-            }
-            return;
-        }
-
-        // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type, version);
-        for message in messages {
-            // Skip this message if it's not valid for this version
-            if message.get_message_minimum_version() > self.device_definition.device_info.version {
-                continue;
-            }
-
-            if let Err(e) = self.handle_message_async_inner(message).await {
-                self.record_error(format!("{e}"), Some(message.clone()));
-            }
-        }
-
-        if self.device_definition.device_type == DeviceType::BeacnStudio
-            && let Some(false) = self.headphones.studio_driverless
-        {
-            let _ = self.get_linked_async().await;
-        }
-
-        if self.headphones.mic_loopback_enabled {
-            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
-            let _ = self.handle_message_async(message).await;
-        }
-
-        if self.suppressor.style == SuppressorStyle::Instant {
-            let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
-            let _ = self.handle_message_async(message).await;
-        }
-
-        // Only change to Running if we're still considered loading..
-        debug!("Load Complete.");
-        if self.device_state.state == LoadState::Loading {
-            self.device_state.state = LoadState::Running;
-        }
     }
 
     pub(crate) fn set_local_value(&mut self, value: Message) {
@@ -608,5 +494,120 @@ impl AudioState {
                 _ => unreachable!(),
             },
         }
+    }
+
+    // Stuff to load the current state on the device.
+    pub async fn load_settings(&mut self) {
+        let device_type = self.device_definition.device_type;
+        let version = self.device_definition.device_info.version;
+
+        // Before we do anything else, is this definition in an error state?
+        if let DefinitionState::Error(error) = &self.device_definition.state {
+            match error {
+                ErrorType::PermissionDenied => {
+                    self.device_state.state = LoadState::PermissionDenied
+                }
+                ErrorType::ResourceBusy => self.device_state.state = LoadState::ResourceBusy,
+                ErrorType::Other(s) => {
+                    self.record_error(format!("Device Definition Error: {s}"), None);
+                }
+                ErrorType::Unknown => {
+                    self.record_error("Unknown Error".to_string(), None);
+                }
+            }
+            return;
+        }
+
+        // Ok, grab all the variables from the mic
+        let messages = Message::generate_fetch_message(device_type, version);
+        for message in messages {
+            // Skip this message if it's not valid for this version
+            if message.get_message_minimum_version() > self.device_definition.device_info.version {
+                continue;
+            }
+
+            if let Err(e) = self.load_setting_inner(message).await {
+                self.record_error(format!("{e}"), Some(message.clone()));
+            }
+        }
+
+        if self.device_definition.device_type == DeviceType::BeacnStudio
+            && let Some(false) = self.headphones.studio_driverless
+        {
+            let _ = self.load_link_state().await;
+        }
+
+        if self.headphones.mic_loopback_enabled {
+            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
+            let _ = self.load_setting(message).await;
+        }
+
+        if self.suppressor.style == SuppressorStyle::Instant {
+            let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
+            let _ = self.load_setting(message).await;
+        }
+
+        // Only change to Running if we're still considered loading..
+        debug!("Load Complete.");
+        if self.device_state.state == LoadState::Loading {
+            self.device_state.state = LoadState::Running;
+        }
+    }
+
+    async fn load_setting(&mut self, message: Message) -> Result<Message> {
+        let result = self.load_setting_inner(message).await;
+        if let Err(e) = &result {
+            self.record_error(format!("{e}"), Some(message.clone()));
+
+            // Set the entire device as errored
+            let definition_error = "Message Send Error".to_owned();
+            let state = DefinitionState::Error(ErrorType::Other(definition_error));
+
+            self.device_definition.state = state;
+        }
+        result
+    }
+
+    async fn load_setting_inner(&mut self, message: Message) -> Result<Message> {
+        trace!("Sending Message: {:?}", message);
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Handle(message, tx);
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send_async(message).await?;
+                let message = rx.await?;
+                trace!("Received Message: {:?}", message);
+
+                // Quickly intercept the message, and set our local value
+                if let Ok(message) = message {
+                    self.set_local_value(message);
+                }
+                Ok(message?)
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+    }
+
+    async fn load_link_state(&mut self) -> Result<()> {
+        let (tx, rx) = oneshot::channel();
+        let message = AudioMessage::Linked(LinkedCommands::GetLinked(tx));
+
+        match &self.device_sender {
+            Some(sender) => {
+                // Send the message, return the response (or fail).
+                sender.send_async(message).await?;
+                let message = rx.await?;
+
+                if let Ok(apps) = message {
+                    self.linked = apps;
+                } else {
+                    self.linked = None;
+                }
+            }
+            None => bail!("Device Sender not Ready"),
+        }
+        Ok(())
     }
 }
