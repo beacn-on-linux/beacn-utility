@@ -31,6 +31,15 @@ impl State for ControlState {
 }
 
 impl ControlState {
+    pub fn new(definition: DeviceDefinition, sender: Sender<ControlMessage>) -> Self {
+        ControlState {
+            device_definition: definition,
+            device_sender: Some(sender),
+
+            ..Default::default()
+        }
+    }
+
     pub fn handle_message(&mut self, message: Message, save: bool) -> Result<Message> {
         let (tx, rx) = oneshot::channel();
         let message = ControlMessage::Handle(message, tx);
@@ -99,66 +108,56 @@ impl ControlState {
         }
     }
 
-    pub async fn load_settings_async(
-        definition: DeviceDefinition,
-        sender: Sender<ControlMessage>,
-    ) -> Self {
-        let mut state = ControlState {
-            device_definition: definition,
-            device_sender: Some(sender),
-            ..Default::default()
-        };
-
+    pub async fn load_settings_async(&mut self) {
         // Before we do anything else, is this definition in an error state?
-        if let DefinitionState::Error(error) = &state.device_definition.state {
+        if let DefinitionState::Error(error) = &self.device_definition.state {
             match error {
                 ErrorType::PermissionDenied => {
-                    state.device_state.state = LoadState::PermissionDenied
+                    self.device_state.state = LoadState::PermissionDenied
                 }
-                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::ResourceBusy => self.device_state.state = LoadState::ResourceBusy,
                 ErrorType::Other(s) => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
+                    self.device_state.state = LoadState::Error;
+                    self.device_state.errors.push(ErrorMessage {
                         error_text: Some(format!("Device Definition Error: {s}")),
                         failed_message: None,
                     });
                 }
                 ErrorType::Unknown => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
+                    self.device_state.state = LoadState::Error;
+                    self.device_state.errors.push(ErrorMessage {
                         error_text: Some("Unknown Error".to_string()),
                         failed_message: None,
                     });
                 }
             }
-            return state;
+            return;
         }
 
         // Grab the settings from a possible saved config file
-        state.load_from_file();
+        self.load_from_file();
         let messages = [
-            Message::DisplayBrightness(state.saved_settings.display_brightness),
-            Message::ButtonBrightness(state.saved_settings.button_brightness),
-            Message::DisplayDimTime(state.saved_settings.display_dim),
+            Message::DisplayBrightness(self.saved_settings.display_brightness),
+            Message::ButtonBrightness(self.saved_settings.button_brightness),
+            Message::DisplayDimTime(self.saved_settings.display_dim),
         ];
 
         debug!("Sending Initial Messages");
         for message in messages {
             debug!("Sending Message: {:?}", message);
             // Skip this message if it's not valid for this version
-            if let Err(e) = state.handle_message_async(message.clone(), false).await {
-                state.device_state.state = LoadState::Error;
-                state.device_state.errors.push(ErrorMessage {
+            if let Err(e) = self.handle_message_async(message.clone(), false).await {
+                self.device_state.state = LoadState::Error;
+                self.device_state.errors.push(ErrorMessage {
                     error_text: Some(format!("{e}")),
                     failed_message: None,
                 })
             }
         }
 
-        if state.device_state.state == LoadState::Loading {
-            state.device_state.state = LoadState::Running;
+        if self.device_state.state == LoadState::Loading {
+            self.device_state.state = LoadState::Running;
         }
-        state
     }
 
     pub fn load_from_file(&mut self) {

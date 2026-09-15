@@ -35,7 +35,7 @@ use beacn_lib::audio::messages::subwoofer::Subwoofer as MicSubwoofer;
 use beacn_lib::audio::messages::suppressor::Suppressor as MicSuppressor;
 use beacn_lib::flume::Sender;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
-use log::trace;
+use log::{debug, trace};
 
 type Rgb = [u8; 3];
 
@@ -219,6 +219,14 @@ pub struct Subwoofer {
 }
 
 impl AudioState {
+    pub fn new(device_definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
+        Self {
+            device_definition,
+            device_sender: Some(sender),
+            ..Default::default()
+        }
+    }
+
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
@@ -373,171 +381,73 @@ impl AudioState {
         Ok(())
     }
 
-    #[allow(unused)]
-    pub fn load_settings(definition: DeviceDefinition, sender: Sender<AudioMessage>) -> Self {
-        let device_type = definition.device_type;
-        let version = definition.device_info.version;
-
-        let mut state = AudioState {
-            device_definition: definition,
-            device_state: DeviceLoadState {
-                state: LoadState::Loading,
-                ..Default::default()
-            },
-            device_sender: Some(sender),
-            ..Default::default()
-        };
-
-        // let mut state = Self::default();
-        // state.device_definition = definition;
-        // state.device_sender = Some(sender);
-        // state.device_state.state = LoadState::LOADING;
+    pub async fn load_settings_async(&mut self) {
+        let device_type = self.device_definition.device_type;
+        let version = self.device_definition.device_info.version;
 
         // Before we do anything else, is this definition in an error state?
-        if let DefinitionState::Error(error) = &state.device_definition.state {
+        if let DefinitionState::Error(error) = &self.device_definition.state {
             match error {
                 ErrorType::PermissionDenied => {
-                    state.device_state.state = LoadState::PermissionDenied
+                    self.device_state.state = LoadState::PermissionDenied
                 }
-                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
+                ErrorType::ResourceBusy => self.device_state.state = LoadState::ResourceBusy,
                 ErrorType::Other(s) => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
+                    self.device_state.state = LoadState::Error;
+                    self.device_state.errors.push(ErrorMessage {
                         error_text: Some(format!("Device Definition Error: {s}")),
                         failed_message: None,
                     });
                 }
                 ErrorType::Unknown => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
+                    self.device_state.state = LoadState::Error;
+                    self.device_state.errors.push(ErrorMessage {
                         error_text: Some("Unknown Error".to_string()),
                         failed_message: None,
                     });
                 }
             }
-            return state;
+            return;
         }
 
         // Ok, grab all the variables from the mic
         let messages = Message::generate_fetch_message(device_type, version);
         for message in messages {
             // Skip this message if it's not valid for this version
-            if message.get_message_minimum_version() > state.device_definition.device_info.version {
+            if message.get_message_minimum_version() > self.device_definition.device_info.version {
                 continue;
             }
 
-            let value = state.handle_message_inner(message);
-            if let Err(e) = value {
-                // fetch_value didn't panic, but it did error
-                state.device_state.state = LoadState::Error;
-                state.device_state.errors.push(ErrorMessage {
+            if let Err(e) = self.handle_message_async_inner(message).await {
+                self.device_state.state = LoadState::Error;
+                self.device_state.errors.push(ErrorMessage {
                     error_text: Some(format!("{e}")),
                     failed_message: Some(message),
                 })
             }
         }
 
-        if state.device_definition.device_type == DeviceType::BeacnStudio {
-            let _ = state.get_linked();
-        }
-
-        // This honestly shouldn't be enabled on load, it implies something crashed while it
-        // was active, so we'll forcibly reset it.
-        if state.headphones.mic_loopback_enabled {
-            let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
-            let _ = state.handle_message(message);
-        }
-
-        // Same with this, if this is "Off", the app was closed while a snapshot was in progress.
-        if state.suppressor.style == SuppressorStyle::Instant {
-            let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
-            let _ = state.handle_message(message);
-        }
-
-        state.device_state.state = LoadState::Running;
-        state
-    }
-
-    pub async fn load_settings_async(
-        definition: DeviceDefinition,
-        sender: Sender<AudioMessage>,
-    ) -> Self {
-        let device_type = definition.device_type;
-        let version = definition.device_info.version;
-
-        let mut state = AudioState {
-            device_definition: definition,
-            device_state: DeviceLoadState {
-                state: LoadState::Loading,
-                ..Default::default()
-            },
-            device_sender: Some(sender),
-            ..Default::default()
-        };
-
-        // Before we do anything else, is this definition in an error state?
-        if let DefinitionState::Error(error) = &state.device_definition.state {
-            match error {
-                ErrorType::PermissionDenied => {
-                    state.device_state.state = LoadState::PermissionDenied
-                }
-                ErrorType::ResourceBusy => state.device_state.state = LoadState::ResourceBusy,
-                ErrorType::Other(s) => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: Some(format!("Device Definition Error: {s}")),
-                        failed_message: None,
-                    });
-                }
-                ErrorType::Unknown => {
-                    state.device_state.state = LoadState::Error;
-                    state.device_state.errors.push(ErrorMessage {
-                        error_text: Some("Unknown Error".to_string()),
-                        failed_message: None,
-                    });
-                }
-            }
-            return state;
-        }
-
-        // Ok, grab all the variables from the mic
-        let messages = Message::generate_fetch_message(device_type, version);
-        for message in messages {
-            // Skip this message if it's not valid for this version
-            if message.get_message_minimum_version() > state.device_definition.device_info.version {
-                continue;
-            }
-
-            if let Err(e) = state.handle_message_async_inner(message).await {
-                state.device_state.state = LoadState::Error;
-                state.device_state.errors.push(ErrorMessage {
-                    error_text: Some(format!("{e}")),
-                    failed_message: Some(message),
-                })
-            }
-        }
-
-        if state.device_definition.device_type == DeviceType::BeacnStudio
-            && let Some(false) = state.headphones.studio_driverless
+        if self.device_definition.device_type == DeviceType::BeacnStudio
+            && let Some(false) = self.headphones.studio_driverless
         {
-            let _ = state.get_linked_async().await;
+            let _ = self.get_linked_async().await;
         }
 
-        if state.headphones.mic_loopback_enabled {
+        if self.headphones.mic_loopback_enabled {
             let message = Message::Headphones(MicHeadphones::MicFromLoopback(false));
-            let _ = state.handle_message_async(message).await;
+            let _ = self.handle_message_async(message).await;
         }
 
-        if state.suppressor.style == SuppressorStyle::Instant {
+        if self.suppressor.style == SuppressorStyle::Instant {
             let message = Message::Suppressor(MicSuppressor::Style(SuppressorStyle::Snapshot));
-            let _ = state.handle_message_async(message).await;
+            let _ = self.handle_message_async(message).await;
         }
 
         // Only change to Running if we're still considered loading..
-        if state.device_state.state == LoadState::Loading {
-            state.device_state.state = LoadState::Running;
+        debug!("Load Complete.");
+        if self.device_state.state == LoadState::Loading {
+            self.device_state.state = LoadState::Running;
         }
-        state
     }
 
     pub(crate) fn set_local_value(&mut self, value: Message) {

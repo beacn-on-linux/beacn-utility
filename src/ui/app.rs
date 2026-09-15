@@ -152,16 +152,32 @@ impl BeacnUtility {
             Message::Device(msg) => {
                 match msg {
                     DeviceMessage::DeviceArrived(arrival) => {
+                        // Firstly, check whether this device exists,
                         let device = match arrival {
-                            DeviceArriveMessage::Audio(state) => Device {
-                                state: DeviceState::Audio(state),
-                                pages: create_pages_audio(),
-                            },
+                            DeviceArriveMessage::Audio(state) => {
+                                if let Some(dev) = self.devices.get_mut(&state.location().hash) {
+                                    dev.state = DeviceState::Audio(state);
+                                    self.validate_page();
+                                    return Task::none();
+                                }
 
-                            DeviceArriveMessage::Control(state) => Device {
-                                state: DeviceState::Control(state),
-                                pages: create_pages_controller(),
-                            },
+                                Device {
+                                    state: DeviceState::Audio(state),
+                                    pages: create_pages_audio(),
+                                }
+                            }
+                            DeviceArriveMessage::Control(state) => {
+                                if let Some(dev) = self.devices.get_mut(&state.location().hash) {
+                                    dev.state = DeviceState::Control(state);
+                                    self.validate_page();
+                                    return Task::none();
+                                }
+
+                                Device {
+                                    state: DeviceState::Control(state),
+                                    pages: create_pages_controller(),
+                                }
+                            }
                         };
 
                         let hash = device.state.location().hash.clone();
@@ -282,21 +298,7 @@ impl BeacnUtility {
                     .update_fn(&mut device.state, msg)
                     .map(Message::Page);
 
-                // Before we proceed, should we still be allowed to be on this page?
-                #[allow(clippy::borrowed_box)]
-                let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
-                if !show(&device.pages[page_index]) {
-                    // Firstly, find a page that CAN be shown..
-                    let page = device.pages.iter().position(show);
-                    if let Some(page) = page {
-                        // Close this page..
-                        device.pages[page_index].on_close_fn(&mut device.state);
-
-                        self.active_page = Some(page);
-                        device.pages[page].on_open_fn(&mut device.state);
-                    }
-                }
-
+                self.validate_page();
                 return task;
             }
 
@@ -383,6 +385,34 @@ impl BeacnUtility {
             }
         }
         Task::none()
+    }
+
+    fn validate_page(&mut self) {
+        let Some(device_id) = &self.active_device else {
+            return;
+        };
+
+        let Some(page_index) = self.active_page else {
+            return;
+        };
+
+        let Some(device) = self.devices.get_mut(device_id) else {
+            return;
+        };
+
+        #[allow(clippy::borrowed_box)]
+        let show = |p: &Box<dyn Page>| p.should_show_fn(&device.state);
+        if !show(&device.pages[page_index]) {
+            // Firstly, find a page that CAN be shown..
+            let page = device.pages.iter().position(show);
+            if let Some(page) = page {
+                // Close this page..
+                device.pages[page_index].on_close_fn(&mut device.state);
+
+                self.active_page = Some(page);
+                device.pages[page].on_open_fn(&mut device.state);
+            }
+        }
     }
 
     pub(crate) fn view(&self, _window_id: window::Id) -> Element<'_, Message> {

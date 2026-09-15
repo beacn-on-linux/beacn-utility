@@ -61,19 +61,6 @@ pub(crate) async fn spawn_device_manager(
     let (device_event_tx, device_event_rx) = unbounded();
     let mut forwarders: HashMap<DeviceLocation, JoinHandle<()>> = HashMap::new();
 
-    // This is basically a FIFO channel for device arrivals
-    let (order_tx, order_rx) = unbounded();
-    {
-        let event_tx = event_tx.clone();
-        tokio::spawn(async move {
-            while let Ok(rx) = order_rx.recv_async().await {
-                if let Ok(msg) = rx.await {
-                    let _ = event_tx.send(msg);
-                }
-            }
-        });
-    }
-
     // watch_hotplug_devices is beacn-lib's async-native hotplug watcher -- spawn it as a
     // task instead of spawn_hotplug_handler, which would give us a dedicated OS thread we
     // don't need now that we're on a runtime.
@@ -119,7 +106,7 @@ pub(crate) async fn spawn_device_manager(
                                 &mut devices,
                                 &mut forwarders,
                                 &device_event_tx,
-                                &order_tx,
+                                &event_tx
                             )
                             .await;
                         }
@@ -156,7 +143,7 @@ pub(crate) async fn spawn_device_manager(
                                 &mut devices,
                                 &mut forwarders,
                                 &device_event_tx,
-                                &order_tx,
+                                &event_tx,
                             )
                             .await;
                         }
@@ -301,7 +288,7 @@ async fn handle_device_attached(
     devices: &mut HashMap<DeviceLocation, DeviceEntry>,
     forwarders: &mut HashMap<DeviceLocation, JoinHandle<()>>,
     device_event_tx: &Sender<(DeviceLocation, DeviceRequest)>,
-    order_tx: &Sender<oneshot::Receiver<DeviceMessage>>,
+    event_tx: &Sender<DeviceMessage>,
 ) {
     match device_type {
         DeviceType::BeacnMic | DeviceType::BeacnStudio => {
@@ -348,16 +335,20 @@ async fn handle_device_attached(
                 );
             }
 
-            // Reserve a Slot in the Queue
-            let (arrive_tx, arrive_rx) = oneshot::channel();
-            let _ = order_tx.send(arrive_rx);
+            // Create an initial state for the device, and send it.
+            let mut state = AudioState::new(data, tx);
+            let arrived = DeviceArriveMessage::Audio(state.clone());
+            let message = DeviceMessage::DeviceArrived(arrived);
+            event_tx.send(message).unwrap();
 
-            // Complete against the queue
+            // Clone the Event TX so we can move it into the future...
+            let event_tx = event_tx.clone();
             tokio::spawn(async move {
-                let state = AudioState::load_settings_async(data, tx).await;
+                // Load the settings, then re-send the arrival.
+                state.load_settings_async().await;
                 let arrived = DeviceArriveMessage::Audio(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                let _ = arrive_tx.send(message);
+                event_tx.send(message).unwrap();
             });
         }
         DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
@@ -422,17 +413,21 @@ async fn handle_device_attached(
             }
 
             // Reserve a Slot in the Queue
-            let (arrive_tx, arrive_rx) = oneshot::channel();
-            let _ = order_tx.send(arrive_rx);
+            let mut state = ControlState::new(data, tx);
+            let arrived = DeviceArriveMessage::Control(state.clone());
+            let message = DeviceMessage::DeviceArrived(arrived);
+            let _ = event_tx.send(message);
+
+            let event_tx = event_tx.clone();
             tokio::spawn(async move {
-                let state = ControlState::load_settings_async(data, tx).await;
+                state.load_settings_async().await;
+
                 let arrived = DeviceArriveMessage::Control(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                let _ = arrive_tx.send(message);
+                let _ = event_tx.send(message);
             });
         }
     }
-    //let _ = self_tx.send(ToMainMessages::RequestRedraw);
 }
 
 /// Spawn a small task that just loops on `rx` and forwards everything it receives into
