@@ -1,4 +1,5 @@
 use crate::devices::manager::DefinitionState;
+use crate::devices::states::LoadState;
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
@@ -87,23 +88,19 @@ macro_rules! page_trait {
             }
 
             fn should_show_fn(&self, device: &DeviceState) -> bool {
-                //use crate::devices::states::LoadState;
-
-                // We shouldn't show anything if we're in an error state
-                if matches!(device.definition().state, DefinitionState::Error(_)) {
-                    return false;
-                }
-
                 let DeviceState::$variant(state) = device else {
                     unreachable!()
                 };
 
-                // We can get away with this because Audio and Control pages both contain
-                // the same state structure for this. We should be more careful though!
-                // TODO: Turn this on :D
-                // if state.device_state.state == LoadState::Error {
-                //     return false;
-                // }
+                // We shouldn't show this page if we're in an error state...
+                if matches!(device.definition().state, DefinitionState::Error(_)) {
+                    return false;
+                }
+
+                // We shouldn't show this page if we've not finished loading the state...
+                if matches!(state.device_state.state, LoadState::Loading) {
+                    return false;
+                }
 
                 self.0.should_show(state)
             }
