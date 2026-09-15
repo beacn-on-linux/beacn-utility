@@ -230,11 +230,7 @@ impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
-            self.device_state.state = LoadState::Error;
-            self.device_state.errors.push(ErrorMessage {
-                error_text: Some(e.to_string()),
-                failed_message: Some(message),
-            });
+            self.record_error(format!("{e}"), Some(message.clone()));
 
             // Set the entire device as errored
             let definition_error = "Message Send Error".to_owned();
@@ -267,7 +263,6 @@ impl AudioState {
         }
     }
 
-    #[allow(unused)]
     pub fn handle_bulk_message(&mut self, message: BulkMessage) -> Result<BulkMessage> {
         let (tx, rx) = oneshot::channel();
         let message = AudioMessage::Bulk(message, tx);
@@ -288,11 +283,7 @@ impl AudioState {
     pub async fn handle_message_async(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_async_inner(message).await;
         if let Err(e) = &result {
-            self.device_state.state = LoadState::Error;
-            self.device_state.errors.push(ErrorMessage {
-                error_text: Some(format!("{e}")),
-                failed_message: Some(message),
-            });
+            self.record_error(format!("{e}"), Some(message.clone()));
 
             // Set the entire device as errored
             let definition_error = "Message Send Error".to_owned();
@@ -323,6 +314,14 @@ impl AudioState {
             }
             None => bail!("Device Sender not Ready"),
         }
+    }
+
+    pub(crate) fn record_error(&mut self, error: String, message: Option<Message>) {
+        self.device_state.state = LoadState::Error;
+        self.device_state.errors.push(ErrorMessage {
+            error_text: Some(error),
+            failed_message: message,
+        });
     }
 
     pub fn get_linked(&mut self) -> Result<()> {
@@ -393,18 +392,10 @@ impl AudioState {
                 }
                 ErrorType::ResourceBusy => self.device_state.state = LoadState::ResourceBusy,
                 ErrorType::Other(s) => {
-                    self.device_state.state = LoadState::Error;
-                    self.device_state.errors.push(ErrorMessage {
-                        error_text: Some(format!("Device Definition Error: {s}")),
-                        failed_message: None,
-                    });
+                    self.record_error(format!("Device Definition Error: {s}"), None);
                 }
                 ErrorType::Unknown => {
-                    self.device_state.state = LoadState::Error;
-                    self.device_state.errors.push(ErrorMessage {
-                        error_text: Some("Unknown Error".to_string()),
-                        failed_message: None,
-                    });
+                    self.record_error("Unknown Error".to_string(), None);
                 }
             }
             return;
@@ -419,11 +410,7 @@ impl AudioState {
             }
 
             if let Err(e) = self.handle_message_async_inner(message).await {
-                self.device_state.state = LoadState::Error;
-                self.device_state.errors.push(ErrorMessage {
-                    error_text: Some(format!("{e}")),
-                    failed_message: Some(message),
-                })
+                self.record_error(format!("{e}"), Some(message.clone()));
             }
         }
 
