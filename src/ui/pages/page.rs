@@ -31,9 +31,9 @@ pub(crate) trait Page {
         "error"
     }
 
-    /// Whether this page should be shown at all, defaults to Device = Working
-    fn should_show_fn(&self, state: &DeviceState) -> bool {
-        state.definition().state == DefinitionState::Running
+    /// Whether this page should be shown at all, defaults to 'yes'
+    fn should_show_fn(&self, _: &DeviceState) -> bool {
+        true
     }
 
     /// Called when the page is first opened, allows it to perform setup
@@ -63,8 +63,8 @@ macro_rules! page_trait {
             fn icon(&self) -> &'static str {
                 "error"
             }
-            fn should_show(&self, state: &$state_type) -> bool {
-                state.definition().state == DefinitionState::Running
+            fn should_show(&self, _: &$state_type) -> bool {
+                true
             }
 
             fn on_open(&mut self, _state: &mut $state_type) {}
