@@ -16,6 +16,10 @@ pub mod widgets;
 pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {
     let mut map = HashMap::default();
     map.insert(
+        "hourglass",
+        Handle::from_memory(include_bytes!("../../resources/ui/icons/hourglass.svg")),
+    );
+    map.insert(
         "mic",
         Handle::from_memory(include_bytes!("../../resources/ui/icons/microphone.svg")),
     );

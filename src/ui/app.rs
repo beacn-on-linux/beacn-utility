@@ -541,6 +541,7 @@ fn create_pages_audio() -> Vec<Box<dyn Page>> {
         Box::new(AP(audio::studio_link::StudioLink::new())),
         Box::new(AP(audio::about::About::new())),
         Box::new(common::error_page::ErrorPage::new()),
+        Box::new(common::loading_page::LoadingPage::new()),
     ]
 }
 
@@ -548,6 +549,7 @@ fn create_pages_controller() -> Vec<Box<dyn Page>> {
     vec![
         Box::new(CP(control::about::About::new())),
         Box::new(common::error_page::ErrorPage::new()),
+        Box::new(common::loading_page::LoadingPage::new()),
     ]
 }
 
