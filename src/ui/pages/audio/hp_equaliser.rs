@@ -280,7 +280,7 @@ impl HPEqualiser {
             Balance(amount) => {
                 let msg = Controls::Balance(amount.into());
                 let msg = Message::Controls(msg);
-                let _ = state.handle_message(msg);
+                let _ = state.send_message(msg);
             }
 
             SubWoofer(amount) => {
@@ -289,7 +289,7 @@ impl HPEqualiser {
                 // Subwoofer is fun, get various messages based on amount
                 let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
-                    let _ = state.handle_message(message);
+                    let _ = state.send_message(message);
                 }
             }
 
@@ -297,7 +297,7 @@ impl HPEqualiser {
                 // The checkbox is flipped, so we need to unflip it here
                 let msg = Controls::Mono(!enabled);
                 let msg = Message::Controls(msg);
-                let _ = state.handle_message(msg);
+                let _ = state.send_message(msg);
             }
 
             ToggleLinked => {
@@ -305,7 +305,7 @@ impl HPEqualiser {
             }
 
             State(msg) => {
-                let _ = state.handle_message(msg);
+                let _ = state.send_message(msg);
             }
         }
 

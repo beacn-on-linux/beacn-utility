@@ -47,7 +47,7 @@ impl ConfigPage for HeadphonesPage {
                     Message::Subwoofer(Subwoofer::Enabled(enabled)),
                 ];
                 for message in messages {
-                    let _ = state.handle_message(message);
+                    let _ = state.send_message(message);
                 }
             }
 
@@ -55,13 +55,13 @@ impl ConfigPage for HeadphonesPage {
                 let version = state.device_definition.device_info.version;
                 let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
-                    let _ = state.handle_message(message);
+                    let _ = state.send_message(message);
                 }
             }
 
             HeadphonesMessage::HeadphoneType(headphone_type) => {
                 let message = Message::Headphones(Headphones::HeadphoneType(headphone_type));
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
             }
         }
 

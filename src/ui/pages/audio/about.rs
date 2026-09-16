@@ -49,7 +49,7 @@ impl AudioPage for About {
                 }
 
                 let message = Message::Headphones(Headphones::StudioDriverless(enabled));
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
             }
             AboutMessage::SetMicClassCompliant(enabled) => {
                 if state.device_definition.device_type != DeviceType::BeacnMic {
@@ -58,7 +58,7 @@ impl AudioPage for About {
                 }
 
                 let message = Message::Headphones(Headphones::MicClassCompliant(enabled));
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
             }
         }
 

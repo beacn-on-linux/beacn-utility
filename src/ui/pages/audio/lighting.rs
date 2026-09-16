@@ -68,7 +68,7 @@ impl AudioPage for LightingPage {
 
         match message {
             LightingMessage::State(msg) => {
-                let _ = state.handle_message(msg);
+                let _ = state.send_message(msg);
             }
             LightingMessage::TogglePicker(picker) => {
                 if self.active_picker == Some(picker) {

@@ -72,7 +72,7 @@ impl ConfigPage for ExpanderPage {
                 for mode in ExpanderMode::iter() {
                     let exp_msg = Expander::Enabled(mode, enabled);
                     let message = Message::Expander(exp_msg);
-                    state.handle_message(message).expect("Failed");
+                    state.send_message(message);
                 }
             }
             ExpanderMessage::SetThreshold(value) => {
@@ -80,7 +80,7 @@ impl ConfigPage for ExpanderPage {
                 let msg = Expander::Threshold(expander_mode, value.into());
                 let msg = Message::Expander(msg);
 
-                state.handle_message(msg).expect("Failed");
+                state.send_message(msg);
                 self.graph.set_threshold(value.into());
             }
         }

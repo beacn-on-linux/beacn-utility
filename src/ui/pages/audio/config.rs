@@ -414,7 +414,7 @@ impl AudioPage for Configuration {
             handler.clear_buffer();
 
             let msg = Message::Headphones(Headphones::MicFromLoopback(false));
-            let _ = state.handle_message(msg);
+            let _ = state.send_message(msg);
         }
 
         // Remove anything that may be cached, we should redraw later.
@@ -491,14 +491,14 @@ impl AudioPage for Configuration {
                 ConfigMessage::OutputGainChanged(gain) => {
                     let msg = Headphones::MicOutputGain(HPMicOutputGain(gain));
                     let msg = Message::Headphones(msg);
-                    let _ = state.handle_message(msg);
+                    let _ = state.send_message(msg);
 
                     Task::none()
                 }
 
                 // These are messages intended to go to device
                 ConfigMessage::Child(ChildMessage::State(msg)) => {
-                    let _ = state.handle_message(msg);
+                    let _ = state.send_message(msg);
                     Task::none()
                 }
 
@@ -533,10 +533,10 @@ impl AudioPage for Configuration {
                             handler.stop();
 
                             let msg = Message::Headphones(Headphones::MicFromLoopback(false));
-                            let _ = state.handle_message(msg);
+                            let _ = state.send_message(msg);
                         } else {
                             let msg = Message::Headphones(Headphones::MicFromLoopback(true));
-                            let _ = state.handle_message(msg);
+                            let _ = state.send_message(msg);
 
                             handler.perform_playback();
                         }

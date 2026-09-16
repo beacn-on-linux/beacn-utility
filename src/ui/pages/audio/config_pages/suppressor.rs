@@ -64,11 +64,11 @@ impl SuppressorPage {
         }
 
         let msg = Message::Suppressor(Suppressor::Enabled(self.suppressor_enabled));
-        let _ = state.handle_message(msg);
+        let _ = state.send_message(msg);
 
         let style = SuppressorStyle::Snapshot;
         let msg = Message::Suppressor(Suppressor::Style(style));
-        let _ = state.handle_message(msg);
+        let _ = state.send_message(msg);
 
         self.snapshot_running = false;
     }
@@ -103,10 +103,10 @@ impl ConfigPage for SuppressorPage {
                 self.snapshot_started = Instant::now();
 
                 let message = Message::Suppressor(Suppressor::Enabled(false));
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
 
                 let message = Message::Suppressor(Suppressor::Style(SuppressorStyle::Instant));
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
 
                 Task::perform(
                     async move {

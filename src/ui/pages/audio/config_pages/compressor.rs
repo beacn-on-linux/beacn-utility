@@ -47,7 +47,7 @@ impl ConfigPage for CompressorPage {
                 for mode in CompressorMode::iter() {
                     let msg = Compressor::Enabled(mode, enabled);
                     let msg = Message::Compressor(msg);
-                    state.handle_message(msg).expect("Failed");
+                    state.send_message(msg);
                 }
             }
         }
