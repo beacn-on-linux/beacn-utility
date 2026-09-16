@@ -46,6 +46,7 @@ const HIGHLIGHT_COLOUR: Color = Color::from_rgb8(0, 123, 178);
 enum StateMachine {
     None,
     ReloadBand(EQChannel, EQBand),
+    ReloadBands(EQChannel),
 }
 
 #[derive(Debug, Clone)]
@@ -239,7 +240,7 @@ impl HPEqualiser {
 
                     // Send and update the state
                     for message in messages {
-                        let _ = state.handle_message(message);
+                        let _ = state.send_message(message);
                     }
 
                     // Update the views
@@ -325,7 +326,9 @@ impl HPEqualiser {
 
     fn sync(&mut self, state: &mut AudioState) -> Task<HPEQMessage> {
         match self.state_machine {
-            StateMachine::ReloadBand(ch, band) => {
+            StateMachine::None => {}
+
+            ReloadBand(ch, band) => {
                 let ot = ch.other();
 
                 self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
@@ -334,8 +337,13 @@ impl HPEqualiser {
                 }
             }
 
-            _ => {}
+            StateMachine::ReloadBands(ch) => {
+                self.view[ch].set_bands(state.eq_headphones.bands[ch]);
+            }
         }
+
+        // Reset our state
+        self.state_machine = StateMachine::None;
 
         Task::none()
     }
@@ -436,7 +444,7 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
             }
 
             self.state_machine = ReloadBand(ch, band);
@@ -470,12 +478,13 @@ impl HPEqualiser {
     // tweaks. Firstly, we disable the green border around the active channel, then we enable
     // a matching active band on the other channel.
     fn toggle_linked(&mut self, state: &mut AudioState) {
-        let set_linked = !state.eq_headphones.linked;
-        let msg = EQHeadphones::Linked(set_linked);
+        let is_linked = !state.eq_headphones.linked;
+        let msg = EQHeadphones::Linked(is_linked);
         let msg = Message::EQHeadphones(msg);
-        let _ = state.handle_message(msg);
+        let _ = state.send_message(msg);
 
-        let is_linked = state.eq_headphones.linked;
+        // Don't sync on the above message, graceful failure happens upstream so we can be sure
+        // that the linked state *WILL* be updated.
         if is_linked {
             self.view[self.active_channel].set_border_colour(None);
             self.view[self.active_channel.other()].set_active(self.active_band);
@@ -493,11 +502,12 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.handle_message(Message::EQHeadphones(message));
+                let _ = state.send_message(Message::EQHeadphones(message));
             }
 
-            // Sync the view now everything's updated..
-            self.view[c].set_bands(state.eq_headphones.bands[c]);
+            // Flag this band for full redraw on sync
+            self.state_machine = StateMachine::ReloadBands(c);
+            state.perform_sync();
         } else {
             self.view[self.active_channel].set_border_colour(Some(HIGHLIGHT_COLOUR));
             self.view[self.active_channel.other()].set_active(None);
