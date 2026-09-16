@@ -15,6 +15,8 @@ use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
+    Sync,
+
     AudioAbout(AboutMessage),
     AudioConfig(ConfigMessage),
     AudioLighting(LightingMessage),

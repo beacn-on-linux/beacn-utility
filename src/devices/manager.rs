@@ -171,6 +171,10 @@ pub(crate) async fn spawn_device_manager(
                     DeviceRequest::Audio(msg) => {
                         if let Some(DeviceEntry::Audio(dev)) = devices.get(&location) {
                             match msg {
+                                AudioMessage::Sync => {
+                                    event_tx.send_async(DeviceMessage::AudioSyncHandled).await.unwrap();
+                                }
+
                                 AudioMessage::Send(msg) => {
                                     let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
                                     let result = match response {
@@ -514,6 +518,11 @@ pub(crate) enum DeviceMessage {
     DeviceArrived(DeviceArriveMessage),
     DeviceRemoved(DeviceLocation),
 
+    // A sync message is just like it sounds, a message which is called from the frontend to the
+    // manager, then back to the frontend. It's useful for when you're sending bulk async messages,
+    // because it'll be sent once *EVERYTHING* ahead of it has been handled, so if you're dependent
+    // on a value change something, this is how you know it's ready.
+    AudioSyncHandled,
     AudioMessageHandled(DeviceLocation, AMessage, Result<AMessage, String>),
 }
 
@@ -526,7 +535,9 @@ pub(crate) enum DeviceArriveMessage {
 
 #[derive(Debug)]
 pub enum AudioMessage {
+    Sync,
     Send(AMessage),
+
     Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
     Bulk(BMessage, oneshot::Sender<Result<BMessage, BeacnError>>),
     Linked(LinkedCommands),

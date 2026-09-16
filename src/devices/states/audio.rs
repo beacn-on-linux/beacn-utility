@@ -227,6 +227,7 @@ impl AudioState {
         }
     }
 
+    #[allow(unused)]
     pub fn send_message(&mut self, message: Message) {
         trace!("Sending Message: {:?}", message);
         let wrapped = AudioMessage::Send(message.clone());
@@ -238,6 +239,22 @@ impl AudioState {
 
         if let Err(e) = sender.send(wrapped) {
             self.record_error(e.to_string(), Some(message));
+        }
+    }
+
+    #[allow(unused)]
+    /// This function will trigger a PageMessage::Sync update event in the page as soon as it's
+    /// read by the device manager. Once your update() function receives the Sync callback, all
+    /// prior pending messages have been executed, and the state has synchronised.
+    pub fn perform_sync(&mut self) {
+        let wrapped = AudioMessage::Sync;
+        let Some(sender) = &self.device_sender else {
+            self.record_error("Device Sender not Ready".to_owned(), None);
+            return;
+        };
+
+        if let Err(e) = sender.send(wrapped) {
+            self.record_error(e.to_string(), None);
         }
     }
 

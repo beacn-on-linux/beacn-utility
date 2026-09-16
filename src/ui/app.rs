@@ -216,6 +216,12 @@ impl BeacnUtility {
                             }
                         }
                     }
+
+                    DeviceMessage::AudioSyncHandled => {
+                        // Send a Sync message to the current page
+                        return Task::done(Message::Page(PageMessage::Sync));
+                    }
+
                     DeviceMessage::AudioMessageHandled(location, sent, recv) => {
                         let Some(device) = self.devices.get_mut(&location.hash) else {
                             return Task::none();
