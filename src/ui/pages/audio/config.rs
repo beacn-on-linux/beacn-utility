@@ -473,6 +473,13 @@ impl AudioPage for Configuration {
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
         match message {
+            // This is currently only used in the equaliser, so we'll just handle that for now.
+            PageMessage::Sync => self
+                .equaliser
+                .sync(state)
+                .map(ConfigMessage::Equaliser)
+                .map(PageMessage::AudioConfig),
+
             PageMessage::AudioConfig(msg) => match msg {
                 ConfigMessage::Equaliser(event) => self
                     .equaliser
