@@ -171,6 +171,27 @@ pub(crate) async fn spawn_device_manager(
                     DeviceRequest::Audio(msg) => {
                         if let Some(DeviceEntry::Audio(dev)) = devices.get(&location) {
                             match msg {
+                                AudioMessage::Send(msg) => {
+                                    let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
+                                    let result = match response {
+                                        Ok(result) => {
+                                            match &result {
+                                                Ok(msg) => Ok(msg.clone()),
+                                                Err(e) => Err(e.to_string()),
+                                            }
+                                        }
+
+                                        Err(panic) => {
+                                            let err = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
+                                            Err(err.clone())
+                                        }
+                                    };
+
+                                    // Send the response, UI will handle this..
+                                    let message = DeviceMessage::AudioMessageHandled(location.clone(), msg, result);
+                                    event_tx.send_async(message).await.unwrap();
+                                }
+
                                 AudioMessage::Handle(msg, resp) => {
                                     let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
 
@@ -339,7 +360,7 @@ async fn handle_device_attached(
             let mut state = AudioState::new(data, tx);
             let arrived = DeviceArriveMessage::Audio(state.clone());
             let message = DeviceMessage::DeviceArrived(arrived);
-            event_tx.send(message).unwrap();
+            event_tx.send_async(message).await.unwrap();
 
             // Clone the Event TX so we can move it into the future...
             let event_tx = event_tx.clone();
@@ -348,7 +369,7 @@ async fn handle_device_attached(
                 state.load_settings().await;
                 let arrived = DeviceArriveMessage::Audio(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                event_tx.send(message).unwrap();
+                event_tx.send_async(message).await.unwrap();
             });
         }
         DeviceType::BeacnMix | DeviceType::BeacnMixCreate => {
@@ -416,7 +437,7 @@ async fn handle_device_attached(
             let mut state = ControlState::new(data, tx);
             let arrived = DeviceArriveMessage::Control(state.clone());
             let message = DeviceMessage::DeviceArrived(arrived);
-            let _ = event_tx.send(message);
+            let _ = event_tx.send_async(message).await;
 
             let event_tx = event_tx.clone();
             tokio::spawn(async move {
@@ -424,7 +445,7 @@ async fn handle_device_attached(
 
                 let arrived = DeviceArriveMessage::Control(state);
                 let message = DeviceMessage::DeviceArrived(arrived);
-                let _ = event_tx.send(message);
+                let _ = event_tx.send_async(message).await;
             });
         }
     }
@@ -443,7 +464,11 @@ fn spawn_forwarder<M: Send + 'static>(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         while let Ok(msg) = rx.recv_async().await {
-            if device_event_tx.send((location.clone(), wrap(msg))).is_err() {
+            if device_event_tx
+                .send_async((location.clone(), wrap(msg)))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -488,6 +513,8 @@ enum DeviceEntry {
 pub(crate) enum DeviceMessage {
     DeviceArrived(DeviceArriveMessage),
     DeviceRemoved(DeviceLocation),
+
+    AudioMessageHandled(DeviceLocation, AMessage, Result<AMessage, String>),
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -499,6 +526,7 @@ pub(crate) enum DeviceArriveMessage {
 
 #[derive(Debug)]
 pub enum AudioMessage {
+    Send(AMessage),
     Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
     Bulk(BMessage, oneshot::Sender<Result<BMessage, BeacnError>>),
     Linked(LinkedCommands),

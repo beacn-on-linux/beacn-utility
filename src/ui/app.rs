@@ -216,6 +216,22 @@ impl BeacnUtility {
                             }
                         }
                     }
+                    DeviceMessage::AudioMessageHandled(location, sent, recv) => {
+                        let Some(device) = self.devices.get_mut(&location.hash) else {
+                            return Task::none();
+                        };
+
+                        let DeviceState::Audio(state) = &mut device.state else {
+                            return Task::none();
+                        };
+
+                        match recv {
+                            Ok(message) => state.set_local_value(message),
+                            Err(e) => state.record_error(e, Some(sent)),
+                        }
+
+                        return Task::none();
+                    }
                 }
             }
 

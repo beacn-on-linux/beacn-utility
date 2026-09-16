@@ -227,6 +227,20 @@ impl AudioState {
         }
     }
 
+    pub fn send_message(&mut self, message: Message) {
+        trace!("Sending Message: {:?}", message);
+        let wrapped = AudioMessage::Send(message.clone());
+
+        let Some(sender) = &self.device_sender else {
+            self.record_error("Device Sender not Ready".to_owned(), Some(message));
+            return;
+        };
+
+        if let Err(e) = sender.send(wrapped) {
+            self.record_error(e.to_string(), Some(message));
+        }
+    }
+
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
