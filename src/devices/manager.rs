@@ -180,7 +180,7 @@ pub(crate) async fn spawn_device_manager(
                                     let result = match response {
                                         Ok(result) => {
                                             match &result {
-                                                Ok(msg) => Ok(msg.clone()),
+                                                Ok(msg) => Ok(*msg),
                                                 Err(e) => Err(e.to_string()),
                                             }
                                         }

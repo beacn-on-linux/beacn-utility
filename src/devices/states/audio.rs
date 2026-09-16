@@ -230,7 +230,7 @@ impl AudioState {
     #[allow(unused)]
     pub fn send_message(&mut self, message: Message) {
         trace!("Sending Message: {:?}", message);
-        let wrapped = AudioMessage::Send(message.clone());
+        let wrapped = AudioMessage::Send(message);
 
         let Some(sender) = &self.device_sender else {
             self.record_error("Device Sender not Ready".to_owned(), Some(message));
@@ -261,7 +261,7 @@ impl AudioState {
     pub fn handle_message(&mut self, message: Message) -> Result<Message> {
         let result = self.handle_message_inner(message);
         if let Err(e) = &result {
-            self.record_error(format!("{e}"), Some(message.clone()));
+            self.record_error(format!("{e}"), Some(message));
 
             // Set the entire device as errored
             let definition_error = "Message Send Error".to_owned();
@@ -558,7 +558,7 @@ impl AudioState {
             }
 
             if let Err(e) = self.load_setting_inner(message).await {
-                self.record_error(format!("{e}"), Some(message.clone()));
+                self.record_error(format!("{e}"), Some(message));
             }
         }
 
@@ -588,7 +588,7 @@ impl AudioState {
     async fn load_setting(&mut self, message: Message) -> Result<Message> {
         let result = self.load_setting_inner(message).await;
         if let Err(e) = &result {
-            self.record_error(format!("{e}"), Some(message.clone()));
+            self.record_error(format!("{e}"), Some(message));
 
             // Set the entire device as errored
             let definition_error = "Message Send Error".to_owned();
