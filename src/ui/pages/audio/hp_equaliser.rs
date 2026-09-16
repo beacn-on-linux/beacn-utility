@@ -2,7 +2,9 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::*;
 use crate::ui::pages::audio::hp_equaliser::HPEQValue::*;
-use crate::ui::pages::audio::hp_equaliser::StateMachine::ReloadBand;
+use crate::ui::pages::audio::hp_equaliser::StateMachine::{
+    PostRemoveBand, ReloadBand, ReloadBands,
+};
 use crate::ui::pages::page::{AudioPage, PageMessage};
 use crate::ui::utility::pipewire::platform::{
     find_pipewire_nodes_for_usb, start_spectrum_analyser,
@@ -47,6 +49,7 @@ enum StateMachine {
     None,
     ReloadBand(EQChannel, EQBand),
     ReloadBands(EQChannel),
+    PostRemoveBand(EQChannel, EQBand),
 }
 
 #[derive(Debug, Clone)]
@@ -261,31 +264,17 @@ impl HPEqualiser {
                 if let Some(band) = self.active_band {
                     let msg = EQHeadphones::Enabled(ch, band, false);
                     let msg = Message::EQHeadphones(msg);
-                    let _ = state.handle_message(msg);
+                    let _ = state.send_message(msg);
 
-                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
                     if is_linked {
                         let msg = EQHeadphones::Enabled(ot, band, false);
                         let msg = Message::EQHeadphones(msg);
-                        let _ = state.handle_message(msg);
-
-                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
+                        let _ = state.send_message(msg);
                     }
 
-                    // Try and find a new active band on this channel.
-                    self.active_band = None;
-                    for band in EQBand::iter().rev() {
-                        if state.eq_headphones.bands[ch][band].enabled {
-                            self.active_band = Some(band);
-                            break;
-                        }
-                    }
-
-                    let active_band = self.active_band;
-                    self.view[ch].set_active(active_band);
-                    if is_linked {
-                        self.view[ot].set_active(active_band);
-                    }
+                    // Sync the new state, then update the bands
+                    self.state_machine = PostRemoveBand(ch, band);
+                    state.perform_sync();
                 }
             }
 
@@ -337,8 +326,34 @@ impl HPEqualiser {
                 }
             }
 
-            StateMachine::ReloadBands(ch) => {
+            ReloadBands(ch) => {
                 self.view[ch].set_bands(state.eq_headphones.bands[ch]);
+            }
+
+            PostRemoveBand(ch, band) => {
+                let ot = ch.other();
+
+                // Firstly, reload bands
+                self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
+                if state.eq_headphones.linked {
+                    self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
+                }
+
+                // Next, we need to find a new active band on this channel.
+                self.active_band = None;
+                for b in EQBand::iter().rev() {
+                    if state.eq_headphones.bands[ch][b].enabled {
+                        self.active_band = Some(b);
+                        break;
+                    }
+                }
+
+                // Set the new active bands
+                let active_band = self.active_band;
+                self.view[ch].set_active(active_band);
+                if state.eq_headphones.linked {
+                    self.view[ot].set_active(active_band);
+                }
             }
         }
 
