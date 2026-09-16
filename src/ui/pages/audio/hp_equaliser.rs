@@ -2,6 +2,7 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::hp_equaliser::HPEQMessage::*;
 use crate::ui::pages::audio::hp_equaliser::HPEQValue::*;
+use crate::ui::pages::audio::hp_equaliser::StateMachine::ReloadBand;
 use crate::ui::pages::page::{AudioPage, PageMessage};
 use crate::ui::utility::pipewire::platform::{
     find_pipewire_nodes_for_usb, start_spectrum_analyser,
@@ -19,8 +20,8 @@ use beacn_lib::EQ_HEADPHONES_VERSION;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::controls::Controls;
 use beacn_lib::audio::messages::eq_common::{EQBand, EQBandType, EQFrequency, EQGain, EQQ};
-use beacn_lib::audio::messages::eq_headphones::EQChannel as Channel;
 use beacn_lib::audio::messages::eq_headphones::EQHeadphones;
+use beacn_lib::audio::messages::eq_headphones::{EQChannel as Channel, EQChannel};
 use beacn_lib::audio::messages::headphones::{HPLevel, HPMicMonitorLevel, Headphones};
 use beacn_lib::audio::messages::subwoofer::{Subwoofer, SubwooferAmount};
 use beacn_lib::manager::DeviceType;
@@ -40,6 +41,12 @@ use web_time::{Duration, Instant};
 // Stolen from mic_equaliser
 const DRAG_DELAY: Duration = Duration::from_millis(80);
 const HIGHLIGHT_COLOUR: Color = Color::from_rgb8(0, 123, 178);
+
+#[derive(Debug, Copy, Clone)]
+enum StateMachine {
+    None,
+    ReloadBand(EQChannel, EQBand),
+}
 
 #[derive(Debug, Clone)]
 pub enum HPEQMessage {
@@ -85,6 +92,9 @@ pub struct HPEqualiser {
 
     // Time in which a drag was initiated, if any.
     drag_start: Option<Instant>,
+
+    // Behaviours on next 'Sync' call
+    state_machine: StateMachine,
 }
 
 impl HPEqualiser {
@@ -98,6 +108,8 @@ impl HPEqualiser {
             active_channel: Channel::Left,
             active_band: None,
             drag_start: None,
+
+            state_machine: StateMachine::None,
         }
     }
 
@@ -178,13 +190,11 @@ impl HPEqualiser {
                         }
                     }
                     for message in messages {
-                        let _ = state.handle_message(message);
+                        let _ = state.send_message(message);
                     }
 
-                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
-                    if is_linked {
-                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
-                    }
+                    self.state_machine = ReloadBand(ch, band);
+                    state.perform_sync();
                 }
             }
 
@@ -235,11 +245,12 @@ impl HPEqualiser {
                     // Update the views
                     self.active_band = Some(band);
                     self.view[ch].set_active(Some(band));
-                    self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
                     if is_linked {
                         self.view[ot].set_active(Some(band));
-                        self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
                     }
+
+                    self.state_machine = ReloadBand(ch, band);
+                    state.perform_sync();
                 }
             }
             RemoveBand => {
@@ -312,6 +323,23 @@ impl HPEqualiser {
         Task::none()
     }
 
+    fn sync(&mut self, state: &mut AudioState) -> Task<HPEQMessage> {
+        match self.state_machine {
+            StateMachine::ReloadBand(ch, band) => {
+                let ot = ch.other();
+
+                self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
+                if state.eq_headphones.linked {
+                    self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
+                }
+            }
+
+            _ => {}
+        }
+
+        Task::none()
+    }
+
     fn handle_eq_event(&mut self, state: &mut AudioState, channel: Channel, event: EQMouseEvent) {
         match event {
             EQMouseEvent::Pressed(e) => self.handle_eq_press(state, channel, e),
@@ -333,7 +361,6 @@ impl HPEqualiser {
     }
     fn handle_eq_moved(&mut self, state: &mut AudioState, ch: Channel, point: Point) {
         let is_linked = state.eq_headphones.linked;
-        let ot = ch.other();
         if self.drag_start.is_some_and(|t| t.elapsed() >= DRAG_DELAY) {
             // We're dragging the active band, so should be updating its state
             let Some(band) = self.active_band else {
@@ -374,13 +401,11 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.handle_message(message);
+                let _ = state.send_message(message);
             }
 
-            self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
-            if is_linked {
-                self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
-            }
+            self.state_machine = ReloadBand(ch, band);
+            state.perform_sync();
         }
     }
     fn handle_eq_released(&mut self, _state: &AudioState, channel: Channel) {
@@ -390,7 +415,6 @@ impl HPEqualiser {
     fn handle_eq_scrolled(&mut self, state: &mut AudioState, c: Channel, p: Point, d: ScrollDelta) {
         let (ch, point, delta) = (c, p, d);
         let is_linked = state.eq_headphones.linked;
-        let ot = ch.other();
 
         if let Some(band) = self.check_band_hit(ch, state, point) {
             let delta = get_q_delta(delta);
@@ -415,10 +439,8 @@ impl HPEqualiser {
                 let _ = state.handle_message(message);
             }
 
-            self.view[ch].set_band(band, state.eq_headphones.bands[ch][band]);
-            if is_linked {
-                self.view[ot].set_band(band, state.eq_headphones.bands[ot][band]);
-            }
+            self.state_machine = ReloadBand(ch, band);
+            state.perform_sync();
         }
     }
 
@@ -959,6 +981,10 @@ impl AudioPage for HPEqualiser {
     }
 
     fn update(&mut self, state: &mut AudioState, msg: PageMessage) -> Task<PageMessage> {
+        if matches!(msg, PageMessage::Sync) {
+            return self.sync(state).map(PageMessage::AudioHPEqualiser);
+        }
+
         if let PageMessage::AudioHPEqualiser(msg) = msg {
             return self.update(state, msg).map(PageMessage::AudioHPEqualiser);
         }
