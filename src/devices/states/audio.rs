@@ -227,7 +227,6 @@ impl AudioState {
         }
     }
 
-    #[allow(unused)]
     pub fn send_message(&mut self, message: Message) {
         trace!("Sending Message: {:?}", message);
         let wrapped = AudioMessage::Send(message);
@@ -242,7 +241,6 @@ impl AudioState {
         }
     }
 
-    #[allow(unused)]
     /// This function will trigger a PageMessage::Sync update event in the page as soon as it's
     /// read by the device manager. Once your update() function receives the Sync callback, all
     /// prior pending messages have been executed, and the state has synchronised.
@@ -255,42 +253,6 @@ impl AudioState {
 
         if let Err(e) = sender.send(wrapped) {
             self.record_error(e.to_string(), None);
-        }
-    }
-
-    pub fn handle_message(&mut self, message: Message) -> Result<Message> {
-        let result = self.handle_message_inner(message);
-        if let Err(e) = &result {
-            self.record_error(format!("{e}"), Some(message));
-
-            // Set the entire device as errored
-            let definition_error = "Message Send Error".to_owned();
-            let state = DefinitionState::Error(ErrorType::Other(definition_error));
-
-            self.device_definition.state = state;
-        }
-        result
-    }
-
-    fn handle_message_inner(&mut self, message: Message) -> Result<Message> {
-        trace!("Sending Message: {:?}", message);
-        let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Handle(message, tx);
-
-        match &self.device_sender {
-            Some(sender) => {
-                // Send the message, return the response (or fail).
-                sender.send(message)?;
-                let message = rx.recv()?;
-                trace!("Received Message: {:?}", message);
-
-                // Quickly intercept the message, and set our local value
-                if let Ok(message) = message {
-                    self.set_local_value(message);
-                }
-                Ok(message?)
-            }
-            None => bail!("Device Sender not Ready"),
         }
     }
 
