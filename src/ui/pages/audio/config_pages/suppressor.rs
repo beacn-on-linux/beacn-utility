@@ -82,14 +82,22 @@ impl ConfigPage for SuppressorPage {
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
         if matches!(message, ChildMessage::OnTick) {
             let msg = BulkMessage::GetSuppressionBase;
-            if let Ok(BulkMessage::SuppressionBase(response)) = state.handle_bulk_message(msg) {
-                self.baseline = response;
-            }
+            state.send_bulk_request(msg);
 
             let msg = BulkMessage::GetSuppressionCurrent;
-            if let Ok(BulkMessage::SuppressionCurrent(response)) = state.handle_bulk_message(msg) {
+            state.send_bulk_request(msg);
+
+            return Task::none();
+        }
+
+        if let ChildMessage::Bulk(msg) = message {
+            if let BulkMessage::SuppressionBase(response) = msg {
+                self.baseline = response;
+            }
+            if let BulkMessage::SuppressionCurrent(response) = msg {
                 self.current = response;
             }
+            return Task::none();
         }
 
         let ChildMessage::Suppressor(message) = message else {

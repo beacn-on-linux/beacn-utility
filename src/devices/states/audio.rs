@@ -256,20 +256,17 @@ impl AudioState {
         }
     }
 
-    pub fn handle_bulk_message(&mut self, message: BulkMessage) -> Result<BulkMessage> {
-        let (tx, rx) = oneshot::channel();
-        let message = AudioMessage::Bulk(message, tx);
+    pub fn send_bulk_request(&mut self, message: BulkMessage) {
+        trace!("Sending Bulk Request: {:?}", message);
+        let wrapped = AudioMessage::SendBulk(message);
 
-        match &self.device_sender {
-            Some(sender) => {
-                // Send the message, return the response (or fail).
-                sender.send(message)?;
-                let message = rx.recv()?;
+        let Some(sender) = &self.device_sender else {
+            self.record_error("Device Sender not Ready".to_owned(), None);
+            return;
+        };
 
-                // Quickly intercept the message, and set our local value
-                Ok(message?)
-            }
-            None => bail!("Device Sender not Ready"),
+        if let Err(e) = sender.send(wrapped) {
+            self.record_error(e.to_string(), None);
         }
     }
 

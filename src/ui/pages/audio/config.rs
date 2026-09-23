@@ -57,6 +57,7 @@ pub struct Configuration {
 
     loopback_handler: Option<LoopbackHandler>,
 
+    waiting_meter_response: bool,
     meter_ballistics: MeterBallistics,
 
     selected_tab: usize,
@@ -72,6 +73,7 @@ impl Configuration {
 
             loopback_handler: None,
 
+            waiting_meter_response: false,
             meter_ballistics: MeterBallistics::new(METER_RANGE_DB.0),
 
             selected_tab: 0,
@@ -425,19 +427,11 @@ impl AudioPage for Configuration {
     }
 
     fn on_tick(&mut self, state: &mut AudioState) -> Task<PageMessage> {
-        // Ok, let's try and feed compressor data :D
-        let message = BulkMessage::GetMeters;
-        if let Ok(meters) = state.handle_bulk_message(message)
-            && let BulkMessage::Meters(response) = meters
-        {
-            // Send a message to the active config page, notifying it that we have some new
-            // meter data. Not all pages use this, but we do, so we always need it.
-            let msg = ChildMessage::Meters(response);
-            let _ = self.tab_pages[self.selected_tab].update(state, msg);
+        if !self.waiting_meter_response {
+            let message = BulkMessage::GetMeters;
+            state.send_bulk_request(message);
 
-            // Push the fresh raw level into the ballistics; it tracks its own timing
-            // internally and produces a smoothed value + decaying peak line.
-            self.meter_ballistics.advance(response.processed_mic);
+            self.waiting_meter_response = true;
         }
 
         // Send a frame tick to the child, in case it needs anything.
@@ -479,6 +473,21 @@ impl AudioPage for Configuration {
                 .sync(state)
                 .map(ConfigMessage::Equaliser)
                 .map(PageMessage::AudioConfig),
+
+            PageMessage::BulkMessage(msg) => {
+                // Advance our local ballistics
+                if let BulkMessage::Meters(meters) = msg {
+                    self.meter_ballistics.advance(meters.processed_mic);
+                }
+
+                // Send a message to the active config page, notifying it that we have some new
+                // meter data. Not all pages use this, but we do, so we always need it.
+                let msg = ChildMessage::Bulk(msg);
+                let _ = self.tab_pages[self.selected_tab].update(state, msg);
+
+                self.waiting_meter_response = false;
+                Task::none()
+            }
 
             PageMessage::AudioConfig(msg) => match msg {
                 ConfigMessage::Equaliser(event) => self

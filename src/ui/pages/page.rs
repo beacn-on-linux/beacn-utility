@@ -11,11 +11,13 @@ use crate::ui::pages::audio::lighting::LightingMessage;
 use crate::ui::pages::audio::studio_link::StudioLinkMessage;
 use crate::ui::pages::common::error_page::ErrorPageMessages;
 use crate::ui::pages::control::about::ControlAboutMessage;
+use beacn_lib::audio::data::BulkMessage;
 use iced::{Element, Task};
 
 #[derive(Debug, Clone)]
 pub(crate) enum PageMessage {
     Sync,
+    BulkMessage(BulkMessage),
 
     AudioAbout(AboutMessage),
     AudioConfig(ConfigMessage),

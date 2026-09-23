@@ -2,6 +2,7 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage, map_to_range};
 use crate::ui::widgets::helpers::buttons::toggle_button;
 use crate::ui::widgets::helpers::composite::{draw_horizontal_range, draw_range};
+use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::compressor::{
     Compressor, CompressorMode, CompressorRatio, CompressorThreshold,
@@ -29,7 +30,7 @@ impl ConfigPage for CompressorPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
-        if let ChildMessage::Meters(meters) = message {
+        if let ChildMessage::Bulk(BulkMessage::Meters(meters)) = message {
             self.input_amount = meters.pre_compressor;
             self.output_amount = meters.post_compressor;
             self.attenuation = meters.compressor_attenuation;

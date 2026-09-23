@@ -196,6 +196,27 @@ pub(crate) async fn spawn_device_manager(
                                     event_tx.send_async(message).await.unwrap();
                                 }
 
+                                AudioMessage::SendBulk(msg) => {
+                                    let response = AssertUnwindSafe(dev.handle_bulk_message(msg)).catch_unwind().await;
+                                    let result = match response {
+                                        Ok(result) => {
+                                            match &result {
+                                                Ok(msg) => Ok(*msg),
+                                                Err(e) => Err(e.to_string()),
+                                            }
+                                        }
+
+                                        Err(panic) => {
+                                            let err = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
+                                            Err(err.clone())
+                                        }
+                                    };
+
+                                    // Send the response, UI will handle this..
+                                    let message = DeviceMessage::BulkMessageHandled(location.clone(), msg, result);
+                                    event_tx.send_async(message).await.unwrap();
+                                }
+
                                 AudioMessage::Handle(msg, resp) => {
                                     let response = AssertUnwindSafe(dev.handle_message(msg)).catch_unwind().await;
 
@@ -524,6 +545,7 @@ pub(crate) enum DeviceMessage {
     // on a value change something, this is how you know it's ready.
     AudioSyncHandled,
     AudioMessageHandled(DeviceLocation, AMessage, Result<AMessage, String>),
+    BulkMessageHandled(DeviceLocation, BMessage, Result<BMessage, String>),
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -537,6 +559,7 @@ pub(crate) enum DeviceArriveMessage {
 pub enum AudioMessage {
     Sync,
     Send(AMessage),
+    SendBulk(BMessage),
 
     Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
     Bulk(BMessage, oneshot::Sender<Result<BMessage, BeacnError>>),

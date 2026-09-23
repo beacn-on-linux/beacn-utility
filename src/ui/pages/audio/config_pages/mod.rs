@@ -8,7 +8,7 @@ pub(crate) mod suppressor;
 use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::compressor::CompressorMessage;
 use crate::ui::pages::audio::config_pages::expander::ExpanderMessage;
-use beacn_lib::audio::data::MetersResponse;
+use beacn_lib::audio::data::{BulkMessage};
 
 use crate::ui::pages::audio::config_pages::headphones::HeadphonesMessage;
 use crate::ui::pages::audio::config_pages::suppressor::SuppressorMessage;
@@ -19,7 +19,7 @@ use iced::{Element, Task};
 pub(crate) enum ChildMessage {
     OnTick,
     State(Message),
-    Meters(MetersResponse),
+    Bulk(BulkMessage),
     Expander(ExpanderMessage),
     Compressor(CompressorMessage),
     Headphones(HeadphonesMessage),

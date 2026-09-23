@@ -2,6 +2,7 @@ use crate::devices::states::audio::AudioState;
 use crate::ui::pages::audio::config_pages::{ChildMessage, ConfigPage, map_to_range};
 use crate::ui::widgets::helpers::buttons::toggle_button;
 use crate::ui::widgets::helpers::composite::draw_horizontal_range;
+use beacn_lib::audio::data::BulkMessage;
 use beacn_lib::audio::messages::Message;
 use beacn_lib::audio::messages::expander::{
     Expander, ExpanderMode, ExpanderRatio, ExpanderThreshold,
@@ -39,7 +40,7 @@ impl ConfigPage for ExpanderPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
-        if let ChildMessage::Meters(meters) = message {
+        if let ChildMessage::Bulk(BulkMessage::Meters(meters)) = message {
             let input = meters.pre_expander;
             let output = meters.post_expander;
 
