@@ -213,7 +213,7 @@ pub(crate) async fn spawn_device_manager(
                                     };
 
                                     // Send the response, UI will handle this..
-                                    let message = DeviceMessage::BulkMessageHandled(location.clone(), msg, result);
+                                    let message = DeviceMessage::BulkMessageHandled(location.clone(), result);
                                     event_tx.send_async(message).await.unwrap();
                                 }
 
@@ -545,7 +545,7 @@ pub(crate) enum DeviceMessage {
     // on a value change something, this is how you know it's ready.
     AudioSyncHandled,
     AudioMessageHandled(DeviceLocation, AMessage, Result<AMessage, String>),
-    BulkMessageHandled(DeviceLocation, BMessage, Result<BMessage, String>),
+    BulkMessageHandled(DeviceLocation, Result<BMessage, String>),
 }
 
 #[allow(clippy::large_enum_variant)]

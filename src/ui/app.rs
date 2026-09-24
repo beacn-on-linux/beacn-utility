@@ -239,7 +239,7 @@ impl BeacnUtility {
                         return Task::none();
                     }
 
-                    DeviceMessage::BulkMessageHandled(location, send, recv) => {
+                    DeviceMessage::BulkMessageHandled(location, recv) => {
                         let Some(device) = self.devices.get_mut(&location.hash) else {
                             return Task::none();
                         };
