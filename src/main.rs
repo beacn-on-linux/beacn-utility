@@ -240,7 +240,8 @@ fn spawn_iced_window(
     const REGULAR_FONT: &[u8] = include_bytes!("../resources/fonts/noto/NotoSans-Regular.ttf");
     const SEMI_BOLD_FONT: &[u8] = include_bytes!("../resources/fonts/noto/NotoSans-SemiBold.ttf");
 
-    let settings = iced::Settings {
+    #[allow(unused_mut)]
+    let mut settings = iced::Settings {
         default_font: Font {
             family: Family::Name("Noto Sans"),
             weight: Weight::Semibold,
@@ -250,6 +251,13 @@ fn spawn_iced_window(
         default_text_size: 12.0.into(),
         ..Default::default()
     };
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        // This is needed for WASM otherwise all the canvases kinda explode into tiny pieces, I
+        // think this has been fixed upstream, but we're waiting on a release to actually test it.
+        settings.antialiasing = false;
+    }
 
     // Initial Window Settings and size
     #[allow(unused_mut)]
