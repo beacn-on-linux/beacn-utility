@@ -62,7 +62,8 @@ simplelog = "0.12.2"
 file-rotate = "0.8.0"
 
 # Beacn Lib for Hardware Comms
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["tokio"] }
+#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["tokio"] }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["tokio"] }
 
 # Async Runtime
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "signal", "macros"] }
@@ -85,7 +86,8 @@ interprocess = { version = "2.4.2", features = ["tokio"] }
 console_log = "1.1.0"
 
 # Beacn Lib for Hardware Comms
-beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["async"] }
+#beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", tag = "v0.4.3", features = ["async"] }
+beacn-lib = { git = "https://github.com/beacn-on-linux/beacn-lib.git", branch = "main", features = ["async"] }
 
 # Async Runtime
 tokio_with_wasm = { version = "0.10.1", features = ["rt", "time", "sync", "macros"] }
