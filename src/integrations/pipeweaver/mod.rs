@@ -208,15 +208,24 @@ impl PipeweaverHandler {
         }
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(unreachable_code))]
     pub async fn run_handler(&mut self) {
         info!("Starting Pipeweaver Manager");
-        let url = "ws://localhost:14565/api/websocket";
-        let meter = "ws://localhost:14565/api/websocket/meter";
-
-        let mut clean_stop = true;
 
         // Send the Pipeweaver Splash
         self.draw_splash().await;
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let msg = "Pipeweaver is not supported on the Web";
+            self.draw_status(msg).await;
+            return;
+        }
+
+        let mut clean_stop = true;
+        let url = "ws://localhost:14565/api/websocket";
+        let meter = "ws://localhost:14565/api/websocket/meter";
+
         self.draw_status("Loading...").await;
 
         sleep(Duration::from_millis(250)).await;
