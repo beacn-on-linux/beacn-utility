@@ -475,8 +475,13 @@ impl BeacnUtility {
         }
 
         // Add the pipeweaver button at the top
-        let pipeweaver_button = pipeweaver_sidebar_item(self.mixer_active);
-        let mut sidebar_items = column![pipeweaver_button].align_x(Alignment::Center);
+        let mut sidebar_items = column![].align_x(Alignment::Center);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let pipeweaver_button = pipeweaver_sidebar_item(self.mixer_active);
+            sidebar_items = sidebar_items.push(pipeweaver_button);
+        }
 
         // Devices & Inner Pages Loop
         let mut sorted_devices: Vec<&Device> = self.devices.values().collect();
