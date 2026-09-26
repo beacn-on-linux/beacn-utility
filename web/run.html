@@ -1,0 +1,35 @@
+<!--
+ Note: Generate the .js and .wasm via:
+ cargo build --release --target wasm32-unknown-unknown
+ wasm-bindgen --target web --out-dir web/ target/wasm32-unknown-unknown/release/beacn-utility.wasm
+
+ You only need beacn-utility.js and beacn-utility_bg.wasm
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Beacn Utility</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+<script type="module">
+    const cacheKill = Math.floor(Math.random() * 1000000);
+
+    const module = await import(`./beacn-utility.js?t=${cacheKill}`);
+    await module.default(`./beacn-utility_bg.wasm?t=${cacheKill}`)
+</script>
+</body>
+</html>

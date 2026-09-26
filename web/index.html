@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Beacn Utility Setup</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+            max-width: 850px;
+            margin: 0 auto;
+            padding: 32px 20px;
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: 0;
+            border-radius: 6px;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        #status {
+            margin: 16px 0;
+            min-height: 1.5em;
+        }
+
+        ul {
+            padding: 0;
+            list-style: none;
+        }
+
+        li {
+            padding: 12px;
+            margin: 8px 0;
+            border: 1px solid #8885;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="supported">
+    <h1>Pair Beacn Devices</h1>
+    <p>
+        <b>Ensure that neither the Beacn App or regular Utility are running before proceeding!</b><br/> <br/>
+        Before the Utility can communicate with devices via your web browser, you must first grant it permissions (this
+        is a good thing). Hit the button below and add the devices one at a time, they'll list underneath once pairing
+        has been confirmed. Once paired, they should continue to work without further interactions.<br/><br/>
+        To remove the permissions, simply click the info button in the address bar (on the left) and remove the
+        permissions
+        there.
+    </p>
+
+    <button id="pair">Pair USB Device</button>
+
+    <p id="status"></p>
+
+    <h2>Paired Devices</h2>
+    <ul id="devices">
+        <li>No paired devices were found.</li>
+    </ul>
+
+    <button id="start">Start Beacn Utility</button>
+    <br/><br/>
+    <p style="font-size: 0.8em">
+        <span style="font-style: italic">Privacy Note:</span> This app runs entirely in your browser. Server
+        communication is only used to download the app and its content; no data is sent to a backend service.
+    </p>
+</div>
+<div class="unsupported" style="display: none">
+    <h1>WebUSB Not Supported</h1>
+    <p>
+        Unfortunately, WebUSB is only currently supported in Chromium-based browsers.
+    </p>
+</div>
+
+<script>
+    const VENDOR_ID = 0x33ae;
+
+    const supported = document.querySelector(".supported");
+    const unsupported = document.querySelector(".unsupported");
+
+    if (!("usb" in navigator)) {
+        unsupported.style.display = "block";
+        supported.style.display = "none";
+    }
+
+    const pairButton = document.querySelector("#pair");
+    const startButton = document.querySelector("#start");
+    const status = document.querySelector("#status");
+    const devicesList = document.querySelector("#devices");
+
+    function renderDevices(devices) {
+        devicesList.replaceChildren();
+
+        if (devices.length === 0) {
+            const empty = document.createElement("li");
+            empty.textContent = "No paired devices found.";
+            devicesList.appendChild(empty);
+            return;
+        }
+
+        for (const device of devices) {
+            const item = document.createElement("li");
+
+            const name = device.productName || "Unknown device";
+
+            item.innerHTML = `<strong></strong>`;
+            item.querySelector("strong").textContent = name;
+
+
+            devicesList.appendChild(item);
+        }
+    }
+
+    async function listPairedDevices() {
+        if (!("usb" in navigator)) {
+            status.textContent = "WebUSB is not supported by this browser.";
+            return;
+        }
+
+        try {
+            const devices = await navigator.usb.getDevices();
+            renderDevices(devices.filter(device => device.vendorId === VENDOR_ID));
+        } catch (error) {
+            status.textContent = `Could not list devices: ${error.message}`;
+        }
+    }
+
+    pairButton.addEventListener("click", async () => {
+        if (!("usb" in navigator)) {
+            status.textContent = "WebUSB is not supported by this browser.";
+            return;
+        }
+
+        try {
+            status.textContent = "Waiting for device selection...";
+
+            const device = await navigator.usb.requestDevice({
+                filters: [
+                    {vendorId: VENDOR_ID}
+                ]
+            });
+
+            status.textContent = `Paired with ${device.productName || "USB device"}.`;
+            await listPairedDevices();
+        } catch (error) {
+            if (error.name === "NotFoundError") {
+                status.textContent = "No device selected.";
+            } else {
+                status.textContent = `Could not pair device: ${error.message}`;
+            }
+        }
+    });
+
+    startButton.addEventListener("click", async () => {
+        window.location.href = "/run.html";
+    })
+
+    listPairedDevices();
+</script>
+</body>
+</html>
