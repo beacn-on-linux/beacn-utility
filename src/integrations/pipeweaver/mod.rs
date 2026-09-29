@@ -2,12 +2,16 @@
 use tokio_with_wasm as tokio;
 
 use crate::devices::manager::ControlMessage;
+pub use crate::integrations::pipeweaver::channel::MeterSettings;
 use crate::integrations::pipeweaver::channel::{ChannelChangedProperty, ChannelRenderer};
 use crate::integrations::pipeweaver::helpers::{Mix, MuteTarget, OrderGroup};
 
 use crate::integrations::pipeweaver::layout::{
-    BG_COLOUR, CHANNEL_DIMENSIONS, DISPLAY_DIMENSIONS, DrawingUtils, FONT_BOLD, HEADER,
-    JPEG_QUALITY, POSITION_ROOT, TEXT_COLOUR, TextAlign,
+    DrawingUtils, FONT_BOLD, JPEG_QUALITY, TEXT_COLOUR, TextAlign,
+};
+use crate::integrations::pipeweaver::pieces::{
+    HEADER_STRIP, PieceCache, PieceKey, Plate, ScreenModel, SlotShown, dial_origin, plate_jpeg,
+    slot_origin,
 };
 use anyhow::{Result, anyhow, bail};
 use beacn_lib::controller::messages::Message as BeacnMessage;
@@ -18,13 +22,13 @@ use beacn_lib::types::RGBA;
 use enum_map::{EnumMap, enum_map};
 use iced::futures::SinkExt;
 use iced::futures::StreamExt;
-use image::{ImageBuffer, Rgba, RgbaImage, load_from_memory};
+use image::{Rgba, RgbaImage};
 use json_patch::Patch;
 use log::{debug, info, warn};
 use serde::Deserialize;
 use serde_json::{Value, from_value, json};
 use std::cmp::PartialEq;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::sync::{Arc, LazyLock};
 use strum::IntoEnumIterator;
@@ -41,7 +45,10 @@ const HELD_TIME: Duration = Duration::from_millis(500);
 // from the daemon's real state.
 const PENDING_TIMEOUT: Duration = Duration::from_millis(150);
 
-//const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
+// If a frame arrives very late (stalled device, suspended machine) don't let the meters lurch
+// forward by the whole gap, just carry on from where they were.
+const MAX_FRAME_DT: f32 = 0.1;
+
 static PW_SPLASH: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| {
     let bytes = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
     Arc::new(bytes.to_vec())
@@ -106,6 +113,7 @@ pub fn launch_pipeweaver_ui() -> bool {
 mod channel;
 mod helpers;
 mod layout;
+mod pieces;
 
 const COLOUR_MIX_A: RGBA = RGBA {
     red: 89,
@@ -150,7 +158,7 @@ struct ButtonHoldState {
     pub(crate) hold_handled: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChannelType {
     Source,
     Target,
@@ -182,6 +190,12 @@ struct PipeweaverHandler {
 
     // In-flight dial changes per channel
     pending_volumes: HashMap<String, (u8, Instant)>,
+
+    // JPEG Cache and shadow model
+    pieces: PieceCache,
+    screen: ScreenModel,
+
+    meter_settings: MeterSettings,
 }
 
 impl PipeweaverHandler {
@@ -213,6 +227,9 @@ impl PipeweaverHandler {
             renderers: HashMap::new(),
             button_down_states: EnumMap::default(),
             pending_volumes: HashMap::new(),
+            pieces: PieceCache::default(),
+            screen: ScreenModel::default(),
+            meter_settings: MeterSettings::default(),
         }
     }
 
@@ -309,9 +326,12 @@ impl PipeweaverHandler {
         }
     }
 
-    async fn draw_splash(&self) {
+    async fn draw_splash(&mut self) {
         let message = BeacnMessage::Image(0, 0, PW_SPLASH.clone());
         let _ = self.send_message(message).await;
+
+        // The splash covers everything, invalidate our model
+        self.screen.invalidate();
     }
 
     async fn draw_status(&self, text: &str) {
@@ -434,6 +454,9 @@ impl PipeweaverHandler {
     async fn load_initial_state(&mut self) -> Result<()> {
         self.pending_volumes.clear();
 
+        // Start clean, we may be reconnecting, or switching between Sources and Targets
+        self.renderers.clear();
+
         let devices_shown = self.get_channels_on_page()?;
         self.devices_shown = devices_shown;
 
@@ -443,6 +466,9 @@ impl PipeweaverHandler {
         // Perform the initial screen render
         self.perform_full_refresh().await?;
 
+        // ..then get everything else ready, so page changes are never the first time we draw
+        self.warm_pieces();
+
         Ok(())
     }
 
@@ -451,18 +477,21 @@ impl PipeweaverHandler {
         stream: &mut WebSocket,
         meter: &mut WebSocket,
     ) -> Result<()> {
-        const METER_HALF_TICK_MS: u64 = 50;
-        const TICK_RATE: f32 = METER_HALF_TICK_MS as f32 / 1000.0;
-
         let mut keep_alive = time::interval(Duration::from_secs(10));
         self.send_message(BeacnMessage::Enabled(true)).await?;
 
         let mut last_channel_count = 0;
 
-        // These are half-tick messages, sent every 50ms to better smooth meter updates
-        let mut sub_tick: Option<(String, usize)> = None;
-        let sub_sleep = tokio::time::sleep(Duration::MAX);
-        tokio::pin!(sub_sleep);
+        // Meter values only arrive every so often, so while any visible meter is still moving
+        // we run our own frame timer, and animate every channel together on each frame.
+        let fps = self.meter_settings.fps.clamp(1, 120);
+        let frame_period = Duration::from_secs_f32(1.0 / fps as f32);
+        let mut last_frame = Instant::now();
+        let mut next_frame = time::Instant::now();
+        let mut was_animating = false;
+
+        let frame_sleep = tokio::time::sleep(Duration::MAX);
+        tokio::pin!(frame_sleep);
 
         let suspend_sleep = tokio::time::sleep(Duration::MAX);
         tokio::pin!(suspend_sleep);
@@ -472,6 +501,17 @@ impl PipeweaverHandler {
         debug!("Starting Pipeweaver Message Loop");
         loop {
             let is_suspended = self.is_suspended();
+
+            // When meters start moving, the frame clock starts from now rather than from whenever
+            // it last ran, otherwise the first frame would see a huge gap
+            let animating = self.is_animating();
+            if animating && !was_animating {
+                last_frame = Instant::now();
+                next_frame = time::Instant::now() + frame_period;
+                frame_sleep.as_mut().reset(next_frame);
+            }
+            was_animating = animating;
+
             select! {
                 Ok(_) = self.stop_rx.changed() => {
                     // Trigger a safe exit
@@ -481,6 +521,7 @@ impl PipeweaverHandler {
                 Ok(_) = self.suspended_rx.changed() => {
                     // We've woken up from a suspension, so redraw everything
                     if !self.is_suspended() {
+                        self.screen.invalidate();
                         self.refresh_page().await?;
                     }
 
@@ -501,7 +542,7 @@ impl PipeweaverHandler {
                                 // Count all channels that aren't hidden
                                 let count = {
                                     let order = self.get_channel_order()?;
-                                        order
+                                    order
                                         .iter()
                                         .filter(|(group, _)| *group != OrderGroup::Hidden)
                                         .map(|(_, v)| v.len())
@@ -513,131 +554,7 @@ impl PipeweaverHandler {
                                     self.load_page_button().await?;
                                 }
 
-                                let devices = self.get_channels_on_page()?;
-                                if devices != self.devices_shown {
-                                    self.devices_shown = devices.clone();
-
-                                    self.update_renderers()?;
-
-                                    // Set the Button Colours
-                                    self.load_all_dial_button_colours().await?;
-                                    self.perform_full_redraw().await?;
-                                } else {
-                                    // Check whether any existing devices have changed
-                                    for (index, device) in self.devices_shown.iter().enumerate() {
-                                        let mut refresh_button_colour = false;
-                                        let devices = &self.raw_status["audio"]["profile"]["devices"];
-                                        let origin = match self.channel_type {
-                                            ChannelType::Source => &devices["sources"],
-                                            ChannelType::Target => &devices["targets"],
-                                        };
-
-                                        let device_id = device.to_string();
-                                        let dev = ["physical_devices", "virtual_devices"]
-                                            .iter()
-                                            .filter_map(|kind| origin[*kind].as_array())
-                                            .flatten()
-                                            .find(|value| value["description"]["id"] == device_id)
-                                            .ok_or_else(|| anyhow::anyhow!("Failed to locate device by ID: {}", device))?;
-
-                                        let render = self.renderers.get_mut(device).ok_or_else(|| anyhow!("Failed to get renderer"))?;
-
-                                        let update = match self.channel_type {
-                                            ChannelType::Source => render.update_from_source_device_value(dev)?,
-                                            ChannelType::Target => render.update_from_target_device_value(dev)?,
-                                        };
-
-                                        // The update above overwrote our optimistic volume with the daemon's
-                                        // value. If that's a stale echo of an earlier dial event, put ours back.
-                                        let active_mix = self.active_mix;
-                                        let mut suppress_volume = false;
-                                        if let Some(&(target, at)) = self.pending_volumes.get(device) {
-                                            if render.volumes[active_mix] == target || at.elapsed() > PENDING_TIMEOUT {
-                                                // Caught up, or gave up waiting: the daemon's value stands
-                                                self.pending_volumes.remove(device);
-                                            } else {
-                                                render.volumes[active_mix] = target;
-                                                suppress_volume = true;
-                                            }
-                                        }
-
-                                        for part in update {
-                                            let (img, x, y) = match part {
-                                                ChannelChangedProperty::Title => {
-                                                    let img = render.draw_header();
-
-                                                    let (x, y) = img.position;
-                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                    (img, x, y)
-                                                }
-                                                ChannelChangedProperty::Colour => {
-                                                    // Set the Button Colour to Refresh
-                                                    refresh_button_colour = true;
-
-                                                    // We need to redraw the entire channel
-                                                    let img = render.full_render(self.active_mix);
-
-                                                    let (x, y) = img.position;
-                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                    (img, x, y)
-                                                }
-                                                ChannelChangedProperty::Volumes(mix) => {
-                                                    if mix != self.active_mix || suppress_volume {
-                                                        continue
-                                                    }
-
-                                                    let img = render.get_volume(self.active_mix)?;
-                                                    let (x, y) = img.position;
-
-                                                    (img.image, x, y)
-                                                }
-                                                ChannelChangedProperty::MuteState(target) => {
-                                                    // Don't draw MixB Mute updates on the Beacn Mix
-                                                    if target == MuteTarget::TargetB && self.device_type == DeviceType::BeacnMix {
-                                                        continue;
-                                                    }
-
-                                                    let img = render.draw_mute_box(target);
-
-                                                    let (x, y) = img.position;
-                                                    let img = img_as_jpeg(img.image, BG_COLOUR)?;
-
-                                                    (img, x, y)
-                                                }
-                                            };
-
-                                            if is_suspended && !self.temporary_active {
-                                                // Everything is up to date, but we dont draw
-                                                continue;
-                                            }
-
-                                            // Determine the 'start' position of this channel
-                                            let (ch_w, _) = CHANNEL_DIMENSIONS;
-                                            let base_x = ch_w * index as u32;
-
-                                            // Get the position relative to the main image root
-                                            let (root_x, root_y) = POSITION_ROOT;
-                                            let x = base_x + x + root_x;
-                                            let y = y + root_y;
-
-                                            // Send it
-                                            let message = BeacnMessage::Image(x, y, Arc::new(img));
-                                            let (tx, rx) = oneshot::channel();
-                                            let msg = ControlMessage::Handle(message, tx);
-                                            self.sender.send_async(msg).await?;
-                                            rx.await??;
-                                        };
-
-                                        // We split this out because there's a lot of borrowing going on
-                                        // inside the loops regards the renderer, which makes executing
-                                        // earlier more difficult :D
-                                        if refresh_button_colour {
-                                            self.load_dial_button_colour(index).await?;
-                                        }
-                                    }
-                                }
+                                self.handle_status_change().await?;
                             }
                         }
                         Some(Ok(Message::Close(frame))) => {
@@ -653,43 +570,9 @@ impl PipeweaverHandler {
                 message = meter.next() => {
                     match message {
                         Some(Ok(Message::Text(text))) => {
-                        let result = serde_json::from_str::<MeterMessage>(&text)?;
-
-                        if let Some(index) = self.devices_shown.iter().position(|id| *id == result.id) &&
-                            let Some(renderer) = self.renderers.get_mut(&result.id) {
-                                renderer.meter_target = result.percent.into();
-
-                                let current = renderer.meter;
-                                let new = renderer.tick_meter(TICK_RATE);
-                                if current == new {
-                                    sub_tick = Some((result.id, index));
-                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-
-                                    continue;
-                                }
-
-                                if is_suspended && !self.temporary_active {
-                                    // We'll tick the subtick, but wont draw this time
-                                    sub_tick = Some((result.id, index));
-                                    sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                                    continue;
-                                }
-
-                                let drawing = renderer.get_volume(self.active_mix)?;
-                                let (x, y) = drawing.position;
-
-                                let (ch_w, _) = CHANNEL_DIMENSIONS;
-                                let base_x = ch_w * index as u32;
-
-                                let (root_x, root_y) = POSITION_ROOT;
-                                let x = base_x + x + root_x;
-                                let y = y + root_y;
-
-                                let msg = BeacnMessage::Image(x, y, Arc::new(drawing.image));
-                                self.send_message(msg).await?;
-
-                                sub_tick = Some((result.id, index));
-                                sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                            let result = serde_json::from_str::<MeterMessage>(&text)?;
+                            if let Some(renderer) = self.renderers.get_mut(&result.id) {
+                                renderer.meter_target = f32::from(result.percent);
                             }
                         }
                         Some(Ok(Message::Close(frame))) => {
@@ -702,44 +585,16 @@ impl PipeweaverHandler {
                         None => bail!("Websocket Closed"),
                     }
                 }
-                _ = &mut sub_sleep, if sub_tick.is_some() => {
-                    if let Some((id, index)) = sub_tick.take() && let Some(renderer) = self.renderers.get_mut(&id) {
-                        let current = renderer.meter;
-                        let new = renderer.tick_meter(TICK_RATE);
-                        if current == new {
-                            sub_tick = Some((id, index));
-                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
+                _ = &mut frame_sleep, if animating => {
+                    let now = Instant::now();
+                    let dt = now.duration_since(last_frame).as_secs_f32().min(MAX_FRAME_DT);
+                    last_frame = now;
 
-                            continue;
-                        }
+                    self.animate_meters(dt).await?;
 
-                        // Drawing is suspended, we'll re-tick, but wont draw.
-                        if is_suspended && !self.temporary_active {
-                            sub_tick = Some((id, index));
-                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                            continue;
-                        }
-
-                        let drawing = renderer.get_volume(self.active_mix)?;
-                        let (x, y) = drawing.position;
-
-                        let (ch_w, _) = CHANNEL_DIMENSIONS;
-                        let (root_x, root_y) = POSITION_ROOT;
-                        let x = ch_w * index as u32 + x + root_x;
-                        let y = y + root_y;
-
-                        let message = BeacnMessage::Image(x, y, Arc::new(drawing.image));
-                        let (tx, rx) = oneshot::channel();
-                        let msg = ControlMessage::Handle(message, tx);
-                        self.sender.send_async(msg).await?;
-                        rx.await??;
-
-                        // Keep ticking until meter hits zero
-                        if renderer.meter > 0 {
-                            sub_tick = Some((id, index));
-                            sub_sleep.as_mut().reset(time::Instant::now() + Duration::from_millis(METER_HALF_TICK_MS));
-                        }
-                    }
+                    // Keep frame time steady
+                    next_frame = (next_frame + frame_period).max(time::Instant::now());
+                    frame_sleep.as_mut().reset(next_frame);
                 }
 
                 _ = &mut suspend_sleep, if self.is_suspended() => {
@@ -759,6 +614,7 @@ impl PipeweaverHandler {
                                     // Wake the device up, and flag as temporarily active
                                     self.send_message(BeacnMessage::Enabled(true)).await?;
                                     self.temporary_active = true;
+                                    self.sync_display().await?;
                                 }
                             }
 
@@ -795,7 +651,7 @@ impl PipeweaverHandler {
     }
 
     async fn perform_full_refresh(&mut self) -> Result<()> {
-        self.perform_full_redraw().await?;
+        self.sync_display_now().await?;
         self.load_all_dial_button_colours().await?;
         self.load_page_button().await?;
         self.load_mix_button_colours().await?;
@@ -804,111 +660,264 @@ impl PipeweaverHandler {
     }
 
     fn update_renderers(&mut self) -> Result<()> {
-        for device in &self.devices_shown {
-            if !self.renderers.contains_key(device) {
-                let render = self.get_channel_renderer(device)?;
-                self.renderers.insert(device.clone(), render);
+        let ids = self.displayable_channels(self.channel_type)?;
+        for id in &ids {
+            if !self.renderers.contains_key(id) {
+                let render = self.get_channel_renderer_for(self.channel_type, id)?;
+                self.renderers.insert(id.clone(), render);
             }
         }
-        // Remove configs which aren't shown anymore
-        self.renderers
-            .retain(|id, _| self.devices_shown.contains(id));
+
+        // Anything which no longer exists goes, along with any dial change still in flight for it
+        let live: HashSet<&String> = ids.iter().collect();
+        self.renderers.retain(|id, _| live.contains(id));
+        self.pending_volumes.retain(|id, _| live.contains(id));
         Ok(())
     }
 
-    async fn perform_full_redraw(&self) -> Result<()> {
-        let (width, height) = DISPLAY_DIMENSIONS;
-        let mut base = ImageBuffer::from_pixel(width, height, BG_COLOUR);
+    // Brings every renderer up to date with the daemon, if there's a colour change a more
+    // significant redrawing will be needed, so return it in preparation
+    fn refresh_renderers(&mut self) -> Result<HashSet<String>> {
+        let mut colour_changed = HashSet::new();
+        let active_mix = self.active_mix;
+        let channel_type = self.channel_type;
 
-        DrawingUtils::composite_from_pos(&mut base, &jpeg_as_img(HEADER)?, (0, 0));
+        let ids: Vec<String> = self.renderers.keys().cloned().collect();
+        for id in ids {
+            let dev = find_device(&self.raw_status, channel_type, &id)?;
+            let render = self
+                .renderers
+                .get_mut(&id)
+                .ok_or_else(|| anyhow!("Failed to get renderer"))?;
 
-        for (index, item) in self.devices_shown.iter().enumerate() {
-            let error = anyhow!("No Such Render Object");
-            let renderer = self.renderers.get(item).ok_or(error)?;
-            let drawing = renderer.full_render(self.active_mix);
-            let (width, _) = CHANNEL_DIMENSIONS;
-            let x = width * index as u32;
-            let y = POSITION_ROOT.1;
-            DrawingUtils::composite_from_pos(&mut base, &drawing.image, (x, y));
+            let updates = match channel_type {
+                ChannelType::Source => render.update_from_source_device_value(dev)?,
+                ChannelType::Target => render.update_from_target_device_value(dev)?,
+            };
+
+            if updates.contains(&ChannelChangedProperty::Colour) {
+                colour_changed.insert(id.clone());
+            }
+
+            if let Some(&(target, at)) = self.pending_volumes.get(&id) {
+                if render.volumes[active_mix] == target || at.elapsed() > PENDING_TIMEOUT {
+                    // Caught up, or gave up waiting: the daemon's value stands
+                    self.pending_volumes.remove(&id);
+                } else {
+                    render.volumes[active_mix] = target;
+                }
+            }
+        }
+        Ok(colour_changed)
+    }
+
+    // Called after every change to the daemon's status
+    async fn handle_status_change(&mut self) -> Result<()> {
+        // Channels may have been added or removed, so make sure we track exactly what exists
+        self.update_renderers()?;
+
+        // Update everything we track, including channels which aren't on this page
+        let colour_changed = self.refresh_renderers()?;
+
+        let devices = self.get_channels_on_page()?;
+        let page_changed = devices != self.devices_shown;
+        self.devices_shown = devices;
+
+        if page_changed {
+            self.load_all_dial_button_colours().await?;
+        } else {
+            for index in 0..self.devices_shown.len() {
+                if colour_changed.contains(&self.devices_shown[index]) {
+                    self.load_dial_button_colour(index).await?;
+                }
+            }
         }
 
-        let img = img_as_jpeg(base, BG_COLOUR)?;
-        let msg = BeacnMessage::Image(0, 0, Arc::new(img));
-        self.send_message(msg).await?;
+        // Send whatever is different from what the device is showing (which may be nothing)
+        self.sync_display().await?;
 
+        // Anything which changed may have created new pieces, or made old ones obsolete
+        self.warm_pieces();
         Ok(())
     }
 
-    async fn redraw_volumes(&self) -> Result<()> {
-        if self.is_suspended() && !self.temporary_active {
+    // Whether any channel we're showing still has a meter on the move
+    fn is_animating(&self) -> bool {
+        self.can_draw()
+            && self
+                .devices_shown
+                .iter()
+                .filter_map(|id| self.renderers.get(id))
+                .any(|renderer| !renderer.meter_settled())
+    }
+
+    // Advances every visible meter by one frame and redraws whichever dials actually changed
+    async fn animate_meters(&mut self, dt: f32) -> Result<()> {
+        let settings = self.meter_settings;
+        for id in &self.devices_shown {
+            if let Some(renderer) = self.renderers.get_mut(id) {
+                renderer.tick_meter(dt, &settings);
+            }
+        }
+
+        // Drawing skips dials that look the same as what's already there
+        for index in 0..self.devices_shown.len() {
+            self.sync_dial(index).await?;
+        }
+        Ok(())
+    }
+
+    fn can_draw(&self) -> bool {
+        !self.is_suspended() || self.temporary_active
+    }
+
+    // Brings the device in line with what we want it to show, if we're currently allowed to draw
+    async fn sync_display(&mut self) -> Result<()> {
+        if !self.can_draw() {
             return Ok(());
         }
+        self.sync_display_now().await
+    }
 
-        for (index, item) in self.devices_shown.iter().enumerate() {
-            let error = anyhow!("No Such Render Object");
-            let renderer = self.renderers.get(item).ok_or(error)?;
-            let drawing = renderer.get_volume(self.active_mix)?;
-            let (x, y) = drawing.position;
-
-            // Determine the 'start' position of this channel
-            let (ch_w, _) = CHANNEL_DIMENSIONS;
-            let base_x = ch_w * index as u32;
-
-            // Get the position relative to the main image root
-            let (root_x, root_y) = POSITION_ROOT;
-            let x = base_x + x + root_x;
-            let y = y + root_y;
-
-            // Send it
-            let msg = BeacnMessage::Image(x, y, Arc::new(drawing.image));
-            self.send_message(msg).await?;
+    async fn sync_display_now(&mut self) -> Result<()> {
+        if !self.screen.header_drawn {
+            let header = BeacnMessage::Image(0, 0, HEADER_STRIP.clone());
+            self.send_message(header).await?;
+            self.screen.header_drawn = true;
         }
 
+        for index in 0..self.screen.slots.len() {
+            self.sync_slot(index).await?;
+        }
         Ok(())
     }
 
-    // Draws the volume for a single channel, if we're currently allowed to draw
-    async fn draw_channel_volume(&self, index: usize) -> Result<()> {
-        if self.is_suspended() && !self.temporary_active {
+    async fn sync_slot(&mut self, index: usize) -> Result<()> {
+        for message in self.plan_slot(index, false)? {
+            self.send_message(message).await?;
+        }
+        Ok(())
+    }
+
+    // Just the dial, which is what meters and dial turns change
+    async fn sync_dial(&mut self, index: usize) -> Result<()> {
+        if !self.can_draw() {
             return Ok(());
         }
+        for message in self.plan_slot(index, true)? {
+            self.send_message(message).await?;
+        }
+        Ok(())
+    }
 
-        let device = self
+    // Works out what a slot needs sending to match its renderer, and records that we sent it.
+    // Sending a plate wipes the slot, so everything on top of it has to be sent again after it.
+    fn plan_slot(&mut self, index: usize, dial_only: bool) -> Result<Vec<BeacnMessage>> {
+        let mut out = Vec::new();
+        if index >= self.screen.slots.len() {
+            return Ok(out);
+        }
+
+        let (slot_x, slot_y) = slot_origin(index);
+        let mix = self.active_mix;
+
+        // These are all different fields, so they can be borrowed side by side
+        let renderer = self
             .devices_shown
             .get(index)
-            .ok_or(anyhow!("No Such Index"))?;
-        let renderer = self
+            .and_then(|id| self.renderers.get(id));
+        let shown = &mut self.screen.slots[index];
+
+        let Some(renderer) = renderer else {
+            // Nothing belongs in this slot, so it needs to be blank
+            if !dial_only && shown.plate != Some(Plate::Blank) {
+                out.push(BeacnMessage::Image(
+                    slot_x,
+                    slot_y,
+                    plate_jpeg(Plate::Blank),
+                ));
+                *shown = SlotShown {
+                    plate: Some(Plate::Blank),
+                    ..Default::default()
+                };
+            }
+            return Ok(out);
+        };
+
+        if !dial_only {
+            let plate = renderer.plate();
+            if shown.plate != Some(plate) {
+                out.push(BeacnMessage::Image(slot_x, slot_y, plate_jpeg(plate)));
+                *shown = SlotShown {
+                    plate: Some(plate),
+                    ..Default::default()
+                };
+            }
+
+            let top = renderer.top_key();
+            if shown.top.as_ref() != Some(&top) {
+                let (x, y) = top.origin();
+                let jpeg = self.pieces.get(&top)?;
+                out.push(BeacnMessage::Image(slot_x + x, slot_y + y, jpeg));
+                shown.top = Some(top);
+            }
+        }
+
+        let dial = renderer.dial_key(mix);
+        if shown.dial != Some(dial) {
+            let (x, y) = dial_origin();
+            let jpeg = renderer.get_volume(mix)?;
+            out.push(BeacnMessage::Image(slot_x + x, slot_y + y, jpeg));
+            shown.dial = Some(dial);
+        }
+
+        if !dial_only {
+            let mute = renderer.mute_key();
+            if shown.mute.as_ref() != Some(&mute) {
+                let (x, y) = mute.origin();
+                let jpeg = self.pieces.get(&mute)?;
+                out.push(BeacnMessage::Image(slot_x + x, slot_y + y, jpeg));
+                shown.mute = Some(mute);
+            }
+        }
+
+        Ok(out)
+    }
+
+    // Renders every piece any channel could show (on any page, Source or Target), then drops
+    // anything nothing can produce any more. Anything already rendered is skipped.
+    fn warm_pieces(&mut self) {
+        let mut keys: Vec<PieceKey> = self
             .renderers
-            .get(device)
-            .ok_or(anyhow!("No Such Render Object"))?;
-        let drawing = renderer.get_volume(self.active_mix)?;
-        let (x, y) = drawing.position;
+            .values()
+            .flat_map(|renderer| renderer.all_keys())
+            .collect();
 
-        let (ch_w, _) = CHANNEL_DIMENSIONS;
-        let (root_x, root_y) = POSITION_ROOT;
-        let x = ch_w * index as u32 + x + root_x;
-        let y = y + root_y;
+        // The other channel type is only a button hold away, so keep that ready too
+        let other = match self.channel_type {
+            ChannelType::Source => ChannelType::Target,
+            ChannelType::Target => ChannelType::Source,
+        };
+        match self.build_renderers(other) {
+            Ok(renderers) => {
+                keys.extend(renderers.iter().flat_map(|renderer| renderer.all_keys()));
+            }
+            Err(e) => debug!("Unable to prepare {:?} channels: {}", other, e),
+        }
 
-        self.send_message(BeacnMessage::Image(x, y, Arc::new(drawing.image)))
-            .await
+        let mut live = HashSet::with_capacity(keys.len());
+        for key in keys {
+            if let Err(e) = self.pieces.get(&key) {
+                warn!("Failed to render {:?}: {}", key, e);
+            }
+            live.insert(key);
+        }
+        self.pieces.retain_live(&live);
     }
 
     // Re-reads a single channel's state from the daemon's status, discarding any optimistic values
-    fn resync_renderer(&mut self, device: &String) -> Result<()> {
-        let devices = &self.raw_status["audio"]["profile"]["devices"];
-        let origin = match self.channel_type {
-            ChannelType::Source => &devices["sources"],
-            ChannelType::Target => &devices["targets"],
-        };
-
-        let device_id = device.to_string();
-        let dev = ["physical_devices", "virtual_devices"]
-            .iter()
-            .filter_map(|kind| origin[*kind].as_array())
-            .flatten()
-            .find(|value| value["description"]["id"] == device_id)
-            .ok_or_else(|| anyhow!("Failed to locate device by ID: {}", device))?;
-
+    fn resync_renderer(&mut self, device: &str) -> Result<()> {
+        let dev = find_device(&self.raw_status, self.channel_type, device)?;
         let render = self
             .renderers
             .get_mut(device)
@@ -937,10 +946,12 @@ impl PipeweaverHandler {
 
         for id in &expired {
             self.pending_volumes.remove(id);
-            self.resync_renderer(id)?;
+            if self.renderers.contains_key(id) {
+                self.resync_renderer(id)?;
+            }
         }
 
-        self.redraw_volumes().await
+        self.sync_display().await
     }
 
     async fn load_all_dial_button_colours(&self) -> Result<()> {
@@ -1026,28 +1037,27 @@ impl PipeweaverHandler {
         result
     }
 
-    fn get_channel_renderer(&self, device: &String) -> Result<ChannelRenderer> {
-        let devices = &self.raw_status["audio"]["profile"]["devices"];
-        let origin = match self.channel_type {
-            ChannelType::Source => &devices["sources"],
-            ChannelType::Target => &devices["targets"],
-        };
+    fn get_channel_renderer_for(
+        &self,
+        channel_type: ChannelType,
+        device: &str,
+    ) -> Result<ChannelRenderer> {
+        let dev = find_device(&self.raw_status, channel_type, device)?;
 
-        let device_id = device.to_string();
-        let dev = ["physical_devices", "virtual_devices"]
-            .iter()
-            .filter_map(|kind| origin[*kind].as_array())
-            .flatten()
-            .find(|value| value["description"]["id"] == device_id)
-            .ok_or_else(|| anyhow::anyhow!("Failed to locate device by ID: {}", device))?;
-
-        let mut renderer = match self.channel_type {
+        let mut renderer = match channel_type {
             ChannelType::Source => ChannelRenderer::from_source_device_value(dev)?,
             ChannelType::Target => ChannelRenderer::from_target_device_value(dev)?,
         };
 
         renderer.set_beacn_device(self.device_type);
         Ok(renderer)
+    }
+
+    fn build_renderers(&self, channel_type: ChannelType) -> Result<Vec<ChannelRenderer>> {
+        self.displayable_channels(channel_type)?
+            .iter()
+            .map(|id| self.get_channel_renderer_for(channel_type, id))
+            .collect()
     }
 
     async fn refresh_page(&mut self) -> Result<()> {
@@ -1132,9 +1142,16 @@ impl PipeweaverHandler {
     }
 
     fn get_channel_order(&self) -> Result<EnumMap<OrderGroup, Vec<String>>> {
+        self.channel_order_for(self.channel_type)
+    }
+
+    fn channel_order_for(
+        &self,
+        channel_type: ChannelType,
+    ) -> Result<EnumMap<OrderGroup, Vec<String>>> {
         let base = &self.raw_status["audio"]["profile"]["devices"];
 
-        let order = match self.channel_type {
+        let order = match channel_type {
             ChannelType::Source => &base["sources"]["device_order"],
             ChannelType::Target => &base["targets"]["device_order"],
         };
@@ -1161,6 +1178,16 @@ impl PipeweaverHandler {
             OrderGroup::Default => parse("Default")?,
             OrderGroup::Hidden => parse("Hidden")?,
         })
+    }
+
+    // Every channel which can appear on some page (Hidden channels never do)
+    fn displayable_channels(&self, channel_type: ChannelType) -> Result<Vec<String>> {
+        let order = self.channel_order_for(channel_type)?;
+        Ok(order[OrderGroup::Pinned]
+            .iter()
+            .chain(order[OrderGroup::Default].iter())
+            .cloned()
+            .collect())
     }
 
     async fn set_button_colour(&self, button: ButtonLighting, colour: RGBA) -> Result<()> {
@@ -1291,7 +1318,7 @@ impl PipeweaverHandler {
                     Mix::B => Mix::A,
                 };
                 self.pending_volumes.clear();
-                self.redraw_volumes().await?;
+                self.sync_display().await?;
                 self.load_mix_button_colours().await?;
             }
             Buttons::PageLeft | Buttons::PageRight => {
@@ -1424,7 +1451,7 @@ impl PipeweaverHandler {
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;
 
             // Give immediate feedback rather than waiting for the daemon's echo
-            self.draw_channel_volume(device_index).await?;
+            self.sync_dial(device_index).await?;
         }
 
         Ok(())
@@ -1450,9 +1477,23 @@ fn img_as_jpeg(image: RgbaImage, background: Rgba<u8>) -> Result<Vec<u8>> {
     DrawingUtils::image_as_jpeg(image, background, JPEG_QUALITY)
 }
 
-fn jpeg_as_img(image: &[u8]) -> Result<RgbaImage> {
-    if let Ok(img) = load_from_memory(image) {
-        return Ok(img.into_rgba8());
-    }
-    bail!("Failed to load image");
+// Finds a channel's JSON in the daemon's status. This takes the status rather than the handler
+// so callers can hold it while mutably borrowing other parts of the handler.
+fn find_device<'a>(
+    status: &'a Value,
+    channel_type: ChannelType,
+    device: &str,
+) -> Result<&'a Value> {
+    let devices = &status["audio"]["profile"]["devices"];
+    let origin = match channel_type {
+        ChannelType::Source => &devices["sources"],
+        ChannelType::Target => &devices["targets"],
+    };
+
+    ["physical_devices", "virtual_devices"]
+        .iter()
+        .filter_map(|kind| origin[*kind].as_array())
+        .flatten()
+        .find(|value| value["description"]["id"].as_str() == Some(device))
+        .ok_or_else(|| anyhow!("Failed to locate device by ID: {}", device))
 }
