@@ -38,7 +38,7 @@ pub(crate) type Dimension = (u32, u32);
 pub(crate) type Position = (u32, u32);
 
 // Cache helpers
-pub(crate) const CACHE_VERSION: u16 = 1;
+pub(crate) const CACHE_VERSION: u16 = 2;
 pub(crate) const CACHE_PATH: &str = "pipeweaver_mixer_cache.bin";
 
 type Lazy<T> = LazyLock<T>;
