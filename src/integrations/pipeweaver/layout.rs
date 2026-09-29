@@ -17,7 +17,7 @@ use std::fs::File;
 use std::io::ErrorKind::UnexpectedEof;
 use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 use strum::IntoEnumIterator;
 use web_time::Instant;
 
@@ -48,9 +48,12 @@ type DistanceAngleMap = Lazy<(Vec<Vec<f32>>, Vec<Vec<f32>>)>;
 type DialBaseImage = Lazy<RgbaImage>;
 type DialValueImage = Lazy<EnumMap<Mix, HashMap<u8, RgbaImage>>>;
 type DialTextImage = Lazy<HashMap<u8, RgbaImage>>;
-type DialVolumeJPEG = Lazy<EnumMap<Mix, HashMap<u8, HashMap<u8, Vec<u8>>>>>;
+type DialVolumeJPEG = Lazy<DialArcData>;
 type DialMeterImage = Lazy<EnumMap<Mix, HashMap<u8, RgbaImage>>>;
 type DialMeterData = EnumMap<Mix, HashMap<u8, HashMap<u8, Vec<u8>>>>;
+// The runtime form: cloning a dial image is now a refcount bump rather than a Vec copy
+type DialArcData = EnumMap<Mix, HashMap<u8, HashMap<u8, Arc<Vec<u8>>>>>;
+type FontCache = Lazy<Mutex<HashMap<usize, Arc<Font>>>>;
 
 // Resolution of the Beacn Mix / Mix Create Screens, and how many channels to display
 pub(crate) static DISPLAY_DIMENSIONS: Dimension = (800, 480);
@@ -72,7 +75,10 @@ pub(crate) static DIAL_BASE_IMAGE: DialBaseImage = Lazy::new(DialHandler::precom
 pub(crate) static DIAL_MIX_IMAGES: DialValueImage = Lazy::new(DialHandler::precompute_dial_volumes);
 pub(crate) static DIAL_TEXT_IMAGES: DialTextImage = Lazy::new(DialHandler::precompute_dial_text);
 pub(crate) static DIAL_METER_IMAGES: DialMeterImage = Lazy::new(DialHandler::precompute_meters);
-pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::composite_dials);
+pub(crate) static DIAL_VOLUME_JPEG: DialVolumeJPEG = Lazy::new(DialHandler::composite_dial_arcs);
+
+// Parsing a font is expensive (fontdue reads every glyph up front), so do it once per font
+static PARSED_FONTS: FontCache = Lazy::new(|| Mutex::new(HashMap::new()));
 
 // Next up, we define some colours, which will be used when generating components
 pub(crate) static TEXT_COLOUR: Rgba<u8> = Rgba([180, 180, 180, 255]);
@@ -394,16 +400,28 @@ impl DrawingUtils {
         img
     }
 
+    // Fonts are statics, so their address uniquely identifies them
+    fn parsed_font(bytes: &'static [u8]) -> Arc<Font> {
+        let key = bytes.as_ptr() as usize;
+        let mut cache = PARSED_FONTS.lock().unwrap();
+        cache
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(Font::from_bytes(bytes, fontdue::FontSettings::default()).unwrap())
+            })
+            .clone()
+    }
+
     pub(crate) fn draw_text(
         text: String,
         width: u32,
         height: u32,
-        font: &[u8],
+        font: &'static [u8],
         font_size: f32,
         colour: Rgba<u8>,
         align: TextAlign,
     ) -> RgbaImage {
-        let font = Font::from_bytes(font, fontdue::FontSettings::default()).unwrap();
+        let font = Self::parsed_font(font);
         let (font_r, font_g, font_b) = (colour[0], colour[1], colour[2]);
         let mut img = RgbaImage::new(width, height);
 
@@ -594,6 +612,19 @@ impl DrawingUtils {
 
 struct DialHandler;
 impl DialHandler {
+    fn composite_dial_arcs() -> DialArcData {
+        let mut out: DialArcData = EnumMap::default();
+        for (mix, volumes) in Self::composite_dials() {
+            for (volume, meters) in volumes {
+                let target = out[mix].entry(volume).or_default();
+                for (meter, data) in meters {
+                    target.insert(meter, Arc::new(data));
+                }
+            }
+        }
+        out
+    }
+
     pub fn composite_dials() -> DialMeterData {
         let start = Instant::now();
 
