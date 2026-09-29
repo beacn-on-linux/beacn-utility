@@ -142,7 +142,7 @@ impl MicEqualiser {
                         let adjusted = (adjusted * 10.0).round() / 10.0;
 
                         let msg = EQMicrophone::Q(mode, band, EQQ(adjusted));
-                        let _ = state.send_message(Message::EQMicrophone(msg));
+                        state.send_message(Message::EQMicrophone(msg));
 
                         self.view.set_active(self.active_band);
 
@@ -159,7 +159,7 @@ impl MicEqualiser {
                 };
 
                 // We'll assume this works cleanly, if it errors upstream will catch it.
-                let _ = state.send_message(Message::EQMicrophone(EQMicrophone::Mode(new_mode)));
+                state.send_message(Message::EQMicrophone(EQMicrophone::Mode(new_mode)));
 
                 // Normally we'd request a sync before doing this, but because NOTHING in the bands
                 // are changing with this swap, we can safely just do it and let the state catch up
@@ -186,7 +186,7 @@ impl MicEqualiser {
                     let mode = state.eq_microphone.mode;
                     let value = EQFrequency(frequency as f32);
                     let msg = EQMicrophone::Frequency(mode, active, value);
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.state_machine = StateMachine::ReloadBand(mode, active);
                     state.perform_sync();
@@ -196,7 +196,7 @@ impl MicEqualiser {
                 if let Some(active) = self.active_band {
                     let mode = state.eq_microphone.mode;
                     let msg = EQMicrophone::Type(mode, active, band_type);
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.state_machine = StateMachine::ReloadBand(mode, active);
                     state.perform_sync();
@@ -207,7 +207,7 @@ impl MicEqualiser {
                     let mode = state.eq_microphone.mode;
                     let value = EQGain(gain);
                     let msg = EQMicrophone::Gain(mode, active, value);
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.state_machine = StateMachine::ReloadBand(mode, active);
                     state.perform_sync();
@@ -217,7 +217,7 @@ impl MicEqualiser {
                 if let Some(active) = self.active_band {
                     let mode = state.eq_microphone.mode;
                     let msg = EQMicrophone::Q(mode, active, EQQ(q));
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.state_machine = StateMachine::ReloadBand(mode, active);
                     state.perform_sync();
@@ -243,11 +243,11 @@ impl MicEqualiser {
                         warn!("EQ Band doesn't have type set, defaulting to BellBand");
 
                         let msg = EQMicrophone::Type(mode, band, EQBandType::BellBand);
-                        let _ = state.send_message(Message::EQMicrophone(msg));
+                        state.send_message(Message::EQMicrophone(msg));
                     }
 
                     let msg = EQMicrophone::Enabled(mode, band, true);
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.active_band = Some(band);
                     self.view.set_active(self.active_band);
@@ -261,7 +261,7 @@ impl MicEqualiser {
                     let mode = state.eq_microphone.mode;
 
                     let msg = EQMicrophone::Enabled(mode, active, false);
-                    let _ = state.send_message(Message::EQMicrophone(msg));
+                    state.send_message(Message::EQMicrophone(msg));
 
                     self.state_machine = StateMachine::PostRemoveBand(mode, active);
                     state.perform_sync();
@@ -351,7 +351,7 @@ impl MicEqualiser {
         ];
 
         for message in messages {
-            let _ = state.send_message(message);
+            state.send_message(message);
         }
     }
 
@@ -366,7 +366,7 @@ impl MicEqualiser {
                 .clamp(MIN_FREQUENCY as f32, MAX_FREQUENCY as f32);
 
             let msg = EQMicrophone::Frequency(mode, active, frequency.into());
-            let _ = state.send_message(Message::EQMicrophone(msg));
+            state.send_message(Message::EQMicrophone(msg));
         }
 
         let has_gain = {
@@ -379,7 +379,7 @@ impl MicEqualiser {
             let gain = (gain * 10.0).round() / 10.0;
 
             let msg = EQMicrophone::Gain(mode, active, gain.into());
-            let _ = state.send_message(Message::EQMicrophone(msg));
+            state.send_message(Message::EQMicrophone(msg));
         }
 
         self.state_machine = StateMachine::ReloadBand(mode, active);

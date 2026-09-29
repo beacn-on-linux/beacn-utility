@@ -194,7 +194,7 @@ impl HPEqualiser {
                         }
                     }
                     for message in messages {
-                        let _ = state.send_message(message);
+                        state.send_message(message);
                     }
 
                     self.state_machine = ReloadBand(ch, band);
@@ -243,7 +243,7 @@ impl HPEqualiser {
 
                     // Send and update the state
                     for message in messages {
-                        let _ = state.send_message(message);
+                        state.send_message(message);
                     }
 
                     // Update the views
@@ -264,12 +264,12 @@ impl HPEqualiser {
                 if let Some(band) = self.active_band {
                     let msg = EQHeadphones::Enabled(ch, band, false);
                     let msg = Message::EQHeadphones(msg);
-                    let _ = state.send_message(msg);
+                    state.send_message(msg);
 
                     if is_linked {
                         let msg = EQHeadphones::Enabled(ot, band, false);
                         let msg = Message::EQHeadphones(msg);
-                        let _ = state.send_message(msg);
+                        state.send_message(msg);
                     }
 
                     // Sync the new state, then update the bands
@@ -281,7 +281,7 @@ impl HPEqualiser {
             Balance(amount) => {
                 let msg = Controls::Balance(amount.into());
                 let msg = Message::Controls(msg);
-                let _ = state.send_message(msg);
+                state.send_message(msg);
             }
 
             SubWoofer(amount) => {
@@ -290,7 +290,7 @@ impl HPEqualiser {
                 // Subwoofer is fun, get various messages based on amount
                 let messages = Subwoofer::get_amount_messages(amount, version);
                 for message in messages {
-                    let _ = state.send_message(message);
+                    state.send_message(message);
                 }
             }
 
@@ -298,7 +298,7 @@ impl HPEqualiser {
                 // The checkbox is flipped, so we need to unflip it here
                 let msg = Controls::Mono(!enabled);
                 let msg = Message::Controls(msg);
-                let _ = state.send_message(msg);
+                state.send_message(msg);
             }
 
             ToggleLinked => {
@@ -306,7 +306,7 @@ impl HPEqualiser {
             }
 
             State(msg) => {
-                let _ = state.send_message(msg);
+                state.send_message(msg);
             }
         }
 
@@ -424,7 +424,7 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.send_message(message);
+                state.send_message(message);
             }
 
             self.state_machine = ReloadBand(ch, band);
@@ -459,7 +459,7 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.send_message(message);
+                state.send_message(message);
             }
 
             self.state_machine = ReloadBand(ch, band);
@@ -496,7 +496,7 @@ impl HPEqualiser {
         let is_linked = !state.eq_headphones.linked;
         let msg = EQHeadphones::Linked(is_linked);
         let msg = Message::EQHeadphones(msg);
-        let _ = state.send_message(msg);
+        state.send_message(msg);
 
         // Don't sync on the above message, graceful failure happens upstream so we can be sure
         // that the linked state *WILL* be updated.
@@ -517,7 +517,7 @@ impl HPEqualiser {
             }
 
             for message in messages {
-                let _ = state.send_message(Message::EQHeadphones(message));
+                state.send_message(Message::EQHeadphones(message));
             }
 
             // Flag this band for full redraw on sync

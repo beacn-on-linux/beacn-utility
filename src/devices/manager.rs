@@ -24,9 +24,7 @@ use beacn_lib::audio::data::BulkMessage as BMessage;
 use beacn_lib::audio::messages::Message as AMessage;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::messages::Message as CMessage;
-use beacn_lib::controller::{
-    BeacnControlDevice, open_control_device, open_control_device_with_timer,
-};
+use beacn_lib::controller::{BeacnControlDevice, open_control_device_with_timer};
 use beacn_lib::flume::{Receiver, Sender, bounded, unbounded};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, watch_hotplug_devices,
@@ -399,7 +397,6 @@ async fn handle_device_attached(
                     Ok(d) => (Some(d), DefinitionState::Running),
                     Err(e) => {
                         error!("Failed to open control device: {e}");
-
                         (
                             None,
                             DefinitionState::Error(match e {
