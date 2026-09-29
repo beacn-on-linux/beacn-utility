@@ -628,7 +628,8 @@ impl PipeweaverHandler {
                                             }
                                         }
                                         Interactions::DialChanged(dial, change) => {
-                                            self.handle_dial(dial, change, stream).await?;
+                                            let sync = self.input_rx.is_empty();
+                                            self.handle_dial(dial, change, stream, sync).await?;
                                         }
                                     }
                                 }
@@ -1403,7 +1404,13 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    async fn handle_dial(&mut self, dial: Dials, change: i8, stream: &mut WebSocket) -> Result<()> {
+    async fn handle_dial(
+        &mut self,
+        dial: Dials,
+        change: i8,
+        stream: &mut WebSocket,
+        sync: bool,
+    ) -> Result<()> {
         let device_index = match dial {
             Dials::Dial1 => 0,
             Dials::Dial2 => 1,
@@ -1448,7 +1455,9 @@ impl PipeweaverHandler {
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;
 
             // Give immediate feedback rather than waiting for the daemon's echo
-            self.sync_dial(device_index).await?;
+            if sync {
+                self.sync_dial(device_index).await?;
+            }
         }
 
         Ok(())
