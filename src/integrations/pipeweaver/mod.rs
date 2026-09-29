@@ -780,14 +780,18 @@ impl PipeweaverHandler {
     }
 
     async fn sync_display_now(&mut self) -> Result<()> {
+        let mut messages = Vec::new();
+        for index in 0..self.screen.slots.len() {
+            messages.extend(self.plan_slot(index, false)?);
+        }
+
         if !self.screen.header_drawn {
-            let header = BeacnMessage::Image(0, 0, HEADER_STRIP.clone());
-            self.send_message(header).await?;
+            messages.insert(0, BeacnMessage::Image(0, 0, HEADER_STRIP.clone()));
             self.screen.header_drawn = true;
         }
 
-        for index in 0..self.screen.slots.len() {
-            self.sync_slot(index).await?;
+        for message in messages {
+            self.send_message(message).await?;
         }
         Ok(())
     }
