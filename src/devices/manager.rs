@@ -232,20 +232,6 @@ pub(crate) async fn spawn_device_manager(
                                     }
                                 }
 
-                                AudioMessage::Bulk(msg, resp) => {
-                                    let response = AssertUnwindSafe(dev.handle_bulk_message(msg)).catch_unwind().await;
-                                    match response {
-                                        Ok(result) => {
-                                            let _ = resp.send(result);
-                                        }
-
-                                        Err(panic) => {
-                                            let error = panic.downcast_ref::<String>().cloned().unwrap_or_else(|| "Unknown Error".to_string());
-                                            let _ = resp.send(Err(anyhow!(error).into()));
-                                        }
-                                    }
-                                }
-
                                 AudioMessage::Linked(command) => match command {
                                     LinkedCommands::GetLinked(tx) => {
                                         let _ = tx.send(dev.get_linked_apps().await);
@@ -562,7 +548,6 @@ pub enum AudioMessage {
     SendBulk(BMessage),
 
     Handle(AMessage, oneshot::Sender<Result<AMessage, BeacnError>>),
-    Bulk(BMessage, oneshot::Sender<Result<BMessage, BeacnError>>),
     Linked(LinkedCommands),
 }
 
