@@ -767,7 +767,7 @@ impl PipeweaverHandler {
                                     match msg {
                                         Interactions::ButtonPress(button, state) => {
                                             match state {
-                                                ButtonState::Press => self.on_button_down(button).await?,
+                                                ButtonState::Press => self.on_button_down(button, stream).await?,
                                                 ButtonState::Release => self.on_button_up(button, stream).await?,
                                             }
                                         }
@@ -1169,16 +1169,26 @@ impl PipeweaverHandler {
         Ok(())
     }
 
-    async fn on_button_down(&mut self, button: Buttons) -> Result<()> {
+    async fn on_button_down(&mut self, button: Buttons, stream: &mut WebSocket) -> Result<()> {
         debug!("Button Down: {:?}", button);
 
-        // Register this button down, assume normal behaviour
+        // Only the dial buttons have a hold behaviour, so they have to wait for the release
+        // to know whether this was a press or a hold. Everything else can fire immediately.
+        let has_hold = matches!(
+            button,
+            Buttons::Dial1 | Buttons::Dial2 | Buttons::Dial3 | Buttons::Dial4
+        );
+
         self.button_down_states[button].replace(ButtonHoldState {
             press_time: Some(Instant::now()),
-            skip_hold: false,
-            skip_release: false,
+            skip_hold: !has_hold,
+            skip_release: !has_hold,
             hold_handled: false,
         });
+
+        if !has_hold {
+            self.handle_button(button, stream).await?;
+        }
 
         Ok(())
     }
