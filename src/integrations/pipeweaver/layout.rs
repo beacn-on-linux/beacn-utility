@@ -30,7 +30,8 @@ pub(crate) static FONT_BOLD: &[u8] =
 
 pub(crate) static HEADER: &[u8] = include_bytes!("../../../resources/screens/header.jpg");
 
-pub(crate) static JPEG_QUALITY: u8 = 70;
+pub(crate) static JPEG_QUALITY: u8 = 90;
+pub(crate) static METER_JPEG_QUALITY: u8 = 70;
 
 // Now, for sanity's sake, we're going to define some basic types
 pub(crate) type Dimension = (u32, u32);
@@ -608,7 +609,7 @@ impl DrawingUtils {
         let (width, mut height) = VOLUME_DIMENSIONS;
         height -= VOLUME_CROP;
         let cropped = image::imageops::crop_imm(&base, 0, 0, width, height);
-        Self::image_as_jpeg(cropped.to_image(), CHANNEL_INNER_COLOUR, JPEG_QUALITY)
+        Self::image_as_jpeg(cropped.to_image(), CHANNEL_INNER_COLOUR, METER_JPEG_QUALITY)
     }
 }
 
