@@ -24,7 +24,9 @@ use beacn_lib::audio::data::BulkMessage as BMessage;
 use beacn_lib::audio::messages::Message as AMessage;
 use beacn_lib::audio::{BeacnAudioDevice, LinkedApp, open_audio_device};
 use beacn_lib::controller::messages::Message as CMessage;
-use beacn_lib::controller::{BeacnControlDevice, open_control_device};
+use beacn_lib::controller::{
+    BeacnControlDevice, open_control_device, open_control_device_with_timer,
+};
 use beacn_lib::flume::{Receiver, Sender, bounded, unbounded};
 use beacn_lib::manager::{
     DeviceLocation, DeviceType, HotPlugMessage, HotPlugThreadManagement, watch_hotplug_devices,
@@ -389,8 +391,11 @@ async fn handle_device_attached(
             // connection and management.
             let (input_tx, input_rx) = unbounded();
 
+            let loc = location.clone();
+            let input_tx = Some(input_tx);
+            let poll_timer = Duration::from_millis(10);
             let (device, state) =
-                match open_control_device(location.clone(), Some(input_tx), health_tx).await {
+                match open_control_device_with_timer(loc, input_tx, health_tx, poll_timer).await {
                     Ok(d) => (Some(d), DefinitionState::Running),
                     Err(e) => {
                         error!("Failed to open control device: {e}");
