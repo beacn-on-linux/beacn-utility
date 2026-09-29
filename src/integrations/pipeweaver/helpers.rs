@@ -55,14 +55,14 @@ pub(super) async fn read_json(stream: &mut LocalSocketStream) -> anyhow::Result<
     Ok(serde_json::from_slice(&data)?)
 }
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, Enum, EnumIter, Serialize, Deserialize)]
 pub enum Mix {
     #[default]
     A,
     B,
 }
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Enum, EnumIter, Serialize, Deserialize)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, Enum, EnumIter, Serialize, Deserialize)]
 pub enum MuteTarget {
     #[default]
     TargetA,
