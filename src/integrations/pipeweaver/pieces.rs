@@ -7,7 +7,7 @@ use crate::integrations::pipeweaver::layout::GradientDirection::{BottomToTop, To
 use crate::integrations::pipeweaver::layout::*;
 use anyhow::Result;
 use image::imageops::{crop, crop_imm};
-use image::{Rgba, RgbaImage};
+use image::{Rgba, RgbaImage, load_from_memory};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock};
 
@@ -75,8 +75,13 @@ static PLATE_BLANK: LazyLock<Jpeg> = LazyLock::new(|| {
     encode(&RgbaImage::from_pixel(w, h, BG_COLOUR))
 });
 
-// The strip across the top is already a JPEG, so it can be sent exactly as it is
-pub(crate) static HEADER_STRIP: LazyLock<Jpeg> = LazyLock::new(|| Arc::new(HEADER.to_vec()));
+// The strip across the top is already a JPEG, but we need to expand it to the full height
+pub(crate) static HEADER_STRIP: LazyLock<Jpeg> = LazyLock::new(|| {
+    let mut base = RgbaImage::from_pixel(DISPLAY_DIMENSIONS.0, POSITION_ROOT.1, BG_COLOUR);
+    let header = load_from_memory(HEADER).expect("Failed").to_rgba8();
+    DrawingUtils::composite_from(&mut base, &header, 0, 0);
+    encode(&base)
+});
 
 fn build_chrome(inner: Dimension) -> RgbaImage {
     let (w, h) = CHANNEL_DIMENSIONS;
