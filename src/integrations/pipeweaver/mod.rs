@@ -37,6 +37,10 @@ use web_time::{Duration, Instant};
 
 const HELD_TIME: Duration = Duration::from_millis(500);
 
+// How long we wait for the daemon to echo back a volume we sent before giving up and resyncing
+// from the daemon's real state.
+const PENDING_TIMEOUT: Duration = Duration::from_millis(150);
+
 //const PW_SPLASH: &[u8] = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
 static PW_SPLASH: LazyLock<Arc<Vec<u8>>> = LazyLock::new(|| {
     let bytes = include_bytes!("../../../resources/screens/beacn-pipeweaver.jpg");
@@ -175,6 +179,9 @@ struct PipeweaverHandler {
     devices_shown: Vec<String>,
     renderers: Renderers,
     button_down_states: EnumMap<Buttons, Option<ButtonHoldState>>,
+
+    // In-flight dial changes per channel
+    pending_volumes: HashMap<String, (u8, Instant)>,
 }
 
 impl PipeweaverHandler {
@@ -205,6 +212,7 @@ impl PipeweaverHandler {
             devices_shown: Vec::with_capacity(4),
             renderers: HashMap::new(),
             button_down_states: EnumMap::default(),
+            pending_volumes: HashMap::new(),
         }
     }
 
@@ -424,6 +432,8 @@ impl PipeweaverHandler {
     }
 
     async fn load_initial_state(&mut self) -> Result<()> {
+        self.pending_volumes.clear();
+
         let devices_shown = self.get_channels_on_page()?;
         self.devices_shown = devices_shown;
 
@@ -537,6 +547,20 @@ impl PipeweaverHandler {
                                             ChannelType::Target => render.update_from_target_device_value(dev)?,
                                         };
 
+                                        // The update above overwrote our optimistic volume with the daemon's
+                                        // value. If that's a stale echo of an earlier dial event, put ours back.
+                                        let active_mix = self.active_mix;
+                                        let mut suppress_volume = false;
+                                        if let Some(&(target, at)) = self.pending_volumes.get(device) {
+                                            if render.volumes[active_mix] == target || at.elapsed() > PENDING_TIMEOUT {
+                                                // Caught up, or gave up waiting: the daemon's value stands
+                                                self.pending_volumes.remove(device);
+                                            } else {
+                                                render.volumes[active_mix] = target;
+                                                suppress_volume = true;
+                                            }
+                                        }
+
                                         for part in update {
                                             let (img, x, y) = match part {
                                                 ChannelChangedProperty::Title => {
@@ -560,7 +584,7 @@ impl PipeweaverHandler {
                                                     (img, x, y)
                                                 }
                                                 ChannelChangedProperty::Volumes(mix) => {
-                                                    if mix != self.active_mix {
+                                                    if mix != self.active_mix || suppress_volume {
                                                         continue
                                                     }
 
@@ -764,6 +788,7 @@ impl PipeweaverHandler {
 
                 _ = ticker.tick() => {
                     self.check_held().await?;
+                    self.expire_pending_volumes().await?;
                 }
             }
         }
@@ -815,6 +840,10 @@ impl PipeweaverHandler {
     }
 
     async fn redraw_volumes(&self) -> Result<()> {
+        if self.is_suspended() && !self.temporary_active {
+            return Ok(());
+        }
+
         for (index, item) in self.devices_shown.iter().enumerate() {
             let error = anyhow!("No Such Render Object");
             let renderer = self.renderers.get(item).ok_or(error)?;
@@ -836,6 +865,82 @@ impl PipeweaverHandler {
         }
 
         Ok(())
+    }
+
+    // Draws the volume for a single channel, if we're currently allowed to draw
+    async fn draw_channel_volume(&self, index: usize) -> Result<()> {
+        if self.is_suspended() && !self.temporary_active {
+            return Ok(());
+        }
+
+        let device = self
+            .devices_shown
+            .get(index)
+            .ok_or(anyhow!("No Such Index"))?;
+        let renderer = self
+            .renderers
+            .get(device)
+            .ok_or(anyhow!("No Such Render Object"))?;
+        let drawing = renderer.get_volume(self.active_mix)?;
+        let (x, y) = drawing.position;
+
+        let (ch_w, _) = CHANNEL_DIMENSIONS;
+        let (root_x, root_y) = POSITION_ROOT;
+        let x = ch_w * index as u32 + x + root_x;
+        let y = y + root_y;
+
+        self.send_message(BeacnMessage::Image(x, y, Arc::new(drawing.image)))
+            .await
+    }
+
+    // Re-reads a single channel's state from the daemon's status, discarding any optimistic values
+    fn resync_renderer(&mut self, device: &String) -> Result<()> {
+        let devices = &self.raw_status["audio"]["profile"]["devices"];
+        let origin = match self.channel_type {
+            ChannelType::Source => &devices["sources"],
+            ChannelType::Target => &devices["targets"],
+        };
+
+        let device_id = device.to_string();
+        let dev = ["physical_devices", "virtual_devices"]
+            .iter()
+            .filter_map(|kind| origin[*kind].as_array())
+            .flatten()
+            .find(|value| value["description"]["id"] == device_id)
+            .ok_or_else(|| anyhow!("Failed to locate device by ID: {}", device))?;
+
+        let render = self
+            .renderers
+            .get_mut(device)
+            .ok_or_else(|| anyhow!("Failed to get renderer"))?;
+
+        let _ = match self.channel_type {
+            ChannelType::Source => render.update_from_source_device_value(dev)?,
+            ChannelType::Target => render.update_from_target_device_value(dev)?,
+        };
+        Ok(())
+    }
+
+    // If the daemon never confirmed a value we sent (clamped, rejected, etc), fall back to its
+    // real state so the display doesn't keep showing our optimistic number.
+    async fn expire_pending_volumes(&mut self) -> Result<()> {
+        let expired: Vec<String> = self
+            .pending_volumes
+            .iter()
+            .filter(|(_, (_, at))| at.elapsed() > PENDING_TIMEOUT)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        if expired.is_empty() {
+            return Ok(());
+        }
+
+        for id in &expired {
+            self.pending_volumes.remove(id);
+            self.resync_renderer(id)?;
+        }
+
+        self.redraw_volumes().await
     }
 
     async fn load_all_dial_button_colours(&self) -> Result<()> {
@@ -946,6 +1051,8 @@ impl PipeweaverHandler {
     }
 
     async fn refresh_page(&mut self) -> Result<()> {
+        self.pending_volumes.clear();
+
         self.devices_shown = self.get_channels_on_page()?;
         self.update_renderers()?;
         self.perform_full_refresh().await?;
@@ -1173,6 +1280,7 @@ impl PipeweaverHandler {
                     Mix::A => Mix::B,
                     Mix::B => Mix::A,
                 };
+                self.pending_volumes.clear();
                 self.redraw_volumes().await?;
                 self.load_mix_button_colours().await?;
             }
@@ -1269,16 +1377,28 @@ impl PipeweaverHandler {
             Dials::Dial4 => 3,
         };
 
-        if let Some(device) = self.devices_shown.get(device_index) {
+        if let Some(device) = self.devices_shown.get(device_index).cloned() {
+            let mix = self.active_mix;
             let error = anyhow!("Failed to get Renderer");
-            let current = self.renderers.get(device).ok_or(error)?;
+            let renderer = self.renderers.get_mut(&device).ok_or(error)?;
 
-            let volume = current.volumes[self.active_mix] as i16;
-            let new_volume = (volume + change as i16).clamp(0, 100) as u8;
+            // The renderer's volume is kept optimistic while a change is in flight, so it's
+            // always the correct baseline, and rapid turns accumulate.
+            let volume = renderer.volumes[mix];
+            let new_volume = (volume as i16 + change as i16).clamp(0, 100) as u8;
+            if new_volume == volume {
+                // Clamped no-op, nothing to send (and no pending entry to get stuck)
+                return Ok(());
+            }
+
+            // Optimistically update the renderer and remember what we're waiting for
+            renderer.volumes[mix] = new_volume;
+            self.pending_volumes
+                .insert(device.clone(), (new_volume, Instant::now()));
 
             let message = match self.channel_type {
                 ChannelType::Source => json!({
-                    "SetSourceVolume": [device, self.active_mix, new_volume]
+                    "SetSourceVolume": [device, mix, new_volume]
                 }),
                 ChannelType::Target => json!({
                     "SetTargetVolume": [device, new_volume]
@@ -1292,6 +1412,9 @@ impl PipeweaverHandler {
             let command = serde_json::to_string(&command)?;
 
             stream.send(Message::Text(Utf8Bytes::from(command))).await?;
+
+            // Give immediate feedback rather than waiting for the daemon's echo
+            self.draw_channel_volume(device_index).await?;
         }
 
         Ok(())
