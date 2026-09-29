@@ -463,11 +463,11 @@ impl PipeweaverHandler {
         // Update the Rendering Nodes
         self.update_renderers()?;
 
+        // Warm the pieces cache before we start
+        self.warm_pieces();
+
         // Perform the initial screen render
         self.perform_full_refresh().await?;
-
-        // ..then get everything else ready, so page changes are never the first time we draw
-        self.warm_pieces();
 
         Ok(())
     }
@@ -791,13 +791,6 @@ impl PipeweaverHandler {
         }
 
         for message in messages {
-            self.send_message(message).await?;
-        }
-        Ok(())
-    }
-
-    async fn sync_slot(&mut self, index: usize) -> Result<()> {
-        for message in self.plan_slot(index, false)? {
             self.send_message(message).await?;
         }
         Ok(())
