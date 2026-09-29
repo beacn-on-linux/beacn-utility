@@ -87,9 +87,11 @@ pub(crate) static BG_COLOUR: Rgba<u8> = Rgba([27, 30, 41, 255]);
 pub(crate) static DIAL_INACTIVE: Rgba<u8> = Rgba([37, 41, 39, 255]);
 
 pub(crate) static MIX_A_DIAL: Rgba<u8> = Rgba([79, 215, 255, 255]);
-pub(crate) static MIX_B_DIAL: Rgba<u8> = Rgba([252, 153, 56, 255]);
-pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([174, 255, 255, 255]);
-pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([255, 248, 151, 255]); // adjust as needed
+pub(crate) static MIX_B_DIAL: Rgba<u8> = Rgba([255, 165, 73, 255]);
+// pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([174, 255, 255, 255]);
+// pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([255, 248, 151, 255]);
+pub(crate) static METER_A_DIAL: Rgba<u8> = Rgba([242, 255, 73, 255]);
+pub(crate) static METER_B_DIAL: Rgba<u8> = Rgba([242, 255, 73, 255]);
 
 pub(crate) static CHANNEL_BORDER_COLOUR: Rgba<u8> = Rgba([100, 100, 100, 255]);
 pub(crate) static CHANNEL_INNER_COLOUR: Rgba<u8> = Rgba([43, 60, 71, 255]);
@@ -599,8 +601,8 @@ impl DrawingUtils {
             .ok_or(anyhow!("Text Not Found"))?;
 
         // Composite it together
-        Self::composite_from(&mut base, volume_arc, 0, 0);
         Self::composite_from(&mut base, meter_arc, 0, 0);
+        Self::composite_from(&mut base, volume_arc, 0, 0);
         Self::composite_from(&mut base, text, 0, 0);
 
         let (width, mut height) = VOLUME_DIMENSIONS;
@@ -708,31 +710,42 @@ impl DialHandler {
 
     fn precompute_dial_bg() -> RgbaImage {
         let (width, height) = VOLUME_DIMENSIONS;
-        Self::generate_dial(width, height, 100, DIAL_INACTIVE)
+        Self::generate_dial(width, height, 15.0, 100, DIAL_INACTIVE)
     }
 
     fn precompute_dial_volumes() -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
-        Self::precompute_arcs(enum_map! {
-            Mix::A => MIX_A_DIAL,
-            Mix::B => MIX_B_DIAL,
-        })
+        Self::precompute_arcs(
+            enum_map! {
+                Mix::A => MIX_A_DIAL,
+                Mix::B => MIX_B_DIAL,
+            },
+            false,
+        )
     }
 
     // Compute the meter arcs
     fn precompute_meters() -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
-        Self::precompute_arcs(enum_map! {
-            Mix::A => METER_A_DIAL,
-            Mix::B => METER_B_DIAL,
-        })
+        Self::precompute_arcs(
+            enum_map! {
+                Mix::A => METER_A_DIAL,
+                Mix::B => METER_B_DIAL,
+            },
+            true,
+        )
     }
 
-    fn precompute_arcs(colours: EnumMap<Mix, Rgba<u8>>) -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
+    fn precompute_arcs(
+        colours: EnumMap<Mix, Rgba<u8>>,
+        meter: bool,
+    ) -> EnumMap<Mix, HashMap<u8, RgbaImage>> {
         let (width, height) = VOLUME_DIMENSIONS;
         let mut enum_map = EnumMap::default();
         for mix in Mix::iter() {
             let mut map = HashMap::new();
             for i in 0..=100 {
-                let img = Self::generate_dial(width, height, i, colours[mix]);
+                let thickness = if meter { 22.5 } else { 15.0 };
+
+                let img = Self::generate_dial(width, height, thickness, i, colours[mix]);
                 map.insert(i, img);
             }
             enum_map[mix] = map;
@@ -785,10 +798,16 @@ impl DialHandler {
         a
     }
 
-    fn generate_dial(width: u32, height: u32, percent: u8, colour: Rgba<u8>) -> RgbaImage {
+    fn generate_dial(
+        width: u32,
+        height: u32,
+        thickness: f32,
+        percent: u8,
+        colour: Rgba<u8>,
+    ) -> RgbaImage {
         let padding = 10;
         let outer_radius = ((width.min(height) / 2) - padding) as f32;
-        let thickness = 15.0;
+        //let thickness = 15.0;
         let inner_radius = outer_radius - thickness;
 
         let gap_angle = 0.2 * 2.0 * PI; // 20% gap in radians
