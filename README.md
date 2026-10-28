@@ -51,6 +51,9 @@ contains the following:
 * The RPM and DEB packages do not provide automatic updates, and there's no app check.
 * For Bazzite, you can install the rpm via ostree, although I'd recommend the flatpak instead.
 
+### Mix / Mix Create Support
+Support for both the mix and mix create is present, they leverage [Pipeweaver](https://github.com/pipeweaver/pipeweaver) for mixing, and will behave the same way as they do on Windows.
+
 ***
 ![screen.gif](.github/resources/screen.gif)
 
