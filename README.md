@@ -54,9 +54,7 @@ contains the following:
 ***
 ![screen.gif](.github/resources/screen.gif)
 
-Currently, this tool is quite barebones and basic and is likely going to stay that way, it's primary goal is to provide
-a way to adjust the DSP values of the Mic or Studio. Outside of rendering a test image, Mix and Mix Create support is
-mostly absent. This app is still quite new, so may also might be slightly buggy, expect issues.
+This app is still quite new, so may also might be slightly buggy, expect issues.
 ***
 
 ## Getting Started
