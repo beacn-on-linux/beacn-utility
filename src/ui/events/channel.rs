@@ -31,7 +31,6 @@ where
 {
     type Output = Out;
 
-    // Kept exactly as you had it: &mut Hasher
     fn hash(&self, state: &mut Hasher) {
         use std::hash::Hash;
         self.id.hash(state);

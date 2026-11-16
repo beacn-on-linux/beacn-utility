@@ -190,7 +190,9 @@ impl BeacnUtility {
                                 self.active_page = Some(*page);
 
                                 // Trigger the on_open callback for the first visible page
-                                if let Some(device) = self.devices.get_mut(&hash) {
+                                if let Some(device) = self.devices.get_mut(&hash)
+                                    && self.active_id.is_some()
+                                {
                                     device.pages[*page].on_open_fn(&mut device.state);
                                 }
                             }
@@ -209,7 +211,9 @@ impl BeacnUtility {
                                     self.active_page = Some(*page);
 
                                     // Trigger the on_open callback for this page
-                                    device.pages[*page].on_open_fn(&mut device.state);
+                                    if self.active_id.is_some() {
+                                        device.pages[*page].on_open_fn(&mut device.state);
+                                    }
 
                                     break;
                                 }
@@ -320,7 +324,10 @@ impl BeacnUtility {
                 {
                     self.active_device = Some(device_id.clone());
                     self.active_page = Some(page_id);
-                    device.pages[page_id].on_open_fn(&mut device.state);
+
+                    if self.active_id.is_some() {
+                        device.pages[page_id].on_open_fn(&mut device.state);
+                    }
                 }
             }
 
@@ -453,7 +460,10 @@ impl BeacnUtility {
                 device.pages[page_index].on_close_fn(&mut device.state);
 
                 self.active_page = Some(page);
-                device.pages[page].on_open_fn(&mut device.state);
+
+                if self.active_id.is_some() {
+                    device.pages[page].on_open_fn(&mut device.state);
+                }
             }
         }
     }
