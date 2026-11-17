@@ -47,7 +47,12 @@ pub(crate) trait Page {
     /// Called when the page is closed, allows it to perform cleanup
     fn on_close_fn(&mut self, _: &mut DeviceState) {}
 
-    /// Called at 30fps, allows periodic updates
+    /// Whether this page wants the global frame tick (default: Opt In)
+    fn wants_tick_fn(&self, _device: &DeviceState) -> bool {
+        true
+    }
+
+    /// Called every frame tick, allows periodic updates
     fn on_tick_fn(&mut self, _device: &mut DeviceState) -> Task<PageMessage> {
         Task::none()
     }
@@ -74,6 +79,9 @@ macro_rules! page_trait {
 
             fn on_open(&mut self, _state: &mut $state_type) {}
             fn on_close(&mut self, _state: &mut $state_type) {}
+            fn wants_tick(&self, _state: &$state_type) -> bool {
+                true
+            }
             fn on_tick(&mut self, _state: &mut $state_type) -> Task<PageMessage> {
                 Task::none()
             }
@@ -121,6 +129,13 @@ macro_rules! page_trait {
                     unreachable!()
                 };
                 self.0.on_close(state)
+            }
+
+            fn wants_tick_fn(&self, device: &DeviceState) -> bool {
+                let DeviceState::$variant(state) = device else {
+                    unreachable!()
+                };
+                self.0.wants_tick(state)
             }
 
             fn on_tick_fn(&mut self, device: &mut DeviceState) -> Task<PageMessage> {

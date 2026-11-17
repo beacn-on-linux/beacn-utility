@@ -36,6 +36,12 @@ pub trait ConfigPage {
     fn on_open(&mut self, _state: &mut AudioState) {}
     fn on_close(&mut self, _state: &mut AudioState) {}
 
+    /// Bulk requests this page wants refreshed every frame while it is open. They are fetched
+    /// together, in order, and each response is delivered back as a `ChildMessage::Bulk`.
+    fn bulk_requests(&self) -> &'static [BulkMessage] {
+        &[]
+    }
+
     fn view(&self, device: &AudioState) -> Element<'_, ChildMessage>;
 }
 

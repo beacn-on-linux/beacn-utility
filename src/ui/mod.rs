@@ -13,6 +13,11 @@ pub mod pages;
 pub mod utility;
 pub mod widgets;
 
+// Define the animation refresh frame rate
+use web_time::Duration;
+pub const REFRESH_RATE: u64 = 45;
+pub const REFRESH_INTERVAL: Duration = Duration::from_millis(1000 / REFRESH_RATE);
+
 pub static SVG: LazyLock<HashMap<&'static str, Handle>> = LazyLock::new(|| {
     let mut map = HashMap::default();
     map.insert(

@@ -33,7 +33,6 @@ pub struct SuppressorPage {
     // Used for the live suppression response
     current: SuppressionResponse,
     baseline: SuppressionResponse,
-    awaiting_response: bool,
 
     // This is for state restore after a snapshot completes.
     suppressor_enabled: bool,
@@ -49,7 +48,6 @@ impl SuppressorPage {
         Self {
             current: Default::default(),
             baseline: Default::default(),
-            awaiting_response: false,
 
             suppressor_enabled: false,
             snapshot_running: false,
@@ -82,33 +80,12 @@ impl ConfigPage for SuppressorPage {
     }
 
     fn update(&mut self, state: &mut AudioState, message: ChildMessage) -> Task<ChildMessage> {
-        if matches!(message, ChildMessage::OnTick) {
-            // Prevent overlapping
-            if self.awaiting_response {
-                return Task::none();
-            }
-
-            let msg = BulkMessage::GetSuppressionBase;
-            state.send_bulk_request(msg);
-
-            let msg = BulkMessage::GetSuppressionCurrent;
-            state.send_bulk_request(msg);
-
-            self.awaiting_response = true;
-
-            return Task::none();
-        }
-
         if let ChildMessage::Bulk(msg) = message {
             if let BulkMessage::SuppressionBase(response) = msg {
                 self.baseline = response;
             }
             if let BulkMessage::SuppressionCurrent(response) = msg {
                 self.current = response;
-
-                // Messages return in the order they're sent, we send current last, so when
-                // we get this, the refresh is complete.
-                self.awaiting_response = false;
             }
             return Task::none();
         }
@@ -145,6 +122,13 @@ impl ConfigPage for SuppressorPage {
 
     fn on_close(&mut self, state: &mut AudioState) {
         self.stop_snapshot(state);
+    }
+
+    fn bulk_requests(&self) -> &'static [BulkMessage] {
+        &[
+            BulkMessage::GetSuppressionBase,
+            BulkMessage::GetSuppressionCurrent,
+        ]
     }
 
     fn view(&self, state: &AudioState) -> Element<'_, ChildMessage> {

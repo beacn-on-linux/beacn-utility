@@ -1,5 +1,10 @@
+#[cfg(target_arch = "wasm32")]
+use tokio_with_wasm as tokio;
+
+use crate::devices::manager::AudioMessage;
 use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
+use crate::ui::REFRESH_INTERVAL;
 use crate::ui::pages::audio::config_pages::compressor::CompressorPage;
 use crate::ui::pages::audio::config_pages::expander::ExpanderPage;
 use crate::ui::pages::audio::config_pages::headphones::HeadphonesPage;
@@ -33,6 +38,7 @@ use iced::{
     Theme, Vector, mouse,
 };
 use std::sync::{Arc, Mutex};
+use tokio::time::sleep;
 use web_time::Instant;
 
 /// The meter's dB span, shared by the label overlay and the `MicMeter`
@@ -48,6 +54,10 @@ pub(crate) enum ConfigMessage {
     OutputGainChanged(f32),
     HandleRecording,
     HandlePlayback,
+
+    // The replies for one frame of our self-paced bulk polling. The generation identifies
+    // which open of the page requested it, so replies to a closed page's polling are ignored.
+    BulkFrame(u64, Option<Result<Vec<BulkMessage>, String>>),
 }
 
 pub struct Configuration {
@@ -57,7 +67,9 @@ pub struct Configuration {
 
     loopback_handler: Option<LoopbackHandler>,
 
-    waiting_meter_response: bool,
+    meter_running: bool,
+    meter_generation: u64,
+    next_meter_at: Instant,
     meter_ballistics: MeterBallistics,
 
     selected_tab: usize,
@@ -73,7 +85,9 @@ impl Configuration {
 
             loopback_handler: None,
 
-            waiting_meter_response: false,
+            meter_running: false,
+            meter_generation: 0,
+            next_meter_at: Instant::now(),
             meter_ballistics: MeterBallistics::new(METER_RANGE_DB.0),
 
             selected_tab: 0,
@@ -319,6 +333,86 @@ impl Configuration {
             .spacing(5.0)
             .into()
     }
+
+    fn handle_bulk(&mut self, state: &mut AudioState, msg: BulkMessage) {
+        // Advance our local ballistics
+        if let BulkMessage::Meters(meters) = msg {
+            self.meter_ballistics.advance(meters.processed_mic);
+        }
+
+        // Send a message to the active config page, notifying it that we have some new
+        // meter data. Not all pages use this, but we do, so we always need it.
+        let msg = ChildMessage::Bulk(msg);
+        let _ = self.tab_pages[self.selected_tab].update(state, msg);
+    }
+
+    fn frame(&mut self, state: &mut AudioState) -> Task<PageMessage> {
+        // Send a frame tick to the child, in case it needs anything.
+        let msg = ChildMessage::OnTick;
+        let _ = self.tab_pages[self.selected_tab].update(state, msg);
+
+        let Some(handler) = self.spectrum_handler.as_mut() else {
+            return Task::none();
+        };
+
+        if handler.has_stopped() {
+            self.spectrum_handler = None;
+            self.spectrum_data = None;
+
+            self.equaliser.clear_spectrum_data();
+            return Task::none();
+        }
+
+        // This shouldn't happen if the handler is active, but just in case..
+        let Some(data) = self.spectrum_data.as_mut() else {
+            self.spectrum_handler = None;
+            self.spectrum_data = None;
+
+            self.equaliser.clear_spectrum_data();
+            return Task::none();
+        };
+
+        if let Ok(guard) = data.lock() {
+            self.equaliser.set_spectrum_data(guard.clone());
+        }
+        Task::none()
+    }
+
+    fn next_bulk_request(&mut self, state: &AudioState) -> Task<PageMessage> {
+        let Some(sender) = state.device_sender.clone() else {
+            return Task::none();
+        };
+
+        let now = Instant::now();
+        self.next_meter_at = (self.next_meter_at + REFRESH_INTERVAL).max(now);
+        let delay = self.next_meter_at - now;
+        let generation = self.meter_generation;
+
+        // Our own meters, plus whatever the open tab wants refreshed each frame
+        let mut requests = vec![BulkMessage::GetMeters];
+        requests.extend_from_slice(self.tab_pages[self.selected_tab].bulk_requests());
+
+        Task::perform(
+            async move {
+                sleep(delay).await;
+
+                let mut responses = Vec::with_capacity(requests.len());
+                for request in requests {
+                    let (tx, rx) = oneshot::channel();
+                    let message = AudioMessage::HandleBulk(request, tx);
+                    sender.send_async(message).await.ok()?;
+
+                    match rx.await.ok()? {
+                        Ok(response) => responses.push(response),
+                        Err(e) => return Some(Err(e.to_string())),
+                    }
+                }
+
+                Some(Ok(responses))
+            },
+            move |result| PageMessage::AudioConfig(ConfigMessage::BulkFrame(generation, result)),
+        )
+    }
 }
 
 impl AudioPage for Configuration {
@@ -404,9 +498,16 @@ impl AudioPage for Configuration {
 
         // Open the active tab
         self.tab_pages[self.selected_tab].on_open(state);
+
+        // Request the first set of meters, handling that response starts the polling.
+        state.send_bulk_request(BulkMessage::GetMeters);
     }
 
     fn on_close(&mut self, state: &mut AudioState) {
+        // Anything still in flight from our polling belongs to a generation that is now stale.
+        self.meter_running = false;
+        self.meter_generation += 1;
+
         if let Some(handler) = self.spectrum_handler.take() {
             handler.stop();
         }
@@ -426,43 +527,8 @@ impl AudioPage for Configuration {
         self.tab_pages[self.selected_tab].on_close(state);
     }
 
-    fn on_tick(&mut self, state: &mut AudioState) -> Task<PageMessage> {
-        if !self.waiting_meter_response {
-            let message = BulkMessage::GetMeters;
-            state.send_bulk_request(message);
-
-            self.waiting_meter_response = true;
-        }
-
-        // Send a frame tick to the child, in case it needs anything.
-        let msg = ChildMessage::OnTick;
-        let _ = self.tab_pages[self.selected_tab].update(state, msg);
-
-        let Some(handler) = self.spectrum_handler.as_mut() else {
-            return Task::none();
-        };
-
-        if handler.has_stopped() {
-            self.spectrum_handler = None;
-            self.spectrum_data = None;
-
-            self.equaliser.clear_spectrum_data();
-            return Task::none();
-        }
-
-        // This shouldn't happen if the handler is active, but just in case..
-        let Some(data) = self.spectrum_data.as_mut() else {
-            self.spectrum_handler = None;
-            self.spectrum_data = None;
-
-            self.equaliser.clear_spectrum_data();
-            return Task::none();
-        };
-
-        if let Ok(guard) = data.lock() {
-            self.equaliser.set_spectrum_data(guard.clone());
-        }
-        Task::none()
+    fn wants_tick(&self, _state: &AudioState) -> bool {
+        false
     }
 
     fn update(&mut self, state: &mut AudioState, message: PageMessage) -> Task<PageMessage> {
@@ -475,21 +541,54 @@ impl AudioPage for Configuration {
                 .map(PageMessage::AudioConfig),
 
             PageMessage::BulkMessage(msg) => {
-                // Advance our local ballistics
-                if let BulkMessage::Meters(meters) = msg {
-                    self.meter_ballistics.advance(meters.processed_mic);
+                let is_meters = matches!(msg, BulkMessage::Meters(_));
+
+                // Handle any bulk arrivals, advance our animation and forward to children
+                self.handle_bulk(state, msg);
+
+                // We only care about meters here
+                if !is_meters {
+                    return Task::none();
                 }
 
-                // Send a message to the active config page, notifying it that we have some new
-                // meter data. Not all pages use this, but we do, so we always need it.
-                let msg = ChildMessage::Bulk(msg);
-                let _ = self.tab_pages[self.selected_tab].update(state, msg);
+                if self.meter_running {
+                    return self.frame(state);
+                }
 
-                self.waiting_meter_response = false;
-                Task::none()
+                self.meter_running = true;
+                self.next_meter_at = Instant::now();
+
+                let frame = self.frame(state);
+                Task::batch([frame, self.next_bulk_request(state)])
             }
 
             PageMessage::AudioConfig(msg) => match msg {
+                ConfigMessage::BulkFrame(generation, result) => {
+                    if generation != self.meter_generation {
+                        return Task::none();
+                    }
+
+                    match result {
+                        Some(Ok(responses)) => {
+                            for response in responses {
+                                self.handle_bulk(state, response);
+                            }
+
+                            let frame = self.frame(state);
+                            Task::batch([frame, self.next_bulk_request(state)])
+                        }
+                        Some(Err(e)) => {
+                            self.meter_running = false;
+                            state.record_error(e, None);
+                            Task::none()
+                        }
+                        None => {
+                            self.meter_running = false;
+                            Task::none()
+                        }
+                    }
+                }
+
                 ConfigMessage::Equaliser(event) => self
                     .equaliser
                     .update(state, event)

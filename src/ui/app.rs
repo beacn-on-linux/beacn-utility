@@ -3,6 +3,7 @@ use crate::devices::states::State;
 use crate::devices::states::audio::AudioState;
 use crate::devices::states::control::ControlState;
 use crate::integrations::pipeweaver::launch_pipeweaver_ui;
+use crate::ui::REFRESH_INTERVAL;
 use crate::ui::events::channel::TrackedReceiver;
 use crate::ui::pages::app::pipeweaver::{PipeweaverMessage, PipeweaverPage};
 use crate::ui::pages::app::settings::{SettingsMessage, SettingsPage};
@@ -20,7 +21,6 @@ use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, time, wi
 use iced_futures::subscription::from_recipe;
 use log::debug;
 use std::collections::HashMap;
-use web_time::Duration;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction
@@ -612,10 +612,24 @@ impl BeacnUtility {
         let resize_sub = window::resize_events().map(Message::WindowResized);
         let close_sub = window::close_requests().map(Message::WindowCloseRequested);
 
-        let tick_rate = 1000 / 45;
-        let ticker = time::every(Duration::from_millis(tick_rate)).map(|_| Message::Tick);
+        let mut subscriptions = vec![device_sub, window_sub, resize_sub, close_sub];
 
-        Subscription::batch(vec![device_sub, window_sub, resize_sub, close_sub, ticker])
+        if self.wants_tick() {
+            let ticker = time::every(REFRESH_INTERVAL).map(|_| Message::Tick);
+            subscriptions.push(ticker);
+        }
+
+        Subscription::batch(subscriptions)
+    }
+
+    fn wants_tick(&self) -> bool {
+        let (Some(device_id), Some(page_index)) = (&self.active_device, self.active_page) else {
+            return true;
+        };
+
+        self.devices
+            .get(device_id)
+            .is_none_or(|device| device.pages[page_index].wants_tick_fn(&device.state))
     }
 }
 
