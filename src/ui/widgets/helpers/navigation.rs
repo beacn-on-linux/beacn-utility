@@ -5,6 +5,7 @@ use crate::ui::SVG;
 use crate::ui::app::Message;
 use crate::ui::widgets::helpers::svg::svg_button_style;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn pipeweaver_sidebar_item(active: bool) -> Element<'static, Message> {
     column![
         Space::new()

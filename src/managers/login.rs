@@ -19,8 +19,8 @@ use std::collections::HashMap;
 use std::env;
 use tokio::sync::{mpsc as tokio_mpsc, oneshot};
 use zbus::export::ordered_stream::OrderedStreamExt;
-use zbus::zvariant::{OwnedFd, OwnedObjectPath, OwnedValue};
-use zbus::{Connection, proxy};
+use zbus::{Connection, OwnedVariant, proxy};
+use zbus::{OwnedFd, OwnedObjectPath};
 
 #[proxy(
     interface = "org.freedesktop.login1.Manager",
@@ -47,7 +47,7 @@ trait Session {
     #[zbus(signal)]
     fn properties_changed(
         interface: String,
-        changed: HashMap<String, OwnedValue>,
+        changed: HashMap<String, OwnedVariant>,
         invalidated: Vec<String>,
     ) -> Result<()>;
 }
@@ -75,11 +75,8 @@ async fn run_internal(
 
     let session_proxy = if let Ok(value) = env::var("XDG_SESSION_ID") {
         if let Ok(session) = manager.get_session(&value).await {
-            if let Ok(builder) = SessionProxy::builder(&conn).path(session) {
-                builder.build().await.ok()
-            } else {
-                None
-            }
+            let builder = SessionProxy::builder(&conn).path(session);
+            builder.build().await.ok()
         } else {
             None
         }

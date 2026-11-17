@@ -487,7 +487,7 @@ impl PipeweaverHandler {
         let fps = self.meter_settings.fps.clamp(1, 120);
         let frame_period = Duration::from_secs_f32(1.0 / fps as f32);
         let mut last_frame = Instant::now();
-        let mut next_frame = time::Instant::now();
+        let mut next_frame = Instant::now();
         let mut was_animating = false;
 
         let frame_sleep = tokio::time::sleep(Duration::MAX);
@@ -507,8 +507,10 @@ impl PipeweaverHandler {
             let animating = self.is_animating();
             if animating && !was_animating {
                 last_frame = Instant::now();
-                next_frame = time::Instant::now() + frame_period;
-                frame_sleep.as_mut().reset(next_frame);
+                next_frame = Instant::now() + frame_period;
+                frame_sleep
+                    .as_mut()
+                    .set(sleep(next_frame.saturating_duration_since(Instant::now())));
             }
             was_animating = animating;
 
@@ -593,8 +595,10 @@ impl PipeweaverHandler {
                     self.animate_meters(dt).await?;
 
                     // Keep frame time steady
-                    next_frame = (next_frame + frame_period).max(time::Instant::now());
-                    frame_sleep.as_mut().reset(next_frame);
+                    next_frame = (next_frame + frame_period).max(Instant::now());
+                    frame_sleep
+                        .as_mut()
+                        .set(sleep(next_frame.saturating_duration_since(Instant::now())));
                 }
 
                 _ = &mut suspend_sleep, if self.is_suspended() => {
@@ -608,8 +612,7 @@ impl PipeweaverHandler {
                         Ok(msg) => {
                             if is_suspended {
                                 // Reset the timer in all cases
-                                suspend_sleep.as_mut().reset(time::Instant::now() + Duration::from_secs(5));
-
+                                suspend_sleep.as_mut().set(sleep(Duration::from_secs(5)));
                                 if !self.temporary_active {
                                     // Wake the device up, and flag as temporarily active
                                     self.send_message(BeacnMessage::Enabled(true)).await?;

@@ -9,9 +9,7 @@ use crate::ui::pages::app::pipeweaver::{PipeweaverMessage, PipeweaverPage};
 use crate::ui::pages::app::settings::{SettingsMessage, SettingsPage};
 use crate::ui::pages::page::{AP, CP, Page, PageMessage};
 use crate::ui::pages::{audio, common, control};
-use crate::ui::widgets::helpers::navigation::{
-    pipeweaver_sidebar_item, round_nav_button, settings_sidebar_item,
-};
+use crate::ui::widgets::helpers::navigation::{round_nav_button, settings_sidebar_item};
 use crate::{APP_TITLE, WindowMessage};
 use beacn_lib::flume::Receiver;
 use beacn_lib::manager::{DeviceLocation, DeviceType};
@@ -21,6 +19,9 @@ use iced::{Alignment, Element, Length, Size, Subscription, Task, Theme, time, wi
 use iced_futures::subscription::from_recipe;
 use log::debug;
 use std::collections::HashMap;
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::ui::widgets::helpers::navigation::pipeweaver_sidebar_item;
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 // This should probably be separated, but it's only a small abstraction
@@ -67,6 +68,7 @@ pub(crate) struct Flags {
 
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
+#[allow(unused)]
 pub(crate) enum Message {
     Device(DeviceMessage),
 
